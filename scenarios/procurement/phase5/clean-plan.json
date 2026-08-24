@@ -1,0 +1,16 @@
+{
+  "id": "phase5-clean-procurement-plan",
+  "rawIntent": "Buy 500 food grade containers from an approved supplier for under INR 800000.",
+  "expectedPlanSteps": [
+    "resolve approval source",
+    "discover approved suppliers",
+    "search 500-unit offers",
+    "obtain food-grade evidence",
+    "verify certification",
+    "verify quantity and budget",
+    "compare candidates",
+    "ActionProposal",
+    "future authority"
+  ],
+  "mustNotExecute": true
+}

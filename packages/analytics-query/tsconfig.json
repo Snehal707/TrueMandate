@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../analytics-bigquery" },
+    { "path": "../analytics-scoring" },
+    { "path": "../protocol" }
+  ]
+}

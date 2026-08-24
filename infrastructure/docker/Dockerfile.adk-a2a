@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1
+
+# TrueMandate x Google ADK reference agent — A2A 1.0 Cloud Run service.
+# Runtime identity: dedicated SA (tm-dev-adk-a2a) with Vertex AI user +
+# logging only. No GEMINI_API_KEY — Vertex AI via ADC/service identity.
+FROM node:20-slim
+WORKDIR /app
+RUN corepack enable
+
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY packages/protocol ./packages/protocol
+COPY packages/read-model ./packages/read-model
+COPY packages/schemas ./packages/schemas
+COPY packages/sdk-core ./packages/sdk-core
+COPY packages/sdk-adk ./packages/sdk-adk
+COPY packages/tool-registry ./packages/tool-registry
+COPY integrations/google-adk ./integrations/google-adk
+
+RUN pnpm install --frozen-lockfile && pnpm -r build
+
+ENV NODE_ENV=production
+ENV PORT=8080
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "integrations/google-adk/dist/server.js"]

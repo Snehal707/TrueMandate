@@ -1,0 +1,15 @@
+﻿steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.analytics-query-service
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/analytics-query:wave3-closure-20260821T153459Z-aqfix
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/analytics-query:wave3-closure-20260821T153459Z-aqfix
+timeout: 1800s
+options:
+  machineType: E2_HIGHCPU_8

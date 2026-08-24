@@ -1,0 +1,15 @@
+﻿steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.agent-runtime
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/agent-runtime:wave1-approval-stabilize-20260820T201604Z
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/agent-runtime:wave1-approval-stabilize-20260820T201604Z
+timeout: 1800s
+options:
+  machineType: E2_HIGHCPU_8

@@ -1,0 +1,33 @@
+{
+  "name": "@truemandate/analytics-query-service",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./analytics-query-routes": {
+      "types": "./dist/analytics-query-routes.d.ts",
+      "import": "./dist/analytics-query-routes.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/bin/start.js"
+  },
+  "dependencies": {
+    "@truemandate/analytics-bigquery": "workspace:*",
+    "@truemandate/analytics-query": "workspace:*",
+    "@truemandate/cloud-pubsub": "workspace:*",
+    "@truemandate/cloud-runtime": "workspace:*",
+    "@truemandate/observability": "workspace:*",
+    "@truemandate/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@truemandate/benchmark-runner",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "safe-run": "./dist/cli.js",
+    "stress-run": "./dist/stress-cli.js",
+    "benchmark-v2-load": "./dist/bin/v2-load-job.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/bin/start.js"
+  },
+  "dependencies": {
+    "@truemandate/cloud-pubsub": "workspace:*",
+    "@truemandate/cloud-runtime": "workspace:*",
+    "@truemandate/cloud-security": "workspace:*",
+    "@truemandate/model": "workspace:*",
+    "@truemandate/observability": "workspace:*",
+    "@truemandate/protocol": "workspace:*",
+    "@truemandate/safe-benchmark": "workspace:*",
+    "@truemandate/sdk-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

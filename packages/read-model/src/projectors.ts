@@ -1,0 +1,422 @@
+import type {
+  Constraint,
+  GuardianVerdict,
+  Intent,
+  IntentState,
+  OutcomeContract,
+  PreparedAction,
+  ProvenanceEdge,
+  ProvenanceNode,
+  RemedyProposal,
+  ResolutionCase,
+  ResponsibilityHypothesis,
+  SideEffectRecord,
+} from "@truemandate/protocol";
+import { redactForUi } from "./redaction.js";
+import type {
+  AuthorityView,
+  ConstraintView,
+  ExecutionView,
+  GraphFilter,
+  GuardianView,
+  IntentSummaryView,
+  IntentWorkspaceView,
+  OutcomeView,
+  PlanView,
+  ProvenanceGraphView,
+  ResolutionView,
+  SemanticStateView,
+  TimelineEventView,
+  TimelineView,
+} from "./views.js";
+
+/** Projectors are pure: they never write to canonical stores. */
+
+export function projectIntentSummary(input: {
+  readonly intent: Intent;
+  readonly tipState?: IntentState;
+  readonly historicalStates?: readonly IntentState[];
+  readonly readiness?: string;
+  readonly ambiguityClass?: string;
+}): IntentSummaryView {
+  return redactForUi({
+    intentId: input.intent.id,
+    rawIntent: input.intent.rawText,
+    principalId: input.intent.principalId,
+    createdAt: input.intent.createdAt,
+    intentStateId: input.tipState?.id,
+    intentStateVersion: input.tipState?.version,
+    stateHash: input.tipState?.stateHash,
+    readiness: input.readiness,
+    ambiguityClass: input.ambiguityClass,
+    historicalStateIds: (input.historicalStates ?? []).map((s) => s.id),
+  });
+}
+
+export function projectSemanticState(input: {
+  readonly intent: Intent;
+  readonly constraints: readonly Constraint[];
+  readonly transformations?: Readonly<Record<string, ConstraintView["transformation"]>>;
+}): SemanticStateView {
+  const constraints: ConstraintView[] = input.constraints.map((c) => ({
+    id: c.id,
+    concept: c.concept,
+    operator: String(c.operator),
+    expectedValue: c.value,
+    criticality: String(c.kind),
+    meaningClass: String(c.meaningClass),
+    sourceText: c.sourceText,
+    sourceSpan: c.sourceSpan,
+    transformation: input.transformations?.[c.id] ?? "PRESERVED",
+    criticalFailure:
+      String(c.kind) === "SAFETY_CRITICAL" || String(c.kind) === "HARD"
+        ? input.transformations?.[c.id] === "DROPPED" ||
+          input.transformations?.[c.id] === "WEAKENED" ||
+          input.transformations?.[c.id] === "CONTRADICTED"
+        : false,
+    groundingStatus: c.sourceSpan ? "GROUNDED" : "UNGROUNDED",
+  }));
+  return redactForUi({
+    intentId: input.intent.id,
+    rawIntent: input.intent.rawText,
+    constraints,
+  });
+}
+
+export function sliceSourceGrounding(
+  rawIntent: string,
+  span: { readonly start: number; readonly end: number },
+): string {
+  return rawIntent.slice(span.start, span.end);
+}
+
+export function projectGuardian(verdict?: GuardianVerdict | null): GuardianView {
+  if (!verdict) {
+    return {
+      judges: [],
+      aggregator: {
+        decision: "UNAVAILABLE",
+        semanticStatus: "UNCERTAIN",
+        criticalFailure: false,
+      },
+    };
+  }
+  return redactForUi({
+    judges: (verdict.judgeResults ?? []).map((j) => ({
+      judgeId: String(j.judgeId),
+      status: String(j.status),
+      findings: (j.findings ?? []).map((f) => f.message ?? f.code ?? JSON.stringify(f)),
+      affectedConstraints: [],
+      modelName: undefined,
+      promptVersion: undefined,
+      schemaVersion: undefined,
+    })),
+    aggregator: {
+      decision: String(verdict.decision),
+      semanticStatus: String(verdict.semanticStatus),
+      criticalFailure: Boolean(verdict.criticalFailure),
+      overallFidelity: verdict.overallFidelity,
+    },
+  });
+}
+
+export function projectAuthority(input: {
+  readonly guardianDecision?: string;
+  readonly authorityDecision?: string;
+  readonly capability?: string;
+  readonly principalId?: string;
+  readonly agentId?: string;
+  readonly merchant?: string;
+  readonly amount?: number;
+  readonly currency?: string;
+  readonly expiresAt?: string;
+  readonly cumulativeExposure?: number;
+  readonly approvalState?: string;
+  readonly grantState?: string;
+  readonly revocationState?: string;
+  readonly semanticGate?: string;
+}): AuthorityView {
+  return redactForUi({
+    guardianRecommendation: input.guardianDecision,
+    semanticGate: input.semanticGate,
+    decision: input.authorityDecision,
+    capability: input.capability,
+    principalId: input.principalId,
+    agentId: input.agentId,
+    merchant: input.merchant,
+    amount: input.amount,
+    currency: input.currency,
+    expiresAt: input.expiresAt,
+    cumulativeExposure: input.cumulativeExposure,
+    approvalState: input.approvalState,
+    grantState: input.grantState,
+    revocationState: input.revocationState,
+    explanation:
+      "Guardian recommends. Authority decides. Gateway enforces. UI does not compute decisions.",
+  });
+}
+
+export function projectExecution(input: {
+  readonly prepared?: PreparedAction;
+  readonly sideEffects?: readonly SideEffectRecord[];
+  readonly phase?: ExecutionView["phase"];
+  readonly stopReason?: string;
+  readonly unknownPending?: boolean;
+  readonly reservedExposure?: number;
+  readonly blockedRetry?: boolean;
+}): ExecutionView {
+  const inferredPhase: ExecutionView["phase"] = input.phase
+    ? input.phase
+    : input.sideEffects && input.sideEffects.length > 0
+      ? "EXECUTE"
+      : input.prepared
+        ? "PREPARE"
+        : "PROPOSE";
+  return redactForUi({
+    phase: inferredPhase,
+    stopReason: input.stopReason,
+    preparedAction: input.prepared
+      ? {
+          id: input.prepared.id,
+          merchant: input.prepared.parameters?.merchant as string | undefined,
+          product: input.prepared.parameters?.product as string | undefined,
+          quantity: input.prepared.parameters?.quantity as number | undefined,
+          amount: input.prepared.parameters?.amount as number | undefined,
+          currency: input.prepared.parameters?.currency as string | undefined,
+          capability: input.prepared.capability,
+          parameterHash: String(input.prepared.parameterHash),
+          outcomeContractId: input.prepared.outcomeContractId
+            ? String(input.prepared.outcomeContractId)
+            : undefined,
+          outcomeContractHash: input.prepared.outcomeContractHash
+            ? String(input.prepared.outcomeContractHash)
+            : undefined,
+          expiresAt: input.prepared.expiresAt,
+        }
+      : undefined,
+    sideEffects: (input.sideEffects ?? []).map((s) => ({
+      id: s.executionId,
+      tool: s.toolId,
+      agent: undefined,
+      amount: s.amount,
+      result: String(s.resultState),
+      reconciliationState: String(s.reconciliationState),
+      at: s.requestTimestamp,
+    })),
+    unknownPending: Boolean(input.unknownPending),
+    reservedExposure: input.reservedExposure,
+    blockedRetry: Boolean(input.blockedRetry),
+  });
+}
+
+export function projectOutcome(contract?: OutcomeContract | null): OutcomeView | undefined {
+  if (!contract) return undefined;
+  return redactForUi({
+    contractId: contract.id,
+    contractState: String(contract.state),
+    paymentStatus: String(contract.paymentStatus),
+    requirements: (contract.requirements ?? []).map((r) => ({
+      concept: r.concept,
+      criticality: String(r.criticality),
+      state: String(r.state),
+      observed: r.value,
+      expected: r.value,
+      display: `${r.concept}: ${String(r.value ?? "")} (${r.state})`,
+    })),
+    atRisk:
+      String(contract.state) === "AT_RISK"
+        ? deriveAtRiskFromRequirements(contract.requirements ?? [])
+        : undefined,
+    missingEvidence: [],
+    conflicts: [],
+  });
+}
+
+function deriveAtRiskFromRequirements(
+  requirements: readonly {
+    readonly concept: string;
+    readonly value?: unknown;
+    readonly deadline?: string;
+  }[],
+): NonNullable<OutcomeView["atRisk"]> {
+  const details: {
+    deadline?: string;
+    eta?: string;
+    basis?: string;
+    confidence?: number;
+  } = {};
+  for (const r of requirements) {
+    if (r.deadline && !details.deadline) {
+      details.deadline = r.deadline;
+    }
+    if (
+      !details.deadline &&
+      typeof r.value === "string" &&
+      (r.concept.includes("deadline") ||
+        r.concept.includes("delivery_before") ||
+        r.concept === "delivery_before")
+    ) {
+      details.deadline = r.value;
+    }
+  }
+  return details;
+}
+
+export function projectResolution(input: {
+  readonly case?: ResolutionCase | null;
+  readonly hypotheses?: readonly ResponsibilityHypothesis[];
+  readonly remedies?: readonly RemedyProposal[];
+  readonly evidenceRequests?: readonly string[];
+  readonly firstDivergence?: string;
+  /** Optional per-remedy override; when omitted, derived from unmetRequirementIds or false. */
+  readonly criticalConstraintsPreserved?: Readonly<Record<string, boolean>>;
+}): ResolutionView | undefined {
+  if (!input.case) return undefined;
+  const resp = String(input.case.responsibilityState);
+  return redactForUi({
+    caseId: input.case.id,
+    state: String(input.case.state),
+    triggerIdentity: input.case.triggerIdentity
+      ? String(input.case.triggerIdentity)
+      : undefined,
+    firstDivergence: input.firstDivergence,
+    responsibilityState: resp,
+    hypotheses: (input.hypotheses ?? []).map((h) => ({
+      id: h.id,
+      cause: String(h.assertedCause),
+      status: String(h.status),
+      confidence: h.confidence,
+      supporting: [...h.supportingEvidenceIds],
+      contradictory: [...h.contradictoryEvidenceIds],
+      missing: [...h.missingEvidence],
+    })),
+    evidenceRequests: input.evidenceRequests ?? [],
+    remedies: (input.remedies ?? []).map((r) => ({
+      id: r.id,
+      description: r.description,
+      restorationValue: r.expectedRecoveryValue,
+      financialCost: r.financialCost ?? r.estimatedAmount,
+      timeCost: r.timeCost,
+      criticalConstraintsPreserved:
+        input.criticalConstraintsPreserved?.[r.id] ??
+        (r.unmetRequirementIds !== undefined
+          ? r.unmetRequirementIds.length === 0
+          : false),
+      reversibility: r.reversibility,
+      authorityRequired: r.requiresFinancialAction,
+      risks: r.risks ?? [],
+    })),
+    blameHonest: resp === "UNKNOWN" || resp === "POSSIBLE",
+  });
+}
+
+export function projectPlan(steps: PlanView["steps"] = []): PlanView {
+  return redactForUi({ steps });
+}
+
+const FILTER_KINDS: Record<GraphFilter, readonly string[]> = {
+  semantic: ["INTENT", "INTENT_STATE", "CONSTRAINT", "ASSUMPTION", "PLAN", "FINDING"],
+  authority: ["PRINCIPAL", "AUTHORITY", "ACTION", "DELEGATION"],
+  external: ["EXTERNAL", "EVIDENCE", "CLAIM"],
+  tainted: [], // special: use taint flag
+  execution: ["ACTION", "PREPARED_ACTION", "COMMIT", "EXECUTION", "SIDE_EFFECT"],
+  outcome: ["OUTCOME", "OUTCOME_CONTRACT", "OUTCOME_EVENT"],
+  resolution: ["RESOLUTION", "REMEDY"],
+  critical: [],
+};
+
+export function projectProvenanceGraph(input: {
+  readonly nodes: readonly ProvenanceNode[];
+  readonly edges: readonly ProvenanceEdge[];
+  readonly filter?: GraphFilter;
+  readonly maxNodes?: number;
+  readonly tracePath?: readonly string[];
+}): ProvenanceGraphView {
+  const max = input.maxNodes ?? 80;
+  let nodes = input.nodes.map((n) => ({
+    id: n.id,
+    kind: String(n.kind),
+    label: n.label,
+    trustClass: n.trustClass ? String(n.trustClass) : undefined,
+    tainted: Boolean(n.taint?.classes?.length),
+    taintClasses: n.taint?.classes ? n.taint.classes.map(String) : [],
+  }));
+  const filter = input.filter;
+  if (filter === "tainted") {
+    nodes = nodes.filter((n) => n.tainted);
+  } else if (filter && FILTER_KINDS[filter]?.length) {
+    const kinds = new Set(FILTER_KINDS[filter]);
+    nodes = nodes.filter((n) => kinds.has(n.kind) || kinds.has(n.kind.toUpperCase()));
+  }
+  nodes = nodes.slice(0, max);
+  const keep = new Set(nodes.map((n) => n.id));
+  const edges = input.edges
+    .filter((e) => keep.has(e.from) && keep.has(e.to))
+    .map((e) => ({
+      id: e.id,
+      from: e.from,
+      to: e.to,
+      relation: String(e.relation),
+    }));
+  return redactForUi({
+    nodes,
+    edges,
+    activeFilter: filter,
+    traceToHuman: input.tracePath,
+  });
+}
+
+export function mergeTimeline(
+  events: readonly TimelineEventView[],
+): TimelineView {
+  const seen = new Set<string>();
+  const out: TimelineEventView[] = [];
+  for (const e of [...events].sort((a, b) => a.at.localeCompare(b.at))) {
+    const key = e.dedupeKey ?? e.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return redactForUi({ events: out });
+}
+
+export function assembleWorkspace(parts: {
+  readonly summary: IntentSummaryView;
+  readonly semantic: SemanticStateView;
+  readonly plan?: PlanView;
+  readonly guardian?: GuardianView;
+  readonly authority?: AuthorityView;
+  readonly execution?: ExecutionView;
+  readonly outcome?: OutcomeView;
+  readonly resolution?: ResolutionView;
+  readonly graph: ProvenanceGraphView;
+  readonly timeline: TimelineView;
+}): IntentWorkspaceView {
+  return redactForUi({
+    summary: parts.summary,
+    semantic: parts.semantic,
+    plan: parts.plan ?? { steps: [] },
+    guardian: parts.guardian ?? {
+      judges: [],
+      aggregator: {
+        decision: "UNAVAILABLE",
+        semanticStatus: "UNCERTAIN",
+        criticalFailure: false,
+      },
+    },
+    authority: parts.authority ?? {
+      explanation:
+        "Guardian recommends. Authority decides. Gateway enforces. UI does not compute decisions.",
+    },
+    execution: parts.execution ?? {
+      phase: "PROPOSE",
+      sideEffects: [],
+      unknownPending: false,
+      blockedRetry: false,
+    },
+    outcome: parts.outcome,
+    resolution: parts.resolution,
+    graph: parts.graph,
+    timeline: parts.timeline,
+  });
+}

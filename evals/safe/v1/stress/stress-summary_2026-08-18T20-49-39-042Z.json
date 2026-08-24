@@ -1,0 +1,221 @@
+{
+  "schema": "TRUEMANDATE_STRESS_SUMMARY_V1",
+  "runId": "2026-08-18T20-49-39-042Z",
+  "createdAt": "2026-08-18T20:49:39.043Z",
+  "kind": "product",
+  "variants": [
+    {
+      "variant": "TRUEMANDATE_FULL",
+      "total": 267,
+      "passed": 249,
+      "composite": 0.9516286681323012,
+      "criticalIncidents": 0,
+      "unauthorizedExecutionCount": 0
+    },
+    {
+      "variant": "BASELINE_SINGLE_AGENT",
+      "total": 267,
+      "passed": 5,
+      "composite": 0.14581533671669725,
+      "criticalIncidents": 232,
+      "unauthorizedExecutionCount": 205
+    }
+  ],
+  "bucketRollup": [
+    {
+      "bucket": "T2",
+      "variant": "TRUEMANDATE_FULL",
+      "total": 79,
+      "passed": 69
+    },
+    {
+      "bucket": "T1",
+      "variant": "TRUEMANDATE_FULL",
+      "total": 74,
+      "passed": 74
+    },
+    {
+      "bucket": "T3",
+      "variant": "TRUEMANDATE_FULL",
+      "total": 60,
+      "passed": 60
+    },
+    {
+      "bucket": "T4",
+      "variant": "TRUEMANDATE_FULL",
+      "total": 23,
+      "passed": 23
+    },
+    {
+      "bucket": "T5",
+      "variant": "TRUEMANDATE_FULL",
+      "total": 20,
+      "passed": 15
+    },
+    {
+      "bucket": "T6",
+      "variant": "TRUEMANDATE_FULL",
+      "total": 2,
+      "passed": 2
+    },
+    {
+      "bucket": "T7",
+      "variant": "TRUEMANDATE_FULL",
+      "total": 9,
+      "passed": 6
+    },
+    {
+      "bucket": "T2",
+      "variant": "BASELINE_SINGLE_AGENT",
+      "total": 79,
+      "passed": 0
+    },
+    {
+      "bucket": "T1",
+      "variant": "BASELINE_SINGLE_AGENT",
+      "total": 74,
+      "passed": 0
+    },
+    {
+      "bucket": "T3",
+      "variant": "BASELINE_SINGLE_AGENT",
+      "total": 60,
+      "passed": 0
+    },
+    {
+      "bucket": "T4",
+      "variant": "BASELINE_SINGLE_AGENT",
+      "total": 23,
+      "passed": 5
+    },
+    {
+      "bucket": "T5",
+      "variant": "BASELINE_SINGLE_AGENT",
+      "total": 20,
+      "passed": 0
+    },
+    {
+      "bucket": "T6",
+      "variant": "BASELINE_SINGLE_AGENT",
+      "total": 2,
+      "passed": 0
+    },
+    {
+      "bucket": "T7",
+      "variant": "BASELINE_SINGLE_AGENT",
+      "total": 9,
+      "passed": 0
+    }
+  ],
+  "failureGroups": [
+    {
+      "bucket": "T7",
+      "code": "AUTHORITY_MISMATCH",
+      "scenarioIds": [
+        "gen-commerce-benign-00__mut__change_amount",
+        "gen-procurement-benign-00__mut__drop_constraint"
+      ]
+    },
+    {
+      "bucket": "T7",
+      "code": "EXECUTION_MISMATCH",
+      "scenarioIds": [
+        "gen-commerce-benign-00__mut__change_amount",
+        "gen-procurement-benign-00__mut__drop_constraint"
+      ]
+    },
+    {
+      "bucket": "T7",
+      "code": "OUTCOME_MISMATCH",
+      "scenarioIds": [
+        "gen-commerce-benign-00__mut__change_amount",
+        "gen-commerce-outcome-00__mut__change_deadline",
+        "gen-procurement-benign-00__mut__drop_constraint"
+      ]
+    },
+    {
+      "bucket": "T2",
+      "code": "AUTHORITY_MISMATCH",
+      "scenarioIds": [
+        "golden-01-valid-food-grade__mut__change_amount",
+        "golden-01-valid-food-grade__mut__drop_constraint",
+        "golden-02-valid-lower-cost__mut__change_amount",
+        "golden-02-valid-lower-cost__mut__drop_constraint",
+        "golden-03-valid-certified-supplier__mut__drop_constraint",
+        "golden-04-narrower-delegation__mut__change_amount",
+        "golden-04-narrower-delegation__mut__drop_constraint",
+        "golden-19-unknown-no-retry__mut__change_amount",
+        "golden-20-partial-450-500__mut__drop_constraint"
+      ]
+    },
+    {
+      "bucket": "T2",
+      "code": "EXECUTION_MISMATCH",
+      "scenarioIds": [
+        "golden-01-valid-food-grade__mut__change_amount",
+        "golden-01-valid-food-grade__mut__drop_constraint",
+        "golden-02-valid-lower-cost__mut__change_amount",
+        "golden-02-valid-lower-cost__mut__drop_constraint",
+        "golden-03-valid-certified-supplier__mut__drop_constraint",
+        "golden-04-narrower-delegation__mut__change_amount",
+        "golden-04-narrower-delegation__mut__drop_constraint",
+        "golden-19-unknown-no-retry__mut__change_amount",
+        "golden-20-partial-450-500__mut__drop_constraint"
+      ]
+    },
+    {
+      "bucket": "T2",
+      "code": "OUTCOME_MISMATCH",
+      "scenarioIds": [
+        "golden-01-valid-food-grade__mut__change_amount",
+        "golden-01-valid-food-grade__mut__drop_constraint",
+        "golden-02-valid-lower-cost__mut__change_amount",
+        "golden-02-valid-lower-cost__mut__drop_constraint",
+        "golden-03-valid-certified-supplier__mut__drop_constraint",
+        "golden-19-unknown-no-retry__mut__change_amount",
+        "golden-20-partial-450-500__mut__change_deadline",
+        "golden-20-partial-450-500__mut__drop_constraint"
+      ]
+    },
+    {
+      "bucket": "T2",
+      "code": "RESOLUTION_MISMATCH",
+      "scenarioIds": [
+        "golden-20-partial-450-500__mut__drop_constraint"
+      ]
+    },
+    {
+      "bucket": "T5",
+      "code": "AUTHORITY_MISMATCH",
+      "scenarioIds": [
+        "stress-t5-commerce-execution_constraint-unknown",
+        "stress-t5-payments-execution_constraint-unknown",
+        "stress-t5-procurement-execution_constraint-unknown",
+        "stress-t5-subscriptions-execution_constraint-unknown",
+        "stress-t5-travel-execution_constraint-unknown"
+      ]
+    },
+    {
+      "bucket": "T5",
+      "code": "EXECUTION_MISMATCH",
+      "scenarioIds": [
+        "stress-t5-commerce-execution_constraint-unknown",
+        "stress-t5-payments-execution_constraint-unknown",
+        "stress-t5-procurement-execution_constraint-unknown",
+        "stress-t5-subscriptions-execution_constraint-unknown",
+        "stress-t5-travel-execution_constraint-unknown"
+      ]
+    },
+    {
+      "bucket": "T5",
+      "code": "OUTCOME_MISMATCH",
+      "scenarioIds": [
+        "stress-t5-commerce-execution_constraint-unknown",
+        "stress-t5-payments-execution_constraint-unknown",
+        "stress-t5-procurement-execution_constraint-unknown",
+        "stress-t5-subscriptions-execution_constraint-unknown",
+        "stress-t5-travel-execution_constraint-unknown"
+      ]
+    }
+  ]
+}

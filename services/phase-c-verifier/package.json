@@ -1,0 +1,27 @@
+{
+  "name": "@truemandate/phase-c-verifier",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@truemandate/cloud-pubsub": "workspace:*",
+    "@truemandate/outcome-core": "workspace:*",
+    "@truemandate/cloud-runtime": "workspace:*",
+    "@truemandate/crypto": "workspace:*",
+    "@truemandate/protocol": "workspace:*",
+    "@truemandate/schemas": "workspace:*",
+    "@truemandate/evidence-service": "workspace:*",
+    "@truemandate/resolution-service": "workspace:*",
+    "@truemandate/outcome-service": "workspace:*",
+    "@truemandate/intent-service": "workspace:*",
+    "@truemandate/cloud-firestore": "workspace:*",
+    "@google-cloud/pubsub": "^4.11.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}

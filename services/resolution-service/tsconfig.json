@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/crypto" },
+    { "path": "../../packages/resolution-core" },
+    { "path": "../../packages/outcome-core" },
+    { "path": "../../packages/schemas" },
+    { "path": "../outcome-service" },
+    { "path": "../evidence-service" },
+    { "path": "../../packages/cloud-pubsub" },
+    { "path": "../../packages/cloud-runtime" },
+    { "path": "../../packages/observability" }
+  ]
+}

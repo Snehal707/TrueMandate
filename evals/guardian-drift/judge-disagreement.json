@@ -1,0 +1,6 @@
+{
+  "id": "p6-judge-disagreement",
+  "description": "Fidelity supports while Contradiction critical; deterministic critical wins.",
+  "expectedDecision": "BLOCK",
+  "criticalDominatesFidelity": true
+}

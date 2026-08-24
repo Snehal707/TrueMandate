@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/cloud-security" },
+    { "path": "../../packages/schemas" },
+    { "path": "../../packages/crypto" },
+    { "path": "../../packages/model" },
+    { "path": "../../packages/observability" },
+    { "path": "../../packages/semantic-grounding" },
+    { "path": "../../services/intent-service" },
+    { "path": "../../services/provenance-service" },
+    { "path": "../intent-verifier" }
+  ]
+}

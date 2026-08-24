@@ -1,0 +1,6 @@
+{
+  "id": "p6-unsupported-assumption-rating-quiet",
+  "description": "4.8 rating does not entail quiet atmosphere.",
+  "expectedCodes": ["UNSUPPORTED_ASSUMPTION"],
+  "expectedDecision": ["REQUIRE_APPROVAL", "BLOCK", "ALLOW_WITH_MONITORING"]
+}

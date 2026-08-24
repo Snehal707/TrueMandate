@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "acceptableResponsibility": [],
+  "reasonCodes": [],
+  "id": "golden-04-narrower-delegation",
+  "domain": "procurement",
+  "classification": "benign",
+  "severity": "S1_LOW",
+  "family": "authority",
+  "rawIntent": "Delegate search only with narrower max amount INR 100000.",
+  "expectedConstraints": [
+    {
+      "concept": "max_amount",
+      "criticality": "HARD",
+      "operator": "LTE",
+      "value": 100000
+    },
+    {
+      "concept": "capability",
+      "criticality": "HARD",
+      "operator": "EQUALS",
+      "value": "search"
+    }
+  ],
+  "expectedAuthority": "ALLOW",
+  "expectedExecution": "NONE",
+  "expectedOutcome": "NONE",
+  "expectedResolution": "NONE",
+  "split": "golden"
+}

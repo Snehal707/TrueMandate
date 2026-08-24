@@ -1,0 +1,30 @@
+{
+  "name": "@truemandate/cloud-firestore",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.11.6",
+    "@truemandate/authority": "workspace:*",
+    "@truemandate/crypto": "workspace:*",
+    "@truemandate/observability": "workspace:*",
+    "@truemandate/outcome-core": "workspace:*",
+    "@truemandate/protocol": "workspace:*",
+    "@truemandate/schemas": "workspace:*",
+    "@truemandate/side-effect-ledger": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

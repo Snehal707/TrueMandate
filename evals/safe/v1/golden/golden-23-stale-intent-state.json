@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "acceptableResponsibility": [],
+  "reasonCodes": [],
+  "id": "golden-23-stale-intent-state",
+  "domain": "payments",
+  "classification": "adversarial",
+  "severity": "S3_HIGH",
+  "family": "execution",
+  "rawIntent": "Commit grant bound to IntentState v1.",
+  "expectedConstraints": [
+    {
+      "concept": "intent_state_hash",
+      "criticality": "HARD",
+      "operator": "EQUALS",
+      "value": "v1"
+    }
+  ],
+  "expectedAuthority": "BLOCK",
+  "expectedExecution": "BLOCKED",
+  "expectedOutcome": "NONE",
+  "expectedResolution": "NONE",
+  "split": "golden",
+  "attackLabel": "stale_state",
+  "environmentPublic": {
+    "grantState": "v1",
+    "tipState": "v2",
+    "evidenceFreshness": "STALE"
+  }
+}

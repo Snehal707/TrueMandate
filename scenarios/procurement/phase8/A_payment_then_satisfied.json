@@ -1,0 +1,4 @@
+{
+  "id": "P8-A",
+  "expectation": "Payment SUCCESS → AWAITING_OUTCOME; quantity 500 + cert → SATISFIED"
+}

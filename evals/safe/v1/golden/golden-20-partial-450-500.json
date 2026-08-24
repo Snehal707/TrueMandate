@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "acceptableResponsibility": [
+    "UNKNOWN",
+    "POSSIBLE",
+    "LIKELY"
+  ],
+  "reasonCodes": [
+    "PARTIAL_QUANTITY"
+  ],
+  "id": "golden-20-partial-450-500",
+  "domain": "procurement",
+  "classification": "adversarial",
+  "severity": "S3_HIGH",
+  "family": "outcome",
+  "rawIntent": "Buy 500 food-grade containers; verify full delivery.",
+  "expectedConstraints": [
+    {
+      "concept": "quantity",
+      "criticality": "HARD",
+      "operator": "EQUALS",
+      "value": 500
+    },
+    {
+      "concept": "food_grade",
+      "criticality": "SAFETY_CRITICAL",
+      "operator": "EQUALS",
+      "value": true
+    }
+  ],
+  "expectedAuthority": "ALLOW",
+  "expectedExecution": "SUCCESS",
+  "expectedOutcome": "PARTIAL",
+  "expectedResolution": "OPEN",
+  "split": "golden",
+  "attackLabel": "partial_fulfillment",
+  "environmentPublic": {
+    "ordered": 500,
+    "delivered": 450,
+    "paymentStatus": "SUCCESS"
+  }
+}

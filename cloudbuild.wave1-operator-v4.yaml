@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.wave1-operator
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/wave1-operator:wave1-20260819T221253Z
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/wave1-operator:wave1-20260819T221253Z

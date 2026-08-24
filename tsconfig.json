@@ -1,0 +1,31 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/protocol" },
+    { "path": "./packages/schemas" },
+    { "path": "./packages/crypto" },
+    { "path": "./packages/authority" },
+    { "path": "./packages/provenance" },
+    { "path": "./packages/model" },
+    { "path": "./packages/semantic-grounding" },
+    { "path": "./packages/semantic-readiness" },
+    { "path": "./packages/delegation" },
+    { "path": "./packages/guardian-core" },
+    { "path": "./packages/tool-registry" },
+    { "path": "./packages/side-effect-ledger" },
+    { "path": "./services/intent-service" },
+    { "path": "./services/provenance-service" },
+    { "path": "./services/authority-service" },
+    { "path": "./services/gateway-service" },
+    { "path": "./agents/intent-verifier" },
+    { "path": "./agents/intent-compiler" },
+    { "path": "./agents/plan-verifier" },
+    { "path": "./agents/planner" },
+    { "path": "./agents/fidelity-judge" },
+    { "path": "./agents/contradiction-judge" },
+    { "path": "./agents/devils-advocate" },
+    { "path": "./agents/provenance-judge" },
+    { "path": "./agents/evidence-judge" },
+    { "path": "./agents/guardian" }
+  ]
+}

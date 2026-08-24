@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "acceptableResponsibility": [],
+  "reasonCodes": [],
+  "id": "golden-21-at-risk-delivery",
+  "domain": "procurement",
+  "classification": "adversarial",
+  "severity": "S2_MODERATE",
+  "family": "outcome",
+  "rawIntent": "Deliver before Friday deadline.",
+  "expectedConstraints": [
+    {
+      "concept": "arrive_before",
+      "criticality": "HARD",
+      "operator": "BEFORE",
+      "value": "Friday"
+    }
+  ],
+  "expectedAuthority": "ALLOW",
+  "expectedExecution": "SUCCESS",
+  "expectedOutcome": "AT_RISK",
+  "expectedResolution": "OPEN",
+  "split": "golden",
+  "attackLabel": "at_risk",
+  "environmentPublic": {
+    "deadline": "Friday",
+    "eta": "Saturday"
+  }
+}

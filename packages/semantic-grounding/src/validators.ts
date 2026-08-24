@@ -1,0 +1,329 @@
+import {
+  ConstraintKind,
+  ConstraintOperator,
+  ErrorCode,
+  MeaningClass,
+  STICKY_CONSTRAINT_KINDS,
+  err,
+  ok,
+  type CandidateConstraint,
+  type Result,
+  type SourceSpan,
+  type TemporalResolution,
+} from "@truemandate/protocol";
+
+const NEGATION_PATTERNS =
+  /\b(do\s+not|don't|nothing|not\s+\w+|avoid|never|excluding|exclude|without)\b/i;
+
+function normalizeTerminalGroundingSurface(text: string): string {
+  return text.replace(/[\s.!?]+$/u, "");
+}
+
+export function assertSourceSpan(
+  raw: string,
+  span: SourceSpan,
+  sourceText: string,
+): Result<void> {
+  if (span.start < 0 || span.end > raw.length || span.start > span.end) {
+    return err(ErrorCode.GROUNDING_FAILED, "Source span out of range", {
+      span,
+      rawLength: raw.length,
+    });
+  }
+  const sliced = raw.slice(span.start, span.end);
+  if (
+    sliced !== sourceText &&
+    normalizeTerminalGroundingSurface(sliced) !== normalizeTerminalGroundingSurface(sourceText)
+  ) {
+    return err(
+      ErrorCode.GROUNDING_FAILED,
+      "Source span does not match sourceText",
+      { expected: sourceText, actual: sliced },
+    );
+  }
+  return ok();
+}
+
+export interface CurrencyAmount {
+  readonly currency: string;
+  readonly amount: number;
+  readonly comparison?: "UNDER" | "AT_MOST" | "AROUND" | "EXACT" | "OVER";
+}
+
+export function normalizeCurrencyAmount(text: string): Result<CurrencyAmount> {
+  const around = /\b(around|approximately|about|roughly)\b/i.test(text);
+  const under = /\b(under|below|at\s+most|less\s+than|no\s+more\s+than)\b/i.test(
+    text,
+  );
+  const over = /\b(over|above|at\s+least|more\s+than)\b/i.test(text);
+
+  const m = text.match(
+    /\b(INR|USD|EUR|GBP)\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+(?:\.[0-9]+)?)\b/i,
+  );
+  if (!m) {
+    // also allow 800000 INR order
+    const m2 = text.match(
+      /\b([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+(?:\.[0-9]+)?)\s*(INR|USD|EUR|GBP)\b/i,
+    );
+    if (!m2) {
+      return err(ErrorCode.GROUNDING_FAILED, "No currency amount found", { text });
+    }
+    const amount = Number(m2[1]!.replace(/,/g, ""));
+    const currency = m2[2]!.toUpperCase();
+    return ok({
+      currency,
+      amount,
+      comparison: around ? "AROUND" : under ? "UNDER" : over ? "OVER" : "EXACT",
+    });
+  }
+  const currency = m[1]!.toUpperCase();
+  const amount = Number(m[2]!.replace(/,/g, ""));
+  return ok({
+    currency,
+    amount,
+    comparison: around ? "AROUND" : under ? "UNDER" : over ? "OVER" : "EXACT",
+  });
+}
+
+export function validateComparisonOperator(
+  expression: string,
+  operator: ConstraintOperator,
+): Result<void> {
+  const under = /\b(under|below|at\s+most|less\s+than)\b/i.test(expression);
+  const before = /\bbefore\b/i.test(expression);
+  if (under && operator !== ConstraintOperator.LT && operator !== ConstraintOperator.LTE) {
+    return err(
+      ErrorCode.GROUNDING_FAILED,
+      "under/below expressions must map to LT/LTE, not approximate equality",
+      { expression, operator },
+    );
+  }
+  if (before && operator !== ConstraintOperator.LT && operator !== ConstraintOperator.LTE) {
+    return err(
+      ErrorCode.TEMPORAL_MISMATCH,
+      "before relationship must be preserved as LT/LTE",
+      { expression, operator },
+    );
+  }
+  return ok();
+}
+
+export function detectNegationMarkers(text: string): readonly string[] {
+  const matches = text.match(
+    /\b(?:do\s+not|don't|nothing\s+containing|not\s+\w+|avoid|never|excluding|exclude)\b[^.!]*/gi,
+  );
+  return matches ?? [];
+}
+
+export function resolveRelativeDate(
+  expression: string,
+  context: { readonly now: string; readonly timezone: string },
+): Result<TemporalResolution> {
+  const now = new Date(context.now);
+  if (Number.isNaN(now.getTime())) {
+    return err(ErrorCode.TEMPORAL_MISMATCH, "Invalid resolution timestamp");
+  }
+  const lower = expression.toLowerCase();
+  const resolved = new Date(now);
+  if (/\btomorrow\b/.test(lower)) {
+    resolved.setUTCDate(resolved.getUTCDate() + 1);
+  } else if (/\bnext\s+friday\b/.test(lower) || /\bfriday\b/.test(lower)) {
+    const day = resolved.getUTCDay();
+    const target = 5; // Friday
+    let delta = (target - day + 7) % 7;
+    if (delta === 0) delta = 7;
+    if (/\bbefore\b/.test(lower)) {
+      // before Friday → end of Thursday relative to next Friday
+      resolved.setUTCDate(resolved.getUTCDate() + delta);
+    } else {
+      resolved.setUTCDate(resolved.getUTCDate() + delta);
+    }
+  } else if (/\bmonday\b/.test(lower)) {
+    const day = resolved.getUTCDay();
+    const target = 1;
+    let delta = (target - day + 7) % 7;
+    if (delta === 0) delta = 7;
+    resolved.setUTCDate(resolved.getUTCDate() + delta);
+  } else {
+    return err(ErrorCode.TEMPORAL_MISMATCH, "Unsupported relative date expression", {
+      expression,
+    });
+  }
+
+  return ok({
+    originalExpression: expression,
+    resolvedValue: resolved.toISOString().slice(0, 10),
+    resolutionTimestamp: context.now,
+    timezone: context.timezone,
+  });
+}
+
+/**
+ * EXPLICIT constraints must have grounding text present in raw intent.
+ */
+export function assertNoInventedConcepts(
+  raw: string,
+  constraints: readonly CandidateConstraint[],
+): Result<void> {
+  const rawNorm = raw.toLowerCase().replace(/-/g, " ");
+  for (const c of constraints) {
+    if (c.meaningClass !== MeaningClass.EXPLICIT) continue;
+    const g = c.grounding.sourceText.toLowerCase().replace(/-/g, " ");
+    if (!rawNorm.includes(g)) {
+      return err(
+        ErrorCode.INVENTED_CONSTRAINT,
+        `EXPLICIT constraint '${c.concept}' grounding not found in raw intent`,
+        { concept: c.concept, grounding: c.grounding.sourceText },
+      );
+    }
+    // Heuristic: BPA_free invented when not in source
+    if (
+      /bpa/.test(c.concept.toLowerCase()) &&
+      !/bpa/.test(rawNorm)
+    ) {
+      return err(
+        ErrorCode.INVENTED_CONSTRAINT,
+        "BPA_free invented without source support",
+        { concept: c.concept },
+      );
+    }
+  }
+  return ok();
+}
+
+/**
+ * Detect silent conversion of under/max into approximately, or around into hard max.
+ */
+export function detectApproxLeak(
+  raw: string,
+  constraint: CandidateConstraint,
+): Result<void> {
+  const rawLower = raw.toLowerCase();
+  const isMonetaryConcept =
+    /budget|cost|price|amount|spend|max_/.test(constraint.concept) ||
+    /\b(INR|USD|EUR|GBP)\b/i.test(constraint.grounding.sourceText);
+
+  const underInRaw =
+    /\b(under|below|at\s+most|less\s+than)\b/.test(rawLower) && isMonetaryConcept;
+
+  if (underInRaw) {
+    const label = String(constraint.value);
+    if (/approx|around|about|roughly/i.test(label)) {
+      return err(
+        ErrorCode.GROUNDING_FAILED,
+        "under amount must not become approximately",
+        { concept: constraint.concept, value: constraint.value },
+      );
+    }
+    if (
+      constraint.operator !== ConstraintOperator.LT &&
+      constraint.operator !== ConstraintOperator.LTE
+    ) {
+      return err(
+        ErrorCode.GROUNDING_FAILED,
+        "under amount must use LT/LTE operator",
+        { operator: constraint.operator },
+      );
+    }
+  }
+
+  if (/\b(around|approximately|about)\b/.test(rawLower)) {
+    if (
+      constraint.kind === ConstraintKind.HARD ||
+      constraint.kind === ConstraintKind.FINANCIAL
+    ) {
+      if (
+        constraint.operator === ConstraintOperator.LTE ||
+        constraint.operator === ConstraintOperator.LT
+      ) {
+        // around should not become a hard maximum
+        return err(
+          ErrorCode.GROUNDING_FAILED,
+          "around amount must not become a hard maximum",
+          { concept: constraint.concept },
+        );
+      }
+    }
+  }
+  return ok();
+}
+
+export function assertInferredNotStickyHard(
+  constraints: readonly CandidateConstraint[],
+): Result<void> {
+  for (const c of constraints) {
+    if (
+      (c.meaningClass === MeaningClass.INFERRED ||
+        c.meaningClass === MeaningClass.UNKNOWN) &&
+      STICKY_CONSTRAINT_KINDS.has(c.kind)
+    ) {
+      return err(
+        ErrorCode.GROUNDING_FAILED,
+        "INFERRED/UNKNOWN must not silently become sticky hard constraints",
+        { concept: c.concept, meaningClass: c.meaningClass, kind: c.kind },
+      );
+    }
+  }
+  return ok();
+}
+
+export function validateCandidateGrounding(
+  raw: string,
+  constraints: readonly CandidateConstraint[],
+): Result<void> {
+  for (const c of constraints) {
+    if (c.grounding.sourceSpan) {
+      const spanCheck = assertSourceSpan(
+        raw,
+        c.grounding.sourceSpan,
+        c.grounding.sourceText,
+      );
+      if (!spanCheck.ok) return spanCheck;
+    }
+    const approx = detectApproxLeak(raw, c);
+    if (!approx.ok) return approx;
+    if (c.grounding.sourceText) {
+      const op = validateComparisonOperator(c.grounding.sourceText, c.operator);
+      if (!op.ok) return op;
+    }
+  }
+  const invented = assertNoInventedConcepts(raw, constraints);
+  if (!invented.ok) return invented;
+  return assertInferredNotStickyHard(constraints);
+}
+
+export function hasNegationInRaw(raw: string): boolean {
+  return NEGATION_PATTERNS.test(raw);
+}
+
+export function candidatePreservesNegation(
+  raw: string,
+  constraints: readonly CandidateConstraint[],
+): Result<void> {
+  const markers = detectNegationMarkers(raw);
+  if (markers.length === 0) return ok();
+
+  for (const marker of markers) {
+    const markerLower = marker.toLowerCase();
+    const preserved = constraints.some((c) => {
+      const forbids =
+        c.operator === ConstraintOperator.FORBID ||
+        c.kind === ConstraintKind.NEGATIVE_PREFERENCE ||
+        c.concept.startsWith("not_") ||
+        c.concept.startsWith("exclude_");
+      const grounded =
+        c.grounding.sourceText.toLowerCase().includes(
+          markerLower.slice(0, Math.min(12, markerLower.length)),
+        ) || markerLower.includes(c.grounding.sourceText.toLowerCase());
+      return forbids || grounded;
+    });
+    if (!preserved) {
+      return err(
+        ErrorCode.NEGATION_LOSS,
+        "Negation in raw intent was not preserved in candidate constraints",
+        { marker },
+      );
+    }
+  }
+  return ok();
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@truemandate/analytics-query",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@truemandate/analytics-bigquery": "workspace:*",
+    "@truemandate/analytics-scoring": "workspace:*",
+    "@truemandate/protocol": "workspace:*"
+  },
+  "optionalDependencies": {
+    "@google-cloud/bigquery": "^7.9.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

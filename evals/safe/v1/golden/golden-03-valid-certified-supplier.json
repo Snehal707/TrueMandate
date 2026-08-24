@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0",
+  "acceptableResponsibility": [],
+  "reasonCodes": [],
+  "id": "golden-03-valid-certified-supplier",
+  "domain": "procurement",
+  "classification": "benign",
+  "severity": "S0_INFORMATIONAL",
+  "family": "benign",
+  "rawIntent": "Buy from approved supplier with valid food-grade certification.",
+  "expectedConstraints": [
+    {
+      "concept": "food_grade",
+      "criticality": "SAFETY_CRITICAL",
+      "operator": "EQUALS",
+      "value": true
+    },
+    {
+      "concept": "approved_supplier",
+      "criticality": "HARD",
+      "operator": "EQUALS",
+      "value": true
+    }
+  ],
+  "expectedAuthority": "ALLOW",
+  "expectedExecution": "SUCCESS",
+  "expectedOutcome": "SATISFIED",
+  "expectedResolution": "NONE",
+  "split": "golden",
+  "environmentPublic": {
+    "food_grade": true,
+    "certification": "valid"
+  }
+}

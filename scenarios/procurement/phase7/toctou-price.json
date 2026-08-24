@@ -1,0 +1,6 @@
+{
+  "id": "p7-B-toctou-price",
+  "prepareAmount": 742000,
+  "commitAmount": 815000,
+  "expectedCode": "PREPARED_ACTION_STALE"
+}

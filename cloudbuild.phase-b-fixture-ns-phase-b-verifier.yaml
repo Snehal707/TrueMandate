@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.phase-b-verifier
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/phase-b-verifier:phase-b-fixture-ns-20260817T223934Z
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/phase-b-verifier:phase-b-fixture-ns-20260817T223934Z

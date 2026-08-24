@@ -1,0 +1,15 @@
+﻿steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.authority
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/authority:wave2-closure-20260821T091828Z
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/authority:wave2-closure-20260821T091828Z
+timeout: 1800s
+options:
+  machineType: E2_HIGHCPU_8

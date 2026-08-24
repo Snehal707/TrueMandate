@@ -1,0 +1,329 @@
+import { ErrorCode, err, ok, type ApprovalArtifact, type Result } from "@truemandate/protocol";
+import { DemoRuntime } from "@truemandate/observability-service";
+import type { DocumentStore } from "@truemandate/cloud-firestore";
+import {
+  assembleWorkspace,
+  mergeTimeline,
+  projectIntentSummary,
+  projectProvenanceGraph,
+  projectSemanticState,
+} from "@truemandate/read-model";
+import type { Intent, IntentState } from "@truemandate/protocol";
+import {
+  buildCanonicalProjection,
+  CANONICAL_PHASE_C_V5_DOC_IDS,
+} from "./handlers/demo-canonical.js";
+import {
+  toPublicApprovalView,
+  toPublicEvidenceView,
+  toPublicOutcomeView,
+  toPublicResolutionCaseView,
+  toPublicWorkspaceView,
+} from "./dto.js";
+import type {
+  ApprovalDecidePort,
+  ApprovalReadPort,
+  DemoCanonicalReadPort,
+  IntentCreatePort,
+  OutcomeReadPort,
+  PublicBffPorts,
+  ResolutionReadPort,
+  WorkflowReadPort,
+  WorkflowCommitPort,
+  WorkflowResumePort,
+  WorkflowSubmitPort,
+} from "./ports.js";
+
+/**
+ * Read-only canonical Phase C v5 projection adapter (judge demo). Reads the
+ * FIXED allowlisted canonical document ids from the durable store and
+ * assembles the field-picked judge-UI projection. No caller-controlled ids,
+ * no writes, no re-runs.
+ */
+export function createDemoCanonicalAdapter(
+  store: DocumentStore,
+): DemoCanonicalReadPort {
+  return {
+    readCanonicalPhaseCv5: async (): Promise<Result<unknown>> => {
+      try {
+        const documents: Record<string, unknown> = {};
+        for (const [key, path] of Object.entries(CANONICAL_PHASE_C_V5_DOC_IDS)) {
+          documents[key] = (await store.get(path)) ?? undefined;
+        }
+        return buildCanonicalProjection(documents);
+      } catch {
+        return err(
+          ErrorCode.VALIDATION_FAILED,
+          "Canonical demo projection unavailable",
+          {},
+        );
+      }
+    },
+  };
+}
+
+/**
+ * Real BFF adapters. Does not mint grants or issue commit tokens.
+ * Intent mutations go through IntentCreatePort (S2S to intent-provenance).
+ */
+export function createLivePublicBffPorts(input: {
+  readonly intentCreate: IntentCreatePort;
+  readonly workspaceSource: {
+    getIntent(intentId: string): Promise<Result<Intent>> | Result<Intent>;
+    getTip(intentId: string): Promise<Result<IntentState>> | Result<IntentState>;
+  };
+  readonly demoRuntime?: Pick<DemoRuntime, "submitApproval">;
+  readonly evidence: {
+    getEnvelope(id: string): Promise<Result<{
+      readonly id: string;
+      readonly source: string;
+      readonly contentHash: string;
+      readonly trustClass: string;
+      readonly captureTime: string;
+      readonly eventTime?: string;
+      readonly freshnessDeadline?: string;
+      readonly mimeType?: string;
+    }>>;
+    submitEvidence?(raw: unknown): Promise<Result<unknown>> | Result<unknown>;
+  };
+  /** Optional read-only canonical projection (judge demo). */
+  readonly canonicalStore?: DocumentStore;
+  /** Wave 1: durable approval lifecycle ports (owner reads/decisions only). */
+  readonly approvalRead?: {
+    getApproval(id: string): Promise<Result<unknown>> | Result<unknown>;
+  };
+  readonly approvalDecide?: {
+    decideApproval(id: string, body: unknown): Promise<Result<unknown>> | Result<unknown>;
+  };
+  /** Wave 1: resolution inspection ports (never remedy execution). */
+  readonly resolutionRead?: {
+    getCase(id: string): Promise<Result<unknown>> | Result<unknown>;
+    getCaseByOutcomeContract(contractId: string): Promise<Result<unknown>> | Result<unknown>;
+    getRemedies(caseId: string): Promise<Result<unknown>> | Result<unknown>;
+    getMandate(id: string): Promise<Result<unknown>> | Result<unknown>;
+  };
+  readonly workflow?: {
+    submitWorkflow(raw: unknown): Promise<Result<unknown>> | Result<unknown>;
+    getWorkflow(workflowId: string): Promise<Result<unknown>> | Result<unknown>;
+    resumeWorkflow(workflowId: string, body: unknown): Promise<Result<unknown>> | Result<unknown>;
+    commitWorkflow(workflowId: string): Promise<Result<unknown>> | Result<unknown>;
+  };
+  readonly outcomeRead?: {
+    getOutcomeContract(id: string): Promise<Result<unknown>> | Result<unknown>;
+  };
+}): PublicBffPorts {
+  const {
+    intentCreate,
+    workspaceSource,
+    demoRuntime,
+    evidence,
+    canonicalStore,
+    approvalRead,
+    approvalDecide,
+    resolutionRead,
+    workflow,
+    outcomeRead,
+  } = input;
+
+  const toApprovalResult = async (result: Promise<Result<unknown>> | Result<unknown>): Promise<Result<import("./dto.js").PublicApprovalView>> => {
+    const resolved = await Promise.resolve(result);
+    if (!resolved.ok) return resolved as never;
+    return ok(toPublicApprovalView(resolved.value as Record<string, unknown>));
+  };
+
+  const approvalReadPort: ApprovalReadPort | undefined = approvalRead
+    ? { getApproval: (id) => toApprovalResult(approvalRead.getApproval(id)) }
+    : undefined;
+  const approvalDecidePort: ApprovalDecidePort | undefined = approvalDecide
+    ? { decideApproval: (id, body) => toApprovalResult(approvalDecide.decideApproval(id, body)) }
+    : undefined;
+  const resolutionReadPort: ResolutionReadPort | undefined = resolutionRead
+    ? {
+        getResolutionCase: async (id) => {
+          const resolved = await Promise.resolve(resolutionRead.getCase(id));
+          if (!resolved.ok) return resolved;
+          const body = resolved.value as { case?: Record<string, unknown> } | Record<string, unknown>;
+          const c = ("case" in body && body.case ? body.case : body) as Record<string, unknown>;
+          return ok(toPublicResolutionCaseView(c));
+        },
+        getResolutionCaseByOutcome: async (outcomeContractId) => {
+          const resolved = await Promise.resolve(
+            resolutionRead.getCaseByOutcomeContract(outcomeContractId),
+          );
+          if (!resolved.ok) return resolved;
+          const body = resolved.value as { case?: Record<string, unknown> } | Record<string, unknown>;
+          const c = ("case" in body && body.case ? body.case : body) as Record<string, unknown>;
+          return ok(toPublicResolutionCaseView(c));
+        },
+        listRemedies: (caseId) => Promise.resolve(resolutionRead.getRemedies(caseId)),
+        getMandate: (id) => Promise.resolve(resolutionRead.getMandate(id)),
+      }
+    : undefined;
+  const workflowSubmitPort: WorkflowSubmitPort | undefined = workflow
+    ? { submitWorkflow: (raw) => Promise.resolve(workflow.submitWorkflow(raw)) }
+    : undefined;
+  const workflowReadPort: WorkflowReadPort | undefined = workflow
+    ? { getWorkflow: (workflowId) => Promise.resolve(workflow.getWorkflow(workflowId)) }
+    : undefined;
+  const workflowResumePort: WorkflowResumePort | undefined = workflow
+    ? {
+        resumeWorkflow: (workflowId, body) =>
+          Promise.resolve(workflow.resumeWorkflow(workflowId, body)),
+      }
+    : undefined;
+  const workflowCommitPort: WorkflowCommitPort | undefined = workflow
+    ? {
+        commitWorkflow: (workflowId) =>
+          Promise.resolve(workflow.commitWorkflow(workflowId)),
+      }
+    : undefined;
+  const outcomeReadPort: OutcomeReadPort | undefined = outcomeRead
+    ? {
+        getOutcomeContract: async (id) => {
+          const resolved = await Promise.resolve(outcomeRead.getOutcomeContract(id));
+          if (!resolved.ok) return resolved as never;
+          return ok(toPublicOutcomeView(resolved.value as Record<string, unknown>));
+        },
+      }
+    : undefined;
+
+  const getWorkspace = async (intentId: string) => {
+    const intent = await Promise.resolve(workspaceSource.getIntent(intentId));
+    if (!intent.ok) {
+      return err(ErrorCode.VALIDATION_FAILED, "Unknown intent workspace", {
+        intentId,
+      });
+    }
+    const tip = await Promise.resolve(workspaceSource.getTip(intentId));
+    const tipState = tip.ok ? tip.value : undefined;
+    return ok(
+      toPublicWorkspaceView(
+        assembleWorkspace({
+          summary: projectIntentSummary({
+            intent: intent.value,
+            tipState,
+          }),
+          semantic: projectSemanticState({
+            intent: intent.value,
+            constraints: tipState?.constraints ?? [],
+          }),
+          graph: projectProvenanceGraph({
+            nodes: [],
+            edges: [],
+            tracePath: [`intent:${intentId}`],
+          }),
+          timeline: mergeTimeline([
+            {
+              id: `intent-recorded:${intentId}`,
+              type: "INTENT_RECORDED",
+              at: intent.value.createdAt,
+              actor: intent.value.principalId,
+              summary: "Intent recorded durably",
+              relatedObjectIds: [intentId],
+              dedupeKey: `intent-recorded:${intentId}`,
+            },
+            ...(tipState
+              ? [{
+                  id: `intent-state-finalized:${tipState.id}`,
+                  type: "INTENT_STATE_FINALIZED",
+                  at: tipState.createdAt,
+                  actor: tipState.createdBy,
+                  summary: "IntentState finalized",
+                  relatedObjectIds: [intentId, tipState.id],
+                  hashes: { stateHash: tipState.stateHash },
+                  dedupeKey: `intent-state-finalized:${tipState.id}`,
+                }]
+              : []),
+          ]),
+        }),
+      ),
+    );
+  };
+
+  return {
+    intentCreate,
+    workspaceRead: {
+      getWorkspace,
+    },
+    approvalSubmit: {
+      submitApproval: (raw): Result<ApprovalArtifact> => {
+        if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+          return err(ErrorCode.VALIDATION_FAILED, "Approval body must be an object", {});
+        }
+        const rec = raw as Record<string, unknown>;
+        if (typeof rec.principalId !== "string" || !rec.principalId.trim()) {
+          return err(ErrorCode.VALIDATION_FAILED, "Approval missing principalId", {});
+        }
+        if (typeof rec.decision !== "string" || !rec.decision.trim()) {
+          return err(ErrorCode.VALIDATION_FAILED, "Approval missing decision", {});
+        }
+        if (rec.prepared === null || typeof rec.prepared !== "object" || Array.isArray(rec.prepared)) {
+          return err(
+            ErrorCode.VALIDATION_FAILED,
+            "Approval requires prepared action binding (no grant mint)",
+            {},
+          );
+        }
+        if (!demoRuntime) {
+          return err(
+            ErrorCode.VALIDATION_FAILED,
+            "Approval submit demo runtime unavailable",
+            {},
+          );
+        }
+        try {
+          return ok(
+            demoRuntime.submitApproval({
+              prepared: rec.prepared as Parameters<DemoRuntime["submitApproval"]>[0]["prepared"],
+              principalId: rec.principalId,
+              decision: rec.decision as Parameters<DemoRuntime["submitApproval"]>[0]["decision"],
+            }),
+          );
+        } catch (e) {
+          return err(
+            ErrorCode.VALIDATION_FAILED,
+            e instanceof Error ? e.message : "Approval submit failed",
+            {},
+          );
+        }
+      },
+    },
+    evidenceRead: {
+      getEvidence: async (id) => {
+        const envelope = await evidence.getEnvelope(id);
+        if (!envelope.ok) return envelope;
+        return ok(
+          toPublicEvidenceView({
+            id: envelope.value.id,
+            source: envelope.value.source,
+            contentHash: envelope.value.contentHash,
+            trustClass: envelope.value.trustClass,
+            captureTime: envelope.value.captureTime,
+            eventTime: envelope.value.eventTime,
+            freshnessDeadline: envelope.value.freshnessDeadline,
+            mimeType: envelope.value.mimeType,
+          }),
+        );
+      },
+    },
+    ...(evidence.submitEvidence
+      ? {
+          evidenceSubmit: {
+            submitEvidence: (raw: unknown) =>
+              Promise.resolve(evidence.submitEvidence!(raw)),
+          },
+        }
+      : {}),
+    ...(approvalReadPort ? { approvalRead: approvalReadPort } : {}),
+    ...(approvalDecidePort ? { approvalDecide: approvalDecidePort } : {}),
+    ...(resolutionReadPort ? { resolutionRead: resolutionReadPort } : {}),
+    ...(workflowSubmitPort ? { workflowSubmit: workflowSubmitPort } : {}),
+    ...(workflowReadPort ? { workflowRead: workflowReadPort } : {}),
+    ...(workflowResumePort ? { workflowResume: workflowResumePort } : {}),
+    ...(workflowCommitPort ? { workflowCommit: workflowCommitPort } : {}),
+    ...(outcomeReadPort ? { outcomeRead: outcomeReadPort } : {}),
+    ...(canonicalStore
+      ? { demoCanonical: createDemoCanonicalAdapter(canonicalStore) }
+      : {}),
+  };
+}

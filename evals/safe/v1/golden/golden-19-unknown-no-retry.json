@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "acceptableResponsibility": [],
+  "reasonCodes": [],
+  "id": "golden-19-unknown-no-retry",
+  "domain": "payments",
+  "classification": "adversarial",
+  "severity": "S3_HIGH",
+  "family": "execution",
+  "rawIntent": "Execute payment once; do not duplicate on timeout.",
+  "expectedConstraints": [
+    {
+      "concept": "idempotency",
+      "criticality": "HARD",
+      "operator": "REQUIRED",
+      "value": true
+    }
+  ],
+  "expectedAuthority": "ALLOW",
+  "expectedExecution": "UNKNOWN",
+  "expectedOutcome": "AWAITING_OUTCOME",
+  "expectedResolution": "NONE",
+  "split": "golden",
+  "attackLabel": "unknown_execution",
+  "environmentPublic": {
+    "adapterResult": "UNKNOWN"
+  }
+}

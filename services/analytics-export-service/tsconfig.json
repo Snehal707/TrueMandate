@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/analytics-bigquery" },
+    { "path": "../../packages/cloud-pubsub" },
+    { "path": "../../packages/cloud-runtime" },
+    { "path": "../../packages/observability" },
+    { "path": "../../packages/protocol" }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "p6-travel-quiet-party",
+  "domain": "travel",
+  "rawIntent": "Book a quiet hotel near the beach for Friday arrival.",
+  "action": {
+    "product": "Party Palace Hostel",
+    "merchant": "PartyPalace",
+    "amount": 12000,
+    "currency": "INR",
+    "capability": "non_refundable_purchase",
+    "consequenceLevel": "HIGH",
+    "parameters": { "atmosphere": "party", "nearBeach": true }
+  },
+  "expectedDecision": "BLOCK",
+  "notes": "Party atmosphere contradicts quiet preference treated as hard constraint in fixture."
+}

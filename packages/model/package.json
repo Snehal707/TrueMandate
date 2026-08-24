@@ -1,0 +1,29 @@
+{
+  "name": "@truemandate/model",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@truemandate/protocol": "workspace:*",
+    "@truemandate/schemas": "workspace:*",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "optionalDependencies": {
+    "google-auth-library": "^9.15.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

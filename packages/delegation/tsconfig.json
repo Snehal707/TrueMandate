@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../protocol" },
+    { "path": "../schemas" },
+    { "path": "../crypto" },
+    { "path": "../authority" },
+    { "path": "../semantic-readiness" }
+  ]
+}

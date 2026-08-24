@@ -1,0 +1,12 @@
+FROM node:20-slim AS build
+WORKDIR /app
+RUN corepack enable
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY packages ./packages
+COPY services ./services
+RUN pnpm install --frozen-lockfile && pnpm --filter @truemandate/phase-c-verifier... build
+FROM node:20-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app /app
+CMD ["node", "services/phase-c-verifier/dist/bin/start.js"]

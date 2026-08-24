@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/integration/**"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/schemas" },
+    { "path": "../../packages/crypto" },
+    { "path": "../../packages/authority" },
+    { "path": "../../packages/guardian-core" },
+    { "path": "../../packages/provenance" },
+    { "path": "../../packages/tool-registry" },
+    { "path": "../../packages/side-effect-ledger" },
+    { "path": "../../packages/cloud-pubsub" },
+    { "path": "../../packages/cloud-runtime" },
+    { "path": "../../packages/cloud-security" },
+    { "path": "../../packages/observability" },
+    { "path": "../intent-service" },
+    { "path": "../provenance-service" },
+    { "path": "../authority-service" },
+    { "path": "../outcome-service" }
+  ]
+}

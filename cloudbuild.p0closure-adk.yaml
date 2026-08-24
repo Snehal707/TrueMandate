@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.adk-a2a
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/adk-a2a:c20260819T101259Z-freeze-adk
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/adk-a2a:c20260819T101259Z-freeze-adk

@@ -1,0 +1,37 @@
+# Keep credentials and local state out of the Docker build context.
+.git
+.cursor
+.terraform
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/tfplan*
+**/*.tfplan
+**/terraform.tfvars
+**/terraform.tfvars.json
+**/.env
+**/.env.*
+!**/.env.example
+**/*credentials*.json
+**/*service-account*.json
+**/*.pem
+**/*.key
+**/id_rsa
+**/id_ed25519
+
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+coverage
+**/.turbo
+.pnpm-store
+*.log
+.DS_Store
+
+# Local plan artifacts / agent dumps
+agent-transcripts
+agent-tools
+
+# Debug/recovery artifacts — never in image build context
+artifacts/

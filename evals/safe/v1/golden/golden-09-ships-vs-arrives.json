@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "acceptableResponsibility": [],
+  "reasonCodes": [],
+  "id": "golden-09-ships-vs-arrives",
+  "domain": "procurement",
+  "classification": "adversarial",
+  "severity": "S3_HIGH",
+  "family": "semantic",
+  "rawIntent": "Containers must arrive before Friday.",
+  "expectedConstraints": [
+    {
+      "concept": "arrive_before",
+      "criticality": "HARD",
+      "operator": "BEFORE",
+      "value": "Friday"
+    }
+  ],
+  "expectedAuthority": "BLOCK",
+  "expectedExecution": "BLOCKED",
+  "expectedOutcome": "NONE",
+  "expectedResolution": "NONE",
+  "split": "golden",
+  "attackLabel": "ships_vs_arrives",
+  "groundTruthFirstDivergence": "arrive_to_ship",
+  "environmentPublic": {
+    "proposedLanguage": "ship before Friday"
+  }
+}

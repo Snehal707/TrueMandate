@@ -1,0 +1,213 @@
+{
+  "version": "2.0.0",
+  "description": "TrueMandate service account capability matrix (Phase 12 hardened). Forbidden capabilities must never be granted via IAM or application code.",
+  "publicAccess": {
+    "web": {
+      "ingress": "INGRESS_TRAFFIC_ALL",
+      "cloudRunInvoker": ["allUsers"],
+      "notes": "Static frontend + server-side BFF proxy; unauthenticated HTTP to web only"
+    },
+    "public-bff": {
+      "ingress": "INGRESS_TRAFFIC_ALL",
+      "cloudRunInvoker": [],
+      "notes": "Network-public but Cloud Run identity required; web SA proxies /v1 with OIDC"
+    },
+    "gateway": {
+      "ingress": "INGRESS_TRAFFIC_INTERNAL_ONLY",
+      "cloudRunInvokerAllowedFrom": ["authority"],
+      "notes": "Never publicly invokable"
+    }
+  },
+  "invokerGraph": {
+    "public-bff": ["intent-provenance", "outcome-resolution"],
+    "agent-runtime": ["intent-provenance", "observability-api"],
+    "intent-provenance": ["agent-runtime", "observability-api"],
+    "authority": ["gateway", "learning-service", "observability-api"],
+    "gateway": ["outcome-resolution", "observability-api"],
+    "outcome-resolution": ["observability-api"],
+    "web": ["public-bff"]
+  },
+  "forbiddenInvokerEdges": [
+    { "from": "public-bff", "to": "gateway" },
+    { "from": "web", "to": "gateway" },
+    { "from": "observability-api", "to": "gateway" },
+    { "from": "benchmark-runner", "to": "gateway" },
+    { "from": "agent-runtime", "to": "gateway" },
+    { "from": "intent-provenance", "to": "gateway" },
+    { "from": "outcome-resolution", "to": "gateway" },
+    { "from": "web", "to": "authority" },
+    { "from": "benchmark-runner", "to": "authority" },
+    { "from": "benchmark-runner", "to": "intent-provenance" }
+  ],
+  "serviceAccounts": {
+    "intent-provenance": {
+      "invoke": ["agent-runtime", "observability-api"],
+      "publish": [
+        "intent.events",
+        "semantic.events",
+        "plan.events",
+        "evidence.events",
+        "observability.events"
+      ],
+      "subscribe": ["authority.events", "execution.events"],
+      "firestore": ["read", "write"],
+      "vertex": [],
+      "armor": [],
+      "secrets": ["read:adk-runtime-config"],
+      "forbiddenCapabilities": [
+        "gateway.commit",
+        "authority.grantMint",
+        "resolution.mutate"
+      ]
+    },
+    "authority": {
+      "invoke": ["gateway", "learning-service", "observability-api"],
+      "publish": ["authority.events", "security.events", "observability.events"],
+      "subscribe": ["intent.events", "guardian.events", "plan.events"],
+      "firestore": ["read", "write"],
+      "vertex": [],
+      "armor": [],
+      "secrets": ["read:gateway-hmac-key"],
+      "forbiddenCapabilities": ["gateway.commit", "resolution.mutate"],
+      "notes": "gateway.commit forbids in-process TwoPhaseGateway.commit / payment adapter execution. Authority is the only Cloud Run invoker of Gateway and may S2S-invoke /internal/gateway/prepare|authorize|commit. Grant minting is exclusive to Authority."
+    },
+    "gateway": {
+      "invoke": ["outcome-resolution", "observability-api"],
+      "publish": ["execution.events", "security.events", "observability.events"],
+      "subscribe": ["authority.events", "outcome.events"],
+      "firestore": ["read", "write"],
+      "vertex": [],
+      "armor": ["scan-external-payloads"],
+      "secrets": ["read:gateway-hmac-key"],
+      "forbiddenCapabilities": ["authority.grantMint"],
+      "notes": "Gateway verifies and consumes Authority-owned grants and issues CommitTokens. It must never call createGrant / createGrantWithApproval."
+    },
+    "outcome-resolution": {
+      "invoke": ["observability-api"],
+      "publish": ["outcome.events", "resolution.events", "observability.events"],
+      "subscribe": ["execution.events", "evidence.events"],
+      "firestore": ["read", "write"],
+      "vertex": [],
+      "armor": [],
+      "secrets": [],
+      "forbiddenCapabilities": ["gateway.commit", "authority.grantMint"]
+    },
+    "agent-runtime": {
+      "invoke": ["intent-provenance", "observability-api"],
+      "publish": ["semantic.events", "plan.events", "guardian.events", "observability.events", "security.events"],
+      "subscribe": ["intent.events"],
+      "firestore": ["read"],
+      "vertex": ["predict", "generateContent"],
+      "armor": ["scan-model-input"],
+      "secrets": ["read:vertex-model-config", "read:adk-runtime-config"],
+      "forbiddenCapabilities": [
+        "authority.grantMint",
+        "gateway.commit",
+        "consumeGrant",
+        "resolution.mutate"
+      ]
+    },
+    "observability-api": {
+      "invoke": [],
+      "publish": ["observability.events"],
+      "subscribe": [
+        "intent.events",
+        "semantic.events",
+        "plan.events",
+        "guardian.events",
+        "authority.events",
+        "execution.events",
+        "evidence.events",
+        "outcome.events",
+        "resolution.events",
+        "security.events"
+      ],
+      "firestore": ["read"],
+      "vertex": [],
+      "armor": [],
+      "secrets": ["read:observability-api-key"],
+      "forbiddenCapabilities": ["gateway.commit", "authority.grantMint", "resolution.mutate"]
+    },
+    "public-bff": {
+      "invoke": ["intent-provenance", "outcome-resolution"],
+      "publish": [],
+      "subscribe": [],
+      "firestore": ["read"],
+      "vertex": [],
+      "armor": [],
+      "secrets": ["read:observability-api-key"],
+      "forbiddenCapabilities": [
+        "gateway.commit",
+        "authority.grantMint",
+        "consumeGrant",
+        "mintGrant",
+        "CommitToken",
+        "TwoPhaseGateway",
+        "resolution.mutate"
+      ]
+    },
+    "benchmark-runner": {
+      "invoke": [],
+      "publish": ["observability.events", "security.events"],
+      "subscribe": [],
+      "firestore": ["read"],
+      "vertex": ["predict", "generateContent"],
+      "armor": ["scan-model-input"],
+      "secrets": ["read:vertex-model-config"],
+      "forbiddenCapabilities": [
+        "productionEconomicAuthority",
+        "gateway.commit",
+        "authority.grantMint",
+        "consumeGrant"
+      ]
+    },
+    "web": {
+      "invoke": ["public-bff"],
+      "publish": [],
+      "subscribe": [],
+      "firestore": [],
+      "vertex": [],
+      "armor": [],
+      "secrets": [],
+      "forbiddenCapabilities": [
+        "firestore.write",
+        "secretAccessor",
+        "gateway.commit",
+        "authority.grantMint",
+        "pubsub",
+        "vertex",
+        "modelArmor"
+      ]
+    },
+    "analytics-export": {
+      "invoke": [],
+      "publish": [],
+      "subscribe": [
+        "intent.events",
+        "semantic.events",
+        "plan.events",
+        "guardian.events",
+        "authority.events",
+        "execution.events",
+        "evidence.events",
+        "outcome.events",
+        "resolution.events",
+        "security.events"
+      ],
+      "firestore": ["read", "write"],
+      "vertex": [],
+      "armor": [],
+      "secrets": [],
+      "bigquery": ["dataEditor"],
+      "forbiddenCapabilities": [
+        "gateway.commit",
+        "authority.grantMint",
+        "consumeGrant",
+        "resolution.mutate",
+        "PreparedAction.create",
+        "CommitToken.issue"
+      ],
+      "notes": "Wave 3.3 append-only analytics exporter. Firestore write is limited to analyticsExportLedger. BigQuery is analytics/history only — never read for authorization."
+    }
+  }
+}

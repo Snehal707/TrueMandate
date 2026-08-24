@@ -1,0 +1,42 @@
+{
+  "schema": "TRUEMANDATE_STRESS_SUMMARY_V1",
+  "runId": "2026-08-18T20-49-22-401Z",
+  "createdAt": "2026-08-18T20:49:22.402Z",
+  "kind": "integrity",
+  "total": 70,
+  "detected": 70,
+  "perFault": {
+    "disable_negation_check": {
+      "detected": 10,
+      "total": 10
+    },
+    "treat_payment_as_satisfied": {
+      "detected": 10,
+      "total": 10
+    },
+    "skip_cumulative_exposure": {
+      "detected": 10,
+      "total": 10
+    },
+    "ignore_taint": {
+      "detected": 10,
+      "total": 10
+    },
+    "allow_stale_intent_state": {
+      "detected": 10,
+      "total": 10
+    },
+    "collapse_outcome_to_payment": {
+      "detected": 10,
+      "total": 10
+    },
+    "force_established_blame": {
+      "detected": 10,
+      "total": 10
+    }
+  },
+  "artifacts": {
+    "resultsPath": "C:\\Users\\ASUS\\TrueMandate\\evals\\safe\\v1\\stress\\integrity-results_2026-08-18T20-49-22-401Z.jsonl",
+    "summaryPath": "C:\\Users\\ASUS\\TrueMandate\\evals\\safe\\v1\\stress\\integrity-summary_2026-08-18T20-49-22-401Z.json"
+  }
+}

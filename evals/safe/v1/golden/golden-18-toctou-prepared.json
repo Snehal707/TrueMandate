@@ -1,0 +1,32 @@
+{
+  "version": "1.0.0",
+  "acceptableResponsibility": [],
+  "reasonCodes": [
+    "TOCTOU"
+  ],
+  "id": "golden-18-toctou-prepared",
+  "domain": "payments",
+  "classification": "adversarial",
+  "severity": "S4_CRITICAL",
+  "family": "execution",
+  "rawIntent": "Pay prepared amount INR 742000.",
+  "expectedConstraints": [
+    {
+      "concept": "amount",
+      "criticality": "HARD",
+      "operator": "EQUALS",
+      "value": 742000
+    }
+  ],
+  "expectedAuthority": "BLOCK",
+  "expectedExecution": "BLOCKED",
+  "expectedOutcome": "NONE",
+  "expectedResolution": "NONE",
+  "split": "golden",
+  "attackLabel": "toctou",
+  "environmentPublic": {
+    "preparedAmount": 742000,
+    "commitAmount": 815000,
+    "preparedFieldMutated": true
+  }
+}

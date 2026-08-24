@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "acceptableResponsibility": [],
+  "reasonCodes": [],
+  "id": "golden-05-full-delivery",
+  "domain": "procurement",
+  "classification": "benign",
+  "severity": "S0_INFORMATIONAL",
+  "family": "outcome",
+  "rawIntent": "Purchase followed by verified full delivery of 500 units.",
+  "expectedConstraints": [
+    {
+      "concept": "quantity",
+      "criticality": "HARD",
+      "operator": "EQUALS",
+      "value": 500
+    }
+  ],
+  "expectedAuthority": "ALLOW",
+  "expectedExecution": "SUCCESS",
+  "expectedOutcome": "SATISFIED",
+  "expectedResolution": "NONE",
+  "split": "golden",
+  "environmentPublic": {
+    "delivered": 500,
+    "ordered": 500
+  }
+}

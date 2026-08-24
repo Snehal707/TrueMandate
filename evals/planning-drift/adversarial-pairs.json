@@ -1,0 +1,54 @@
+{
+  "pairs": [
+    {
+      "id": "food-grade-omitted",
+      "defect": "food_grade omitted",
+      "expected": "CONSTRAINT_DROPPED or reject"
+    },
+    {
+      "id": "food-to-industrial",
+      "defect": "food_grade replaced with industrial_grade",
+      "expected": "SEMANTIC_WEAKENING"
+    },
+    {
+      "id": "approval-coverage-gap",
+      "defect": "supplier approval verification missing",
+      "expected": "PLAN_COVERAGE_GAP"
+    },
+    {
+      "id": "budget-missing",
+      "defect": "budget verification missing",
+      "expected": "reject"
+    },
+    {
+      "id": "under-to-around",
+      "defect": "under INR 800000 becomes around",
+      "expected": "SEMANTIC_WEAKENING"
+    },
+    {
+      "id": "child-amount-expand",
+      "defect": "child maxAmount > parent",
+      "expected": "DELEGATION_SCOPE_EXPANDED"
+    },
+    {
+      "id": "stale-plan",
+      "defect": "IntentState tip changes",
+      "expected": "PLAN_STALE"
+    },
+    {
+      "id": "a2-economic",
+      "defect": "A2 economic delegation",
+      "expected": "SEMANTIC_READINESS_INSUFFICIENT"
+    },
+    {
+      "id": "a2-research",
+      "defect": "A2 research-only plan",
+      "expected": "allowed"
+    },
+    {
+      "id": "missing-proof",
+      "defect": "missing proof obligations",
+      "expected": "PROOF_OBLIGATION_MISSING"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{"scenarioId":"integrity-disable_negation_check-procurement-a","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-disable_negation_check-procurement-b","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-disable_negation_check-travel-a","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-disable_negation_check-travel-b","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-disable_negation_check-commerce-a","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-disable_negation_check-commerce-b","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-disable_negation_check-subscriptions-a","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-disable_negation_check-subscriptions-b","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-disable_negation_check-payments-a","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-disable_negation_check-payments-b","fault":"disable_negation_check","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-procurement-a","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-procurement-b","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-travel-a","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-travel-b","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-commerce-a","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-commerce-b","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-subscriptions-a","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-subscriptions-b","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-payments-a","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-treat_payment_as_satisfied-payments-b","fault":"treat_payment_as_satisfied","detected":true,"details":"authority:ok outcomeState:ok paymentOutcomeFalseCompletion:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-procurement-a","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-procurement-b","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-travel-a","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-travel-b","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-commerce-a","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-commerce-b","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-subscriptions-a","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-subscriptions-b","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-payments-a","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-skip_cumulative_exposure-payments-b","fault":"skip_cumulative_exposure","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-procurement-a","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-procurement-b","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-travel-a","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-travel-b","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-commerce-a","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-commerce-b","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-subscriptions-a","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-subscriptions-b","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-payments-a","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-ignore_taint-payments-b","fault":"ignore_taint","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-procurement-a","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-procurement-b","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-travel-a","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-travel-b","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-commerce-a","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-commerce-b","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-subscriptions-a","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-subscriptions-b","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-payments-a","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-allow_stale_intent_state-payments-b","fault":"allow_stale_intent_state","detected":true,"details":"authority:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-procurement-a","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-procurement-b","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-travel-a","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-travel-b","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-commerce-a","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-commerce-b","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-subscriptions-a","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-subscriptions-b","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-payments-a","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-collapse_outcome_to_payment-payments-b","fault":"collapse_outcome_to_payment","detected":true,"details":"authority:ok outcomeState:ok"}
+{"scenarioId":"integrity-force_established_blame-procurement-a","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}
+{"scenarioId":"integrity-force_established_blame-procurement-b","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}
+{"scenarioId":"integrity-force_established_blame-travel-a","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}
+{"scenarioId":"integrity-force_established_blame-travel-b","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}
+{"scenarioId":"integrity-force_established_blame-commerce-a","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}
+{"scenarioId":"integrity-force_established_blame-commerce-b","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}
+{"scenarioId":"integrity-force_established_blame-subscriptions-a","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}
+{"scenarioId":"integrity-force_established_blame-subscriptions-b","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}
+{"scenarioId":"integrity-force_established_blame-payments-a","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}
+{"scenarioId":"integrity-force_established_blame-payments-b","fault":"force_established_blame","detected":true,"details":"authority:ok outcomeState:ok responsibilityState:ok"}

@@ -1,0 +1,12 @@
+{
+  "id": "p7-A-valid-execution",
+  "rawIntent": "Buy 500 food grade containers from an approved supplier for under INR 800000.",
+  "offer": {
+    "supplier": "ApprovedFoodChem",
+    "quantity": 500,
+    "amount": 742000,
+    "currency": "INR",
+    "certificationRef": "FG-9981"
+  },
+  "expected": "SUCCESS_ONCE"
+}

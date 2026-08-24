@@ -1,0 +1,34 @@
+{
+  "name": "truemandate",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Semantic trust and governance runtime for autonomous economic AI agents",
+  "packageManager": "pnpm@10.28.1",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r run typecheck",
+    "clean": "pnpm -r exec rimraf dist",
+    "safe:run": "vitest run services/benchmark-runner/src/benchmark-runner.test.ts",
+    "safe:golden": "vitest run services/benchmark-runner/src/benchmark-runner.test.ts",
+    "safe:cloud": "vitest run services/benchmark-runner/src/safe-cloud-subset.test.ts",
+    "benchmark:v2:input-hash": "node scripts/benchmark/v2-input-hash.mjs",
+    "benchmark:v2:collect": "node scripts/benchmark/collect-v2-run.mjs",
+    "benchmark:v2:local": "node scripts/benchmark/run-v2-local-conformance.mjs",
+    "benchmark:v2:readmodel": "node scripts/demo/build-current-benchmark-readmodel.mjs",
+    "test:public-api": "vitest run packages/public-api/src",
+    "cloud:smoke": "node -e \"console.log('Optional live GCP smoke: set credentials then run ./scripts/cloud/smoke.sh'); process.exit(process.env.GOOGLE_CLOUD_PROJECT ? 0 : 0)\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "fast-check": "^4.9.0",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

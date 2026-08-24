@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  // run.ts is the acceptance harness: it imports internal coordinator
+  // classes across service boundaries and executes under vitest only.
+  "exclude": ["src/**/*.test.ts", "src/run.ts"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/schemas" },
+    { "path": "../../packages/crypto" },
+    { "path": "../../packages/cloud-runtime" }
+  ]
+}

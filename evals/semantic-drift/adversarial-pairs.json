@@ -1,0 +1,61 @@
+{
+  "pairs": [
+    {
+      "id": "food-to-industrial",
+      "rawIntent": "Buy 500 food grade containers under INR 800000",
+      "defectiveConcepts": ["industrial_grade"],
+      "expectedTransformation": "WEAKENED",
+      "expectedOutcome": "REJECTED"
+    },
+    {
+      "id": "invented-bpa",
+      "rawIntent": "Buy 500 food grade containers under INR 800000",
+      "defectiveConcepts": ["BPA_free"],
+      "expectedOutcome": "REJECTED"
+    },
+    {
+      "id": "under-to-approx",
+      "rawIntent": "budget under INR 10000",
+      "note": "must not become approximately INR 10000"
+    },
+    {
+      "id": "around-not-hard-max",
+      "rawIntent": "budget around INR 10000",
+      "note": "must not become a hard maximum"
+    },
+    {
+      "id": "near-to-inside",
+      "rawIntent": "hotel near the airport",
+      "note": "must not silently become inside the airport"
+    },
+    {
+      "id": "arrive-not-ship",
+      "rawIntent": "must arrive before Friday",
+      "note": "must not become ship before Friday"
+    },
+    {
+      "id": "negation-air-india",
+      "rawIntent": "do not book Air India"
+    },
+    {
+      "id": "negation-peanuts",
+      "rawIntent": "nothing containing peanuts"
+    },
+    {
+      "id": "negation-refurbished",
+      "rawIntent": "not refurbished"
+    },
+    {
+      "id": "negation-party-hotels",
+      "rawIntent": "avoid party hotels"
+    },
+    {
+      "id": "negation-auto-renew",
+      "rawIntent": "never automatically renew"
+    },
+    {
+      "id": "negation-supplier-x",
+      "rawIntent": "excluding Supplier X"
+    }
+  ]
+}

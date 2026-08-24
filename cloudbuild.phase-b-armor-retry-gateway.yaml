@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.gateway
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/gateway:phase-b-armor-retry-20260817T232406Z
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/gateway:phase-b-armor-retry-20260817T232406Z

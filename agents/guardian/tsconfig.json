@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/model" },
+    { "path": "../../packages/guardian-core" },
+    { "path": "../../packages/provenance" },
+    { "path": "../../services/intent-service" },
+    { "path": "../../services/provenance-service" },
+    { "path": "../fidelity-judge" },
+    { "path": "../contradiction-judge" },
+    { "path": "../devils-advocate" },
+    { "path": "../provenance-judge" },
+    { "path": "../evidence-judge" }
+  ]
+}

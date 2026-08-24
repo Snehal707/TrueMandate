@@ -1,0 +1,6 @@
+{
+  "id": "p7-F-search-agent-payment",
+  "agentCapabilities": { "search": "ALLOW" },
+  "toolId": "payment.execute",
+  "expectedCode": "TOOL_NOT_VISIBLE"
+}

@@ -1,0 +1,44 @@
+{
+  "name": "@truemandate/resolution-service",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./outcome-internal-routes": {
+      "types": "./dist/outcome-internal-routes.d.ts",
+      "import": "./dist/outcome-internal-routes.js"
+    },
+    "./resolution-read-routes": {
+      "types": "./dist/resolution-read-routes.d.ts",
+      "import": "./dist/resolution-read-routes.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/bin/start.js"
+  },
+  "dependencies": {
+    "@truemandate/cloud-pubsub": "workspace:*",
+    "@truemandate/cloud-runtime": "workspace:*",
+    "@truemandate/crypto": "workspace:*",
+    "@truemandate/authority": "workspace:*",
+    "@truemandate/evidence-service": "workspace:*",
+    "@truemandate/observability": "workspace:*",
+    "@truemandate/outcome-core": "workspace:*",
+    "@truemandate/outcome-service": "workspace:*",
+    "@truemandate/protocol": "workspace:*",
+    "@truemandate/provenance": "workspace:*",
+    "@truemandate/resolution-core": "workspace:*",
+    "@truemandate/schemas": "workspace:*",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

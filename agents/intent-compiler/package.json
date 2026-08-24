@@ -1,0 +1,36 @@
+{
+  "name": "@truemandate/intent-compiler",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@truemandate/cloud-security": "workspace:*",
+    "@truemandate/crypto": "workspace:*",
+    "@truemandate/intent-service": "workspace:*",
+    "@truemandate/intent-verifier": "workspace:*",
+    "@truemandate/model": "workspace:*",
+    "@truemandate/observability": "workspace:*",
+    "@truemandate/protocol": "workspace:*",
+    "@truemandate/provenance": "workspace:*",
+    "@truemandate/provenance-service": "workspace:*",
+    "@truemandate/schemas": "workspace:*",
+    "@truemandate/semantic-grounding": "workspace:*"
+  },
+  "devDependencies": {
+    "@truemandate/authority-service": "workspace:*",
+    "@truemandate/cloud-pubsub": "workspace:*",
+    "@truemandate/cloud-runtime": "workspace:*",
+    "typescript": "^5.8.2"
+  }
+}

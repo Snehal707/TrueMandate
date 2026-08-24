@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/schemas" },
+    { "path": "../../packages/crypto" },
+    { "path": "../../packages/semantic-readiness" },
+    { "path": "../../packages/cloud-pubsub" },
+    { "path": "../../packages/cloud-runtime" },
+    { "path": "../../packages/cloud-security" },
+    { "path": "../../packages/model" },
+    { "path": "../../packages/observability" },
+    { "path": "../intent-service" },
+    { "path": "../provenance-service" },
+    { "path": "../../agents/intent-compiler" },
+    { "path": "../../packages/guardian-core" },
+    { "path": "../../packages/provenance" },
+    { "path": "../../agents/planner" },
+    { "path": "../../agents/plan-verifier" },
+    { "path": "../../agents/guardian" }
+  ]
+}

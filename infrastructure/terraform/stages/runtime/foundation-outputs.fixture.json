@@ -1,0 +1,58 @@
+{
+  "region": "us-central1",
+  "name_prefix": "tm-dev",
+  "artifact_registry_repo_id": "truemandate",
+  "model_armor_template_name": "projects/elite-crossbar-505104-t9/locations/us-central1/templates/tm-dev-prompt-response",
+  "service_account_emails": {
+    "agent-runtime": "tm-dev-agent-runtime@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "authority": "tm-dev-authority@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "benchmark-runner": "tm-dev-benchmark-runner@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "evidence-service": "tm-dev-evidence-service@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "gateway": "tm-dev-gateway@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "intent-provenance": "tm-dev-intent-provenance@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "observability-api": "tm-dev-observability-api@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "outcome-resolution": "tm-dev-outcome-resolution@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "phase-a-verifier": "tm-dev-phase-a-verifier@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "public-bff": "tm-dev-public-bff@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "web": "tm-dev-web@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "phase-b-verifier": "tm-dev-phase-b-verifier@elite-crossbar-505104-t9.iam.gserviceaccount.com",
+    "phase-c-verifier": "tm-dev-phase-c-verifier@elite-crossbar-505104-t9.iam.gserviceaccount.com"
+  },
+  "consumer_topics": {
+    "agent-runtime": [
+      "intent.events"
+    ],
+    "authority": [
+      "intent.events",
+      "guardian.events",
+      "plan.events"
+    ],
+    "gateway": [
+      "authority.events",
+      "outcome.events"
+    ],
+    "intent-provenance": [
+      "authority.events",
+      "execution.events"
+    ],
+    "observability-api": [
+      "intent.events",
+      "semantic.events",
+      "plan.events",
+      "guardian.events",
+      "authority.events",
+      "execution.events",
+      "evidence.events",
+      "outcome.events",
+      "resolution.events",
+      "security.events"
+    ],
+    "outcome-resolution": [
+      "execution.events",
+      "evidence.events"
+    ]
+  },
+  "vpc_network": "projects/elite-crossbar-505104-t9/global/networks/tm-dev-s2s",
+  "vpc_subnet": "projects/elite-crossbar-505104-t9/regions/us-central1/subnetworks/tm-dev-s2s-usc1",
+  "vpc_egress": "ALL_TRAFFIC"
+}

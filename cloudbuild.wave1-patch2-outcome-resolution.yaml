@@ -1,0 +1,15 @@
+﻿steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.outcome-resolution
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/outcome-resolution:wave1-patch2-20260820T165809Z
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/outcome-resolution:wave1-patch2-20260820T165809Z
+timeout: 1800s
+options:
+  machineType: E2_HIGHCPU_8

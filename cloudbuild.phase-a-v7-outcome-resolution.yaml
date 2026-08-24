@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.outcome-resolution
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/outcome-resolution:phase-a-v7-20260817T185219Z
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/outcome-resolution:phase-a-v7-20260817T185219Z

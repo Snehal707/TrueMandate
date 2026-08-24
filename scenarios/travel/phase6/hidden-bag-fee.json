@@ -1,0 +1,15 @@
+{
+  "id": "p6-travel-hidden-bag-fee",
+  "domain": "travel",
+  "rawIntent": "Book flights under 20000 INR total including bags.",
+  "action": {
+    "product": "BudgetAir",
+    "amount": 18000,
+    "currency": "INR",
+    "capability": "execute_payment",
+    "consequenceLevel": "HIGH",
+    "parameters": { "headlineFare": 18000, "bagFee": 4500, "totalCost": 22500 }
+  },
+  "expectedDecision": "BLOCK",
+  "notes": "Headline fare under budget; total cost breaches financial constraint."
+}

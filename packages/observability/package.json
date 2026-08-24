@@ -1,0 +1,44 @@
+{
+  "name": "@truemandate/observability",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./propagation": {
+      "types": "./dist/propagation.d.ts",
+      "import": "./dist/propagation.js"
+    },
+    "./workflow-stage": {
+      "types": "./dist/workflow-stage.d.ts",
+      "import": "./dist/workflow-stage.js"
+    },
+    "./structured-log": {
+      "types": "./dist/structured-log.d.ts",
+      "import": "./dist/structured-log.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@truemandate/protocol": "workspace:*",
+    "@truemandate/schemas": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/resources": "^2.0.0",
+    "@opentelemetry/sdk-node": "^0.221.0",
+    "@opentelemetry/semantic-conventions": "^1.28.0",
+    "@google-cloud/opentelemetry-cloud-trace-exporter": "^3.0.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/core": "^2.0.0",
+    "@opentelemetry/sdk-trace-base": "^2.0.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@truemandate/learning-service",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./learning-routes": {
+      "types": "./dist/learning-routes.d.ts",
+      "import": "./dist/learning-routes.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/bin/start.js"
+  },
+  "dependencies": {
+    "@truemandate/authority": "workspace:*",
+    "@truemandate/cloud-pubsub": "workspace:*",
+    "@truemandate/cloud-runtime": "workspace:*",
+    "@truemandate/observability": "workspace:*",
+    "@truemandate/preference-core": "workspace:*",
+    "@truemandate/workflow-rule-core": "workspace:*",
+    "@truemandate/protocol": "workspace:*",
+    "@truemandate/schemas": "workspace:*",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

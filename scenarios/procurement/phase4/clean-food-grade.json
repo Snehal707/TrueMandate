@@ -1,0 +1,23 @@
+{
+  "id": "phase4-clean-food-grade",
+  "rawIntent": "Buy 500 food grade containers from an approved supplier for under INR 800000.",
+  "variants": [
+    "Buy 500 food-grade containers from an approved supplier for under INR 800,000.",
+    "Purchase 500 Food Grade containers via an approved supplier under INR 800000"
+  ],
+  "expectedConstraints": [
+    { "concept": "quantity", "operator": "EQ", "value": 500, "meaningClass": "EXPLICIT" },
+    { "concept": "food_grade", "operator": "REQUIRE", "value": true, "meaningClass": "EXPLICIT" },
+    { "concept": "budget", "operator": "LTE", "value": 800000, "meaningClass": "EXPLICIT" },
+    { "concept": "approved_supplier", "operator": "REQUIRE", "value": true, "meaningClass": "EXPLICIT" }
+  ],
+  "expectedAmbiguities": [
+    {
+      "relatedConcepts": ["approved_supplier"],
+      "ambiguityClass": "A2",
+      "description": "Approval source unknown"
+    }
+  ],
+  "expectedVerificationOutcome": "AMBIGUOUS",
+  "expectedReadiness": "PLANNABLE"
+}

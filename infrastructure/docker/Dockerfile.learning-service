@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1
+
+FROM node:20-slim AS build
+WORKDIR /app
+RUN corepack enable
+
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY packages ./packages
+COPY services ./services
+
+RUN pnpm install --frozen-lockfile \
+  && pnpm --filter @truemandate/learning-service... build
+
+FROM node:20-slim
+WORKDIR /app
+ENV NODE_ENV=production
+ENV TM_PERSISTENCE=firestore
+ENV TM_REQUIRE_CONFIG=true
+ENV TM_SERVICE_NAME=learning-service
+
+COPY --from=build /app /app
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "services/learning-service/dist/bin/start.js"]

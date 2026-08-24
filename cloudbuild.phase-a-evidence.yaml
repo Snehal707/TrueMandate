@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.evidence-service
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/evidence-service:phase-a-preexec-20260817T111533Z
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/evidence-service:phase-a-preexec-20260817T111533Z

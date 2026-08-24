@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1
+
+FROM node:20-slim AS build
+WORKDIR /app
+RUN corepack enable
+
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY packages ./packages
+COPY services ./services
+COPY apps/attack-lab ./apps/attack-lab
+COPY infrastructure/docker/node-crypto-shim.ts ./infrastructure/docker/node-crypto-shim.ts
+
+RUN pnpm install --frozen-lockfile \
+  && pnpm --filter @truemandate/attack-lab... build
+
+FROM node:20-slim
+WORKDIR /app
+ENV NODE_ENV=production
+ENV TM_PERSISTENCE=memory
+ENV TM_REQUIRE_CONFIG=false
+ENV TM_SERVICE_NAME=attack-lab
+
+RUN npm install -g serve@14.2.4
+
+COPY --from=build /app/apps/attack-lab/dist ./dist
+COPY infrastructure/docker/health-stub.mjs ./health-stub.mjs
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["sh", "-c", "serve -s dist -l 3000 & node health-stub.mjs"]

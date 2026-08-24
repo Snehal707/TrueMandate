@@ -1,0 +1,35 @@
+{
+  "name": "@truemandate/agent-runtime",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "main": "./dist/bin/start.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/bin/start.js"
+  },
+  "dependencies": {
+    "@truemandate/cloud-pubsub": "workspace:*",
+    "@truemandate/cloud-runtime": "workspace:*",
+    "@truemandate/cloud-security": "workspace:*",
+    "@truemandate/crypto": "workspace:*",
+    "@truemandate/guardian": "workspace:*",
+    "@truemandate/guardian-core": "workspace:*",
+    "@truemandate/intent-compiler": "workspace:*",
+    "@truemandate/model": "workspace:*",
+    "@truemandate/observability": "workspace:*",
+    "@truemandate/plan-verifier": "workspace:*",
+    "@truemandate/planner": "workspace:*",
+    "@truemandate/protocol": "workspace:*",
+    "@truemandate/provenance": "workspace:*",
+    "@truemandate/provenance-service": "workspace:*",
+    "@truemandate/schemas": "workspace:*",
+    "@truemandate/semantic-readiness": "workspace:*",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@truemandate/intent-service": "workspace:*",
+    "typescript": "^5.8.2"
+  }
+}

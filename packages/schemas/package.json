@@ -1,0 +1,28 @@
+{
+  "name": "@truemandate/schemas",
+  "version": "0.1.0",
+  "description": "Zod runtime schemas for protocol objects",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@truemandate/protocol": "workspace:*",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

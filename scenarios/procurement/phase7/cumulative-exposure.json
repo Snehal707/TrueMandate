@@ -1,0 +1,7 @@
+{
+  "id": "p7-G-exposure",
+  "budget": 50000,
+  "prior": 45000,
+  "proposed": 9000,
+  "expectedCode": "CUMULATIVE_EXPOSURE_EXCEEDED"
+}

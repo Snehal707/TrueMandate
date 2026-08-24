@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - -f
+      - infrastructure/docker/Dockerfile.agent-runtime
+      - -t
+      - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/agent-runtime:wave4-stabilization-r21-20260823
+      - .
+images:
+  - us-central1-docker.pkg.dev/elite-crossbar-505104-t9/truemandate/agent-runtime:wave4-stabilization-r21-20260823

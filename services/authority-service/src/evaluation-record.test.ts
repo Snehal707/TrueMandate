@@ -1,0 +1,11 @@
+import { describe, expect, it } from "vitest";
+import { createEvaluationRecord, evaluationHash, InMemoryEvaluationStore } from "./evaluation-record.js";
+
+const h = (c: string) => c.repeat(64);
+function valid() { return { schemaVersion: 1 as const, id: "evaluation-1", workflowId: "wf-1", workflow: { id: "wf-1", hash: h("a") }, action: { id: "action-1", hash: h("b") }, guardian: { id: "guardian-1", hash: h("c") }, evaluatedIntentState: { id: "state-1", hash: h("d"), version: 1 }, decision: "ALLOW" as const, scope: { capabilities: { execute_payment: "ALLOW" as const }, maxAmount: 742000, currency: "INR", allowedMerchants: ["supplier-1"], expiresAt: "2030-01-01T00:00:00.000Z" }, capability: "execute_payment", merchant: "supplier-1", amount: 742000, currency: "INR", expiresAt: "2030-01-01T00:00:00.000Z", materializationEligible: true, createdAt: "2026-01-01T00:00:00.000Z" }; }
+describe("AuthorityEvaluationRecord", () => {
+  it("canonically hashes and creates an immutable eligible record", async () => { const store = new InMemoryEvaluationStore(); const input=valid(); const a=await createEvaluationRecord(store,input); const b=await createEvaluationRecord(store,input); expect(a.ok&&b.ok).toBe(true); if(a.ok&&b.ok) expect(a.value.recordHash).toBe(b.value.recordHash); });
+  it.each(["workflow","action","guardian","decision","expiresAt"])("changes to %s conflict under one identity", async (field) => { const store=new InMemoryEvaluationStore(); const input=valid(); await createEvaluationRecord(store,input); const row=input as unknown as Record<string, unknown>; const changed={...input,[field]:field==="decision"?"BLOCK":field==="expiresAt"?"2029-01-01T00:00:00.000Z":{...(row[field] as Record<string, unknown>),hash:h("e")}}; const result=await createEvaluationRecord(store,changed as typeof input); expect(result.ok).toBe(false); });
+  it("rejects a caller-shaped malformed canonical record", async () => { const input={...valid(), action:{id:"action-1",hash:"not-a-hash"}}; expect((await createEvaluationRecord(new InMemoryEvaluationStore(),input as never)).ok).toBe(false); });
+  it("hash changes for authority-bearing economics", () => { const input=valid(); expect(evaluationHash(input)).not.toBe(evaluationHash({...input,amount:1})); });
+});

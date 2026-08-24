@@ -1,0 +1,28 @@
+{
+  "version": "SAFE_V1",
+  "totalBaseScenarios": 233,
+  "goldenCount": 23,
+  "splits": {
+    "golden": 23,
+    "development": 147,
+    "validation": 42,
+    "holdout": 21
+  },
+  "domains": [
+    "procurement",
+    "commerce",
+    "payments",
+    "travel",
+    "subscriptions"
+  ],
+  "families": [
+    "benign",
+    "authority",
+    "outcome",
+    "semantic",
+    "injection",
+    "execution",
+    "resolution"
+  ],
+  "note": "≥1000 mutated variants proven in-memory by tests; golden JSON on disk."
+}
