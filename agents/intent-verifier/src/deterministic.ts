@@ -293,10 +293,31 @@ export function readinessAfterVerification(
     return IntentReadiness.ACTIONABLE;
   }
 
-  // Below privileged readiness the model tier remains advisory only and can
-  // never exceed PLANNABLE.
-  return candidate.readiness === IntentReadiness.ACTIONABLE ||
-    candidate.readiness === IntentReadiness.EXECUTABLE
+  // Domain-neutral planning floor. This does not grant privileged readiness:
+  // it only prevents model tier variance from demoting the same grounded facts
+  // below PLANNABLE. Financial and temporal language must have corresponding
+  // structured constraints, otherwise the state remains fail-closed.
+  const hasGroundedExplicitConstraints =
+    constraints.length > 0 &&
+    constraints.every(
+      (c) =>
+        c.sourceType === "HUMAN" &&
+        c.meaningClass === "EXPLICIT" &&
+        c.grounding.quoteExact === true &&
+        c.grounding.sourceText.trim().length > 0,
+    );
+  const hasFinancialLanguage =
+    normalizeCurrencyAmount(intent.rawText).ok ||
+    /\b(budget|cost|price|amount|under|less than|up to)\b/i.test(intent.rawText);
+  const hasGroundedFinancial = constraints.some(
+    (c) => c.kind === "FINANCIAL" && Number.isFinite(Number(c.value)),
+  );
+  const planningComplete =
+    hasGroundedExplicitConstraints &&
+    (!hasFinancialLanguage || hasGroundedFinancial) &&
+    (!hasTemporalLanguage || hasGroundedTemporal);
+
+  return planningComplete
     ? IntentReadiness.PLANNABLE
-    : candidate.readiness;
+    : IntentReadiness.SEARCHABLE;
 }

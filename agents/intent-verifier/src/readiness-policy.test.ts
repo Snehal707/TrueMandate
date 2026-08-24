@@ -117,7 +117,48 @@ describe("deterministic authorization-readiness policy", () => {
   it("requires a grounded explicit-human temporal constraint when the intent contains a deadline", () => {
     const noTemporal = candidate({ constraints: candidate().constraints.filter((c: { kind: string }) => c.kind !== "TEMPORAL") });
     const tier = readinessAfterVerification(INTENT, noTemporal, false, AmbiguityClass.A0);
-    expect(tier).toBe(IntentReadiness.PLANNABLE);
+    expect(tier).toBe(IntentReadiness.SEARCHABLE);
+  });
+
+  it("gives the live SaaS A1 shape a deterministic planning floor without privileged readiness", () => {
+    const saasIntent = {
+      ...INTENT,
+      rawText: "Purchase 10 seats of an approved SaaS plan with manual renewal and 12 month term for under USD 12000 before December 31, 2026.",
+    } as never;
+    const saasConstraints = [
+      constraint({ id: "c-seat", concept: "seat_count", value: 10 }),
+      constraint({ id: "c-plan", concept: "plan_approval_status", value: true, operator: "REQUIRE", kind: ConstraintKind.ORGANIZATIONAL_POLICY }),
+      constraint({ id: "c-renewal", concept: "renewal_type", value: "MANUAL" }),
+      constraint({ id: "c-term", concept: "term_length_months", value: 12 }),
+      constraint({ id: "c-budget", concept: "budget_limit", value: 12000, operator: "LT", kind: ConstraintKind.FINANCIAL }),
+      constraint({
+        id: "c-deadline", concept: "deadline", value: "2026-12-31T23:59:59.000Z", operator: "LTE", kind: ConstraintKind.TEMPORAL,
+        temporalResolution: { originalExpression: "before December 31, 2026", resolvedValue: "2026-12-31T23:59:59.000Z", resolutionTimestamp: "2026-08-24T00:00:00.000Z", timezone: "UTC" },
+      }),
+    ];
+    const searchable = candidate({ constraints: saasConstraints, readiness: IntentReadiness.SEARCHABLE });
+    const executable = candidate({ constraints: saasConstraints, readiness: IntentReadiness.EXECUTABLE });
+
+    expect(readinessAfterVerification(saasIntent, searchable, false, AmbiguityClass.A1)).toBe(IntentReadiness.PLANNABLE);
+    expect(readinessAfterVerification(saasIntent, executable, false, AmbiguityClass.A1)).toBe(IntentReadiness.PLANNABLE);
+  });
+
+  it("keeps incomplete and ungrounded A0/A1 candidates fail-closed", () => {
+    const incomplete = candidate({ constraints: [], readiness: IntentReadiness.EXECUTABLE });
+    const ungroundedConstraint = {
+      ...constraint({ id: "c-budget", concept: "budget", value: 800000, kind: ConstraintKind.FINANCIAL }),
+      grounding: { sourceText: "under INR 800000", sourceSpan: { start: 0, end: 17 }, quoteExact: false },
+    };
+    const ungrounded = candidate({ constraints: [ungroundedConstraint], readiness: IntentReadiness.PLANNABLE });
+
+    expect(readinessAfterVerification(INTENT, incomplete, false, AmbiguityClass.A0)).toBe(IntentReadiness.SEARCHABLE);
+    expect(readinessAfterVerification(INTENT, ungrounded, false, AmbiguityClass.A1)).toBe(IntentReadiness.SEARCHABLE);
+  });
+
+  it("keeps critical failures and A3/A4 fail-closed regardless of complete facts", () => {
+    expect(readinessAfterVerification(INTENT, candidate(), true, AmbiguityClass.A0)).toBe(IntentReadiness.SEARCHABLE);
+    expect(readinessAfterVerification(INTENT, candidate(), false, AmbiguityClass.A3)).toBe(IntentReadiness.SEARCHABLE);
+    expect(readinessAfterVerification(INTENT, candidate(), false, AmbiguityClass.A4)).toBe(IntentReadiness.SEARCHABLE);
   });
 
   it("keeps tainted/advisory model findings from altering the deterministic tier", () => {

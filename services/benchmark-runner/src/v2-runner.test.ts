@@ -60,4 +60,56 @@ describe("current-system benchmark fixtures", () => {
     expect(reads.lane).toBe("PUBLIC_READ");
     expect(reads.successfulRequests).toBe(10);
   });
+
+  it("emits ordered public phase diagnostics without changing submission behavior", async () => {
+    let workspaceReads = 0;
+    const server = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.method === "GET" && request.url?.includes("/workspace/")) {
+        workspaceReads += 1;
+        response.writeHead(200);
+        response.end(JSON.stringify({
+          summary: workspaceReads === 1
+            ? { intentId: "intent-phase" }
+            : { intentId: "intent-phase", intentStateId: "state-phase", stateHash: "hash-phase" },
+          evidence: [], approvals: [], monitoring: [], execution: null, outcome: null, resolution: null,
+        }));
+        return;
+      }
+      let body = "";
+      request.on("data", (chunk) => { body += String(chunk); });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as { intent?: { kind?: string } };
+        if (parsed.intent?.kind === "RAW") {
+          response.writeHead(503);
+          response.end(JSON.stringify({ error: { code: "INTENT_STATE_NOT_READY", message: "pending" } }));
+          return;
+        }
+        response.writeHead(200);
+        response.end(JSON.stringify({ workflowId: "wf-phase", state: "BLOCKED", artifacts: [] }));
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing test server port");
+    const phases: string[] = [];
+
+    const run = await runWorkflowLoadLevel({
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      concurrencyLevels: [1], workflowsPerLevel: 1, timeoutMs: 5_000,
+      readinessPollMs: 1, readinessAttempts: 3,
+      domains: ["saas_it_spend"],
+      diagnostic: (event) => phases.push(event.phase),
+    }, 1, 1);
+
+    expect(run.results[0]?.status).toBe("PASS");
+    expect(phases).toEqual([
+      "RAW_SUBMISSION",
+      "WORKSPACE_POLL",
+      "WORKSPACE_POLL",
+      "STATE_BOUND_SUBMISSION",
+      "RESPONSE_HANDOFF",
+    ]);
+  });
 });

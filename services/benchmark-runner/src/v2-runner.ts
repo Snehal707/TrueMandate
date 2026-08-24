@@ -16,6 +16,23 @@ export interface BenchmarkV2LoadConfig {
   readonly readinessPollMs: number;
   readonly readinessAttempts: number;
   readonly now?: () => Date;
+  readonly domains?: readonly BenchmarkV2Domain[];
+  readonly diagnostic?: (record: BenchmarkV2PhaseDiagnostic) => void;
+}
+
+export interface BenchmarkV2PhaseDiagnostic {
+  readonly scenarioId: string;
+  readonly intentId?: string;
+  readonly phase:
+    | "RAW_SUBMISSION"
+    | "WORKSPACE_POLL"
+    | "STATE_BOUND_SUBMISSION"
+    | "RESPONSE_HANDOFF";
+  readonly attempt: number;
+  readonly latencyMs: number;
+  readonly ok: boolean;
+  readonly status: string;
+  readonly stateId?: string;
 }
 
 export interface BenchmarkV2ReadTarget {
@@ -28,30 +45,79 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 async function submitWhenReady(
   baseUrl: string,
   request: SdkWorkflowRequest,
-  config: Pick<BenchmarkV2LoadConfig, "timeoutMs" | "readinessPollMs" | "readinessAttempts">,
+  config: Pick<BenchmarkV2LoadConfig, "timeoutMs" | "readinessPollMs" | "readinessAttempts" | "diagnostic">,
+  scenarioId: string,
 ): Promise<{ result: Awaited<ReturnType<ReturnType<typeof createSdkCore>["submitWorkflow"]>>; attempts: number }> {
   const sdk = createSdkCore({ baseUrl, timeoutMs: config.timeoutMs });
+  const rawStarted = performance.now();
   let result = await sdk.submitWorkflow(request);
+  config.diagnostic?.({
+    scenarioId,
+    intentId: request.intent.kind === "RAW" ? request.intent.id : request.intent.intentId,
+    phase: "RAW_SUBMISSION",
+    attempt: 1,
+    latencyMs: performance.now() - rawStarted,
+    ok: result.ok,
+    status: result.ok ? result.value.state : result.code,
+  });
   if (result.ok || result.code !== "INTENT_STATE_NOT_READY" || request.intent.kind !== "RAW" || !request.intent.id) return { result, attempts: 1 };
   let attempts = 1;
   let attemptedStateId: string | undefined;
   for (let index = 0; index < config.readinessAttempts; index += 1) {
     await wait(config.readinessPollMs);
+    const pollStarted = performance.now();
     const workspace = await sdk.readWorkspace(request.intent.id);
+    config.diagnostic?.({
+      scenarioId,
+      intentId: request.intent.id,
+      phase: "WORKSPACE_POLL",
+      attempt: index + 1,
+      latencyMs: performance.now() - pollStarted,
+      ok: workspace.ok,
+      status: workspace.ok
+        ? workspace.value.summary.intentStateId
+          ? "STATE_AVAILABLE"
+          : "STATE_PENDING"
+        : workspace.code,
+      ...(workspace.ok && workspace.value.summary.intentStateId
+        ? { stateId: workspace.value.summary.intentStateId }
+        : {}),
+    });
     if (!workspace.ok) continue;
     const stateId = workspace.value.summary.intentStateId;
     const stateHash = workspace.value.summary.stateHash;
     if (!stateId || !stateHash || stateId === attemptedStateId) continue;
     attemptedStateId = stateId;
     const { workflowId: _rawWorkflowId, ...stateBound } = request;
+    const finalizedStarted = performance.now();
     result = await sdk.submitWorkflow({
       ...stateBound,
       intent: { kind: "REFERENCE", intentId: request.intent.id, expectedIntentStateId: stateId, expectedIntentStateHash: stateHash },
       idempotencyKey: `${request.idempotencyKey}:finalized:${stateId}`,
     });
     attempts += 1;
+    config.diagnostic?.({
+      scenarioId,
+      intentId: request.intent.id,
+      phase: "STATE_BOUND_SUBMISSION",
+      attempt: attempts,
+      latencyMs: performance.now() - finalizedStarted,
+      ok: result.ok,
+      status: result.ok ? result.value.state : result.code,
+      stateId,
+    });
     if (result.ok || !new Set(["INTENT_STATE_NOT_READY", "GUARDIAN_VERDICT_STALE", "PLAN_STALE"]).has(result.code)) break;
   }
+  config.diagnostic?.({
+    scenarioId,
+    intentId: request.intent.id,
+    phase: "RESPONSE_HANDOFF",
+    attempt: attempts,
+    latencyMs: 0,
+    ok: result.ok,
+    status: result.ok ? result.value.state : result.code,
+    ...(attemptedStateId ? { stateId: attemptedStateId } : {}),
+  });
   return { result, attempts };
 }
 
@@ -71,23 +137,25 @@ export async function runWorkflowLoadLevel(
   level: number,
 ): Promise<{ sample: BenchmarkV2LoadSample; results: BenchmarkV2ScenarioResult[]; readTargets: BenchmarkV2ReadTarget[] }> {
   const started = config.now?.() ?? new Date();
+  const domains = config.domains?.length ? config.domains : BENCHMARK_V2_DOMAINS;
   const jobs = Array.from({ length: config.workflowsPerLevel }, (_, index) => ({
     index,
-    domain: BENCHMARK_V2_DOMAINS[index % BENCHMARK_V2_DOMAINS.length] as BenchmarkV2Domain,
+    domain: domains[index % domains.length] as BenchmarkV2Domain,
   }));
   const results: BenchmarkV2ScenarioResult[] = [];
   const readTargets: BenchmarkV2ReadTarget[] = [];
   await pool(jobs, concurrency, async ({ index, domain }) => {
     const request = buildBenchmarkWorkflowRequest(domain, level * 10_000 + index, started.toISOString());
+    const scenarioId = `load-${level}-${index}-${domain}`;
     const before = performance.now();
     try {
-      const submitted = await submitWhenReady(config.baseUrl, request, config);
+      const submitted = await submitWhenReady(config.baseUrl, request, config, scenarioId);
       const latencyMs = performance.now() - before;
       const workflow = submitted.result.ok ? submitted.result.value as SdkWorkflowView : undefined;
       if (workflow) readTargets.push({ workflowId: workflow.workflowId, intentId: request.intent.kind === "RAW" ? request.intent.id! : request.intent.intentId });
       const failureReason = submitted.result.ok ? undefined : submitted.result.message;
       results.push({
-        scenarioId: `load-${level}-${index}-${domain}`,
+        scenarioId,
         domainId: domain,
         scenarioClass: "HAPPY_PATH",
         status: submitted.result.ok ? "PASS" : "FAIL",
@@ -101,7 +169,7 @@ export async function runWorkflowLoadLevel(
         ...(workflow ? { workflowId: workflow.workflowId } : { reason: failureReason ?? "workflow submission failed" }),
       });
     } catch (error) {
-      results.push({ scenarioId: `load-${level}-${index}-${domain}`, domainId: domain, scenarioClass: "HAPPY_PATH", status: "FAIL", expectedStatus: "WORKFLOW_CREATED", actualStatus: "TRANSPORT_ERROR", latencyMs: performance.now() - before, authorizationCorrect: false, unauthorizedExecution: false, provenanceComplete: false, sideEffectCount: 0, reason: error instanceof Error ? error.message : String(error) });
+      results.push({ scenarioId, domainId: domain, scenarioClass: "HAPPY_PATH", status: "FAIL", expectedStatus: "WORKFLOW_CREATED", actualStatus: "TRANSPORT_ERROR", latencyMs: performance.now() - before, authorizationCorrect: false, unauthorizedExecution: false, provenanceComplete: false, sideEffectCount: 0, reason: error instanceof Error ? error.message : String(error) });
     }
   });
   const completed = config.now?.() ?? new Date();

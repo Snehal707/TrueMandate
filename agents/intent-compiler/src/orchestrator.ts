@@ -28,6 +28,7 @@ import { candidateConstraintProvenanceNodeId } from "@truemandate/provenance";
 import { TaintMetadataSchema, parseWithSchema } from "@truemandate/schemas";
 import { verifyCandidate } from "@truemandate/intent-verifier";
 import {
+  logStructured,
   WorkflowStage,
   WorkflowStageEventStatus,
   type WorkflowStageEvent,
@@ -296,6 +297,17 @@ export async function compileAndVerify(
     inputTaint: taint,
   });
   if (!candidateResult.ok) {
+    logStructured("warn", {
+      event: "intent_compilation_failed",
+      service: "intent-compiler",
+      intentId: intent.id,
+      workflowId: stageWorkflowId,
+      requestId: `compile-${intent.id}`,
+      stage: WorkflowStage.COMPILATION,
+      durationMs: Date.now() - compileStarted,
+      errorCode: candidateResult.code,
+      retryable: candidateResult.details?.retryable === true,
+    });
     await recordStage(deps.stageRecorder, {
       workflowId: stageWorkflowId,
       intentId: intent.id,
@@ -328,6 +340,17 @@ export async function compileAndVerify(
     inputTaint: taint,
   });
   if (!verificationResult.ok) {
+    logStructured("warn", {
+      event: "intent_verification_failed",
+      service: "intent-compiler",
+      intentId: intent.id,
+      workflowId: stageWorkflowId,
+      requestId: `verify-${candidate.id}`,
+      stage: WorkflowStage.VERIFICATION,
+      durationMs: Date.now() - verifyStarted,
+      errorCode: verificationResult.code,
+      retryable: verificationResult.details?.retryable === true,
+    });
     await recordStage(deps.stageRecorder, {
       workflowId: stageWorkflowId,
       intentId: intent.id,

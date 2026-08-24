@@ -28,6 +28,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function logModelAttempt(
+  level: "info" | "warn",
+  request: StructuredGenerateRequest<unknown>,
+  fields: Readonly<Record<string, unknown>>,
+): void {
+  const line = JSON.stringify({
+    event: "vertex_model_attempt",
+    service: "vertex-gemini",
+    requestId: request.requestId,
+    workflowId: request.workflowId,
+    intentId: request.intentId,
+    schemaId: request.schemaId,
+    modelId: request.modelId,
+    ...fields,
+  });
+  if (level === "warn") console.warn(line);
+  else console.info(line);
+}
+
 /** Injectable token source for tests and ADC resolution. */
 export interface TokenProvider {
   getAccessToken(): Promise<string | undefined>;
@@ -281,6 +300,9 @@ export class VertexGeminiModel implements ModelPort {
 
     // Bounded 429 retry loop. Non-429 failures exit immediately.
     for (;;) {
+      const attempt = retryCount + 1;
+      const attemptStarted = Date.now();
+      logModelAttempt("info", request, { phase: "STARTED", attempt });
       try {
         response = await fetch(endpoint, {
           method: "POST",
@@ -292,6 +314,13 @@ export class VertexGeminiModel implements ModelPort {
         });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Vertex fetch failed";
+        logModelAttempt("warn", request, {
+          phase: "COMPLETED",
+          attempt,
+          latencyMs: Date.now() - attemptStarted,
+          status: "TRANSPORT_ERROR",
+          errorCode: ErrorCode.MODEL_UNAVAILABLE,
+        });
         await this.recordTelemetry(request, started, "MODEL_UNAVAILABLE", {
           errorCode: ErrorCode.MODEL_UNAVAILABLE,
           errorMessage: message,
@@ -300,12 +329,23 @@ export class VertexGeminiModel implements ModelPort {
         return err(ErrorCode.MODEL_UNAVAILABLE, message);
       }
 
+      const retryDelayMs =
+        response.status === 429 && retryCount < maxRetries
+          ? backoffBase * 2 ** retryCount
+          : 0;
+      logModelAttempt(response.ok ? "info" : "warn", request, {
+        phase: "COMPLETED",
+        attempt,
+        latencyMs: Date.now() - attemptStarted,
+        httpStatus: response.status,
+        retryDelayMs,
+      });
+
       if (response.ok) break;
 
       if (response.status === 429 && retryCount < maxRetries) {
-        const delay = backoffBase * 2 ** retryCount;
         retryCount += 1;
-        await sleep(delay);
+        await sleep(retryDelayMs);
         continue;
       }
 

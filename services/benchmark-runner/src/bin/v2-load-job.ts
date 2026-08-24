@@ -38,10 +38,15 @@ async function main(): Promise<void> {
   const levels = (process.env.TM_BENCHMARK_CONCURRENCY_LEVELS ?? "1,2,4,8,16,32")
     .split(",").map(Number);
   const workflowsPerLevel = Number(process.env.TM_BENCHMARK_WORKFLOWS_PER_LEVEL ?? "50");
+  const domainFilter = process.env.TM_BENCHMARK_DOMAIN_FILTER?.trim();
+  const domains = domainFilter
+    ? domainFilter.split(",").map((value) => value.trim())
+    : undefined;
   const readLevels = (process.env.TM_BENCHMARK_READ_CONCURRENCY_LEVELS ?? "1,10,25,50").split(",").map(Number);
   const readsPerLevel = Number(process.env.TM_BENCHMARK_READS_PER_LEVEL ?? "200");
   if (levels.some((value) => !Number.isInteger(value) || value < 1)) throw new Error("invalid concurrency levels");
-  if (!Number.isInteger(workflowsPerLevel) || workflowsPerLevel < BENCHMARK_V2_DOMAINS.length) throw new Error("invalid workflows per level");
+  if (domains?.some((value) => !BENCHMARK_V2_DOMAINS.includes(value as never))) throw new Error("invalid benchmark domain filter");
+  if (!Number.isInteger(workflowsPerLevel) || workflowsPerLevel < (domains?.length ?? BENCHMARK_V2_DOMAINS.length)) throw new Error("invalid workflows per level");
   if (readLevels.some((value) => !Number.isInteger(value) || value < 1) || !Number.isInteger(readsPerLevel) || readsPerLevel < 1) throw new Error("invalid read load configuration");
   emit("RUN_STARTED", { metadata, levels, workflowsPerLevel, readLevels, readsPerLevel });
 
@@ -55,6 +60,8 @@ async function main(): Promise<void> {
       timeoutMs: 310_000,
       readinessPollMs: 3_000,
       readinessAttempts: 60,
+      ...(domains ? { domains: domains as typeof BENCHMARK_V2_DOMAINS } : {}),
+      diagnostic: (payload) => emit("PHASE_DIAGNOSTIC", payload),
     }, concurrency, index + 1);
     for (const result of run.results) emit("SCENARIO_RESULT", BenchmarkV2ScenarioResultSchema.parse(result));
     readTargets.push(...run.readTargets);

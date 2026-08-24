@@ -589,6 +589,34 @@ describe("VertexGeminiModel telemetry", () => {
     expect(telemetry.events[0]?.retryCount).toBe(1);
   });
 
+  it("logs attempt timing and retry metadata without model content", async () => {
+    delete process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const model = new VertexGeminiModel(
+      { project: "p", location: "global", model: "gemini-3.7-flash", maxRateLimitRetries: 1, rateLimitBackoffMs: 1 },
+      { getAccessToken: async () => "t" },
+    );
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"answer":"private-response"}' }] } }] }), { status: 200 }));
+
+    const result = await model.generateStructured({
+      modelId: "gemini-3.7-flash", promptVersion: "v1", schemaId: "sample",
+      schemaVersion: "1", schema: SampleSchema, systemInstruction: "private-prompt",
+      userPayload: { secret: "private-payload" }, requestId: "r-safe-attempt-log",
+    });
+
+    expect(result.ok).toBe(true);
+    const logs = [...info.mock.calls, ...warn.mock.calls].flat().join("\n");
+    expect(logs).toContain('"requestId":"r-safe-attempt-log"');
+    expect(logs).toContain('"httpStatus":429');
+    expect(logs).toContain('"retryDelayMs":1');
+    expect(logs).not.toContain("private-prompt");
+    expect(logs).not.toContain("private-payload");
+    expect(logs).not.toContain("private-response");
+  });
+
   it("records RATE_LIMITED when 429 retries are exhausted", async () => {
     const telemetry = collectingTelemetry();
     const model = new VertexGeminiModel(
