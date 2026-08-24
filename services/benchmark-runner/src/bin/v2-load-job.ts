@@ -76,6 +76,10 @@ async function main(): Promise<void> {
       return;
     }
   }
+  if (process.env.TM_BENCHMARK_WORKFLOW_ONLY === "true") {
+    emit("RUN_COMPLETED", { configuredWorkflowCeilingReached: true, readLoadSkipped: true });
+    return;
+  }
   for (const [index, concurrency] of readLevels.entries()) {
     const sample = await runPublicReadLoadLevel({ baseUrl: required("TM_BENCHMARK_PUBLIC_URL"), timeoutMs: 310_000 }, readTargets, concurrency, readsPerLevel, index + 1);
     emit("LOAD_SAMPLE", sample);
