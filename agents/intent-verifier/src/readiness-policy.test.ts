@@ -131,10 +131,7 @@ describe("deterministic authorization-readiness policy", () => {
       constraint({ id: "c-renewal", concept: "renewal_type", value: "MANUAL" }),
       constraint({ id: "c-term", concept: "term_length_months", value: 12 }),
       constraint({ id: "c-budget", concept: "budget_limit", value: 12000, operator: "LT", kind: ConstraintKind.FINANCIAL }),
-      constraint({
-        id: "c-deadline", concept: "deadline", value: "2026-12-31T23:59:59.000Z", operator: "LTE", kind: ConstraintKind.TEMPORAL,
-        temporalResolution: { originalExpression: "before December 31, 2026", resolvedValue: "2026-12-31T23:59:59.000Z", resolutionTimestamp: "2026-08-24T00:00:00.000Z", timezone: "UTC" },
-      }),
+      constraint({ id: "c-deadline", concept: "deadline", value: "2026-12-31", operator: "LTE", kind: ConstraintKind.TEMPORAL }),
     ];
     const searchable = candidate({ constraints: saasConstraints, readiness: IntentReadiness.SEARCHABLE });
     const executable = candidate({ constraints: saasConstraints, readiness: IntentReadiness.EXECUTABLE });

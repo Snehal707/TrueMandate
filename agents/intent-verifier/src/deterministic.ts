@@ -312,10 +312,20 @@ export function readinessAfterVerification(
   const hasGroundedFinancial = constraints.some(
     (c) => c.kind === "FINANCIAL" && Number.isFinite(Number(c.value)),
   );
+  const hasStructurallyRepresentedTemporal = constraints.some(
+    (c) =>
+      c.kind === "TEMPORAL" &&
+      c.sourceType === "HUMAN" &&
+      c.meaningClass === "EXPLICIT" &&
+      c.grounding.quoteExact === true &&
+      (c.temporalResolution !== undefined
+        ? Number.isFinite(Date.parse(c.temporalResolution.resolvedValue))
+        : typeof c.value === "string" && Number.isFinite(Date.parse(c.value))),
+  );
   const planningComplete =
     hasGroundedExplicitConstraints &&
     (!hasFinancialLanguage || hasGroundedFinancial) &&
-    (!hasTemporalLanguage || hasGroundedTemporal);
+    (!hasTemporalLanguage || hasStructurallyRepresentedTemporal);
 
   return planningComplete
     ? IntentReadiness.PLANNABLE
