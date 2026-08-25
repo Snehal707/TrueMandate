@@ -126,6 +126,42 @@ export function assertSourceSpan(
   return ok();
 }
 
+/**
+ * Correct model-supplied offsets only when the exact human quote has one
+ * unambiguous location in the immutable raw intent. The validator remains the
+ * authority for every unresolved or non-exact span.
+ */
+export function reconcileUniqueExactSourceSpans(
+  raw: string,
+  constraints: readonly CandidateConstraint[],
+): CandidateConstraint[] {
+  return constraints.map((constraint) => {
+    const span = constraint.grounding.sourceSpan;
+    if (
+      !span ||
+      assertSourceSpan(raw, span, constraint.grounding.sourceText).ok ||
+      constraint.sourceType !== "HUMAN" ||
+      constraint.grounding.quoteExact !== true
+    ) {
+      return constraint;
+    }
+
+    const sourceText = constraint.grounding.sourceText;
+    const start = raw.indexOf(sourceText);
+    if (start < 0 || raw.indexOf(sourceText, start + 1) >= 0) {
+      return constraint;
+    }
+
+    return {
+      ...constraint,
+      grounding: {
+        ...constraint.grounding,
+        sourceSpan: { start, end: start + sourceText.length },
+      },
+    };
+  });
+}
+
 export interface CurrencyAmount {
   readonly currency: string;
   readonly amount: number;

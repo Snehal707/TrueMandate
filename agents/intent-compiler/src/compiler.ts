@@ -21,7 +21,10 @@ import {
 import type { ProvenanceService } from "@truemandate/provenance-service";
 import { candidateAssumptionProvenanceNodeId, candidateConstraintProvenanceNodeId } from "@truemandate/provenance";
 import { CompilerModelOutputSchema } from "@truemandate/schemas";
-import { validateCandidateGrounding } from "@truemandate/semantic-grounding";
+import {
+  reconcileUniqueExactSourceSpans,
+  validateCandidateGrounding,
+} from "@truemandate/semantic-grounding";
 import {
   COMPILER_PROMPT_VERSION,
   COMPILER_SCHEMA_ID,
@@ -117,8 +120,14 @@ export async function compileIntent(
     proofObligation: c.proofObligation,
   });
 
-  const rawConstraints = output.constraints.map(toCandidateConstraint);
-  const preferences = output.preferences.map(toCandidateConstraint);
+  const rawConstraints = reconcileUniqueExactSourceSpans(
+    intent.rawText,
+    output.constraints.map(toCandidateConstraint),
+  );
+  const preferences = reconcileUniqueExactSourceSpans(
+    intent.rawText,
+    output.preferences.map(toCandidateConstraint),
+  );
 
   // Deterministic financial-constraint structural gate. A budget/price
   // ceiling or floor must carry a finite numeric amount — canonical

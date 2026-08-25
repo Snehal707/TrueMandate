@@ -15,6 +15,7 @@ import {
   classifyGroundedTemporalFact,
   detectApproxLeak,
   normalizeCurrencyAmount,
+  reconcileUniqueExactSourceSpans,
   resolveRelativeDate,
   validateCandidateGrounding,
   validateComparisonOperator,
@@ -57,6 +58,55 @@ describe("semantic grounding validators", () => {
     const start = raw.indexOf(sourceText);
     const span = { start, end: raw.length };
     expect(assertSourceSpan(raw, span, sourceText).ok).toBe(true);
+  });
+
+  it("repairs an incorrect model offset only from one exact human quote", () => {
+    const raw = "Book a stay with check-in on December 20 and checkout on December 22.";
+    const constraint = c({
+      concept: "check_in_date",
+      operator: ConstraintOperator.EQ,
+      value: "2026-12-20",
+      kind: ConstraintKind.TEMPORAL,
+      grounding: {
+        sourceText: "December 20",
+        sourceSpan: {
+          start: raw.indexOf("check-in on"),
+          end: raw.indexOf("check-in on") + "check-in on".length,
+        },
+        quoteExact: true,
+      },
+    });
+
+    const [reconciled] = reconcileUniqueExactSourceSpans(raw, [constraint]);
+    const expectedStart = raw.indexOf("December 20");
+    expect(reconciled?.grounding.sourceSpan).toEqual({
+      start: expectedStart,
+      end: expectedStart + "December 20".length,
+    });
+    expect(validateCandidateGrounding(raw, [reconciled!]).ok).toBe(true);
+  });
+
+  it("does not repair ambiguous, absent, non-exact, or non-human grounding", () => {
+    const raw = "Book December 20 and return December 20.";
+    const invalidSpan = { start: 0, end: 4 };
+    const base = c({
+      concept: "travel_date",
+      operator: ConstraintOperator.EQ,
+      value: "2026-12-20",
+      kind: ConstraintKind.TEMPORAL,
+      grounding: { sourceText: "December 20", sourceSpan: invalidSpan, quoteExact: true },
+    });
+    const rows = [
+      base,
+      { ...base, id: asConstraintId("absent"), grounding: { ...base.grounding, sourceText: "December 21" } },
+      { ...base, id: asConstraintId("non-exact"), grounding: { ...base.grounding, quoteExact: false } },
+      { ...base, id: asConstraintId("agent"), sourceType: SourceType.AGENT },
+    ];
+
+    for (const row of reconcileUniqueExactSourceSpans(raw, rows)) {
+      expect(row.grounding.sourceSpan).toEqual(invalidSpan);
+      expect(validateCandidateGrounding(raw, [row]).ok).toBe(false);
+    }
   });
 
   it("normalizes INR 800000", () => {
