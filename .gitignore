@@ -10,7 +10,14 @@ pnpm-lock.yaml.bak
 *.log
 .turbo/
 .pnpm-store/
+.cache/
+**/.cache/
+*.tmp
+*.temp
 .visual-qa/
+playwright-report/
+test-results/
+blob-report/
 artifacts/
 tmp/
 .claude/settings.local.json
