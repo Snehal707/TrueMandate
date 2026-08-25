@@ -1,0 +1,57 @@
+{
+  "benchmarkVersion": "BENCHMARK_V2",
+  "disposition": "REJECTED_THRESHOLD_STOP",
+  "runId": "benchmark-v2-20260825T172457Z",
+  "executionId": "tm-dev-benchmark-v2-cjhgx",
+  "sourceCommit": "b2345aeddc80daa5efa1a8618941dd3d741dfce0",
+  "sourceInputHash": "6dd9fad1c2c7f6e89f509e956ec235a52818894ef5c9c079e7749aa3b41847a5",
+  "corpusHash": "b6d9ceeacc9f0815066ff46691caef09f89a72cbbd7f100e67db9e173e78cc70",
+  "configurationHash": "36f2641d745396e62452eb46e8b25455d34717bd60e84e7ebdc15eaaafc2ad9e",
+  "startedAt": "2026-08-25T17:27:44.164Z",
+  "completedAt": "2026-08-25T18:20:14.325468Z",
+  "stoppingReason": "ERROR_RATE_ABOVE_1_PERCENT",
+  "workflowC1": {
+    "requests": 50,
+    "successful": 48,
+    "failed": 2,
+    "errorRate": 0.04,
+    "p50Ms": 61446.757324000355,
+    "p95Ms": 79013.7403810001,
+    "p99Ms": 142651.08055999997,
+    "throughputPerSecond": 0.01589506712486847,
+    "unauthorizedExecutions": 0,
+    "duplicateSideEffects": 0
+  },
+  "failures": [
+    {
+      "scenarioId": "load-1-1-travel",
+      "status": "SEMANTIC_READINESS_INSUFFICIENT",
+      "reason": "Readiness below PLANNABLE"
+    },
+    {
+      "scenarioId": "load-1-49-logistics_fulfillment",
+      "status": "VALIDATION_FAILED",
+      "reason": "Missing owner semantic verification for IntentState"
+    }
+  ],
+  "higherLevelsExecuted": false,
+  "readLaneExecuted": false,
+  "acceptedPointerCreated": false,
+  "files": {
+    "raw-job-records.jsonl": {
+      "sha256": "96094b72cede0af3576314e5d44510609687cc3edfaf61a753c2f99992847063",
+      "bytes": 197027,
+      "records": 559
+    },
+    "paired-correctness-records.jsonl": {
+      "sha256": "d5f5ed06b90085ba4319f6013bdf785d5809b015ff8ca9b83b4f57b028d37d5c",
+      "bytes": 75731,
+      "records": 100
+    },
+    "resource-metrics.jsonl": {
+      "sha256": "a9e285907cbbc9108bd17754884f2d36112829a8ad5878adc90afd742c2a2f72",
+      "bytes": 66107,
+      "records": 321
+    }
+  }
+}

@@ -292,7 +292,7 @@ export class IntentService {
       };
       const validated = parseWithSchema(IntentStateSchema, built, "FinalizedIntentState");
       if (!validated.ok) return validated;
-      return ok(await this.repo.finalizeState(built));
+      return ok(built);
     };
     const stateResult = existing ? ok(existing) : await build();
     if (!stateResult.ok) return stateResult;
@@ -336,7 +336,11 @@ export class IntentService {
         }
       }
     }
-    return ok(state);
+
+    // Publish the current tip only after its required semantic verification is
+    // durable. This prevents readers from observing a finalized state whose
+    // owner verification is still in flight.
+    return ok(existing ?? await this.repo.finalizeState(state));
   }
 
   async getIntentState(stateId: string): Promise<Result<IntentState>> {

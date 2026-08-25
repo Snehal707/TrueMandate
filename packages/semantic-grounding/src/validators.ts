@@ -60,17 +60,28 @@ function isAbsoluteDate(value: unknown): boolean {
 
 function isGroundedPartialCalendarDate(value: unknown, sourceText: string): boolean {
   if (typeof value !== "string") return false;
-  const match = value.trim().match(
+  const trimmed = value.trim();
+  const match = trimmed.match(
     /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?$/iu,
   );
-  if (!match) return false;
+  const compact = trimmed.match(/^(\d{2})-(\d{2})$/u);
+  if (!match && !compact) return false;
 
-  const monthIndex = CALENDAR_MONTHS.indexOf(match[1]!.toLowerCase() as (typeof CALENDAR_MONTHS)[number]);
-  const day = Number(match[2]);
+  const monthIndex = match
+    ? CALENDAR_MONTHS.indexOf(match[1]!.toLowerCase() as (typeof CALENDAR_MONTHS)[number])
+    : Number(compact![1]) - 1;
+  const day = Number(match?.[2] ?? compact![2]);
   if (monthIndex < 0 || day < 1 || day > MAX_DAY_BY_MONTH[monthIndex]!) return false;
 
-  const escapedValue = value.trim().replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return new RegExp(`\\b${escapedValue}\\b`, "iu").test(sourceText);
+  if (match) {
+    const escapedValue = trimmed.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    return new RegExp(`\\b${escapedValue}\\b`, "iu").test(sourceText);
+  }
+
+  const monthName = CALENDAR_MONTHS[monthIndex]!;
+  const textual = new RegExp(`\\b${monthName}\\s+0?${day}(?:st|nd|rd|th)?\\b`, "iu");
+  const numeric = new RegExp(`(?:^|\\D)0?${monthIndex + 1}[/-]0?${day}(?:\\D|$)`, "u");
+  return textual.test(sourceText) || numeric.test(sourceText);
 }
 
 function groundedDuration(value: unknown, sourceText: string): boolean {

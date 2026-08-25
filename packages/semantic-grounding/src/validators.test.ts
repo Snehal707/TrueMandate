@@ -199,6 +199,8 @@ describe("semantic grounding validators", () => {
       .toMatchObject({ ok: true, value: TemporalFactShape.ABSOLUTE });
     expect(classifyGroundedTemporalFact(temporal("stay_start_date", "December 20", "check-in on December 20")))
       .toMatchObject({ ok: true, value: TemporalFactShape.PARTIAL_CALENDAR_DATE });
+    expect(classifyGroundedTemporalFact(temporal("stay_start_date", "12-20", "check-in on December 20")))
+      .toMatchObject({ ok: true, value: TemporalFactShape.PARTIAL_CALENDAR_DATE });
     expect(classifyGroundedTemporalFact(temporal("contract_term_months", 12, "12 month term")))
       .toMatchObject({ ok: true, value: TemporalFactShape.DURATION });
     expect(classifyGroundedTemporalFact(temporal("stay_window", { start: "2026-11-10", end: "2026-11-12" }, "from 2026-11-10 to 2026-11-12")))
@@ -220,6 +222,10 @@ describe("semantic grounding validators", () => {
     expect(classifyGroundedTemporalFact(temporal("April 31", "check-in on April 31")).ok)
       .toBe(false);
     expect(classifyGroundedTemporalFact(temporal("December 20", "check-in date unavailable")).ok)
+      .toBe(false);
+    expect(classifyGroundedTemporalFact(temporal("12-20", "check-in date unavailable")).ok)
+      .toBe(false);
+    expect(classifyGroundedTemporalFact(temporal("02-30", "check-in on February 30")).ok)
       .toBe(false);
     expect(classifyGroundedTemporalFact(temporal("2026-02-30", "check-in on 2026-02-30")).ok)
       .toBe(false);

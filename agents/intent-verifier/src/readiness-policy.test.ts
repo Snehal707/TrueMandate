@@ -213,6 +213,35 @@ describe("deterministic authorization-readiness policy", () => {
       .not.toBe(IntentReadiness.ACTIONABLE);
   });
 
+  it("keeps exactly grounded compact yearless Travel dates at PLANNABLE without granting privileged readiness", () => {
+    const travelIntent = {
+      ...INTENT,
+      rawText: "Book 2 refundable hotel stays at Seaside Lodge with Meridian Travel Partners for under USD 5000 before December 31, 2026, with check-in on December 20 and checkout on December 22.",
+    } as never;
+    const compactDate = (id: string, concept: string, value: string, sourceText: string) => ({
+      ...constraint({ id, concept, value, kind: ConstraintKind.TEMPORAL }),
+      grounding: { sourceText, quoteExact: true },
+    });
+    const travel = candidate({
+      readiness: IntentReadiness.PLANNABLE,
+      constraints: [
+        constraint({ id: "c-quantity", concept: "quantity", value: 2 }),
+        constraint({ id: "c-refundable", concept: "cancellation_policy", value: "refundable" }),
+        constraint({ id: "c-property", concept: "hotel_name", value: "Seaside Lodge" }),
+        constraint({ id: "c-provider", concept: "booking_partner", value: "Meridian Travel Partners" }),
+        constraint({ id: "c-budget", concept: "total_budget", value: 5000, operator: "LT", kind: ConstraintKind.FINANCIAL }),
+        compactDate("c-deadline", "booking_deadline", "2026-12-31", "before December 31, 2026"),
+        compactDate("c-checkin", "check_in_date", "12-20", "check-in on December 20"),
+        compactDate("c-checkout", "checkout_date", "12-22", "checkout on December 22"),
+      ],
+    });
+
+    expect(readinessAfterVerification(travelIntent, travel, false, AmbiguityClass.A1))
+      .toBe(IntentReadiness.PLANNABLE);
+    expect(readinessAfterVerification(travelIntent, travel, false, AmbiguityClass.A1))
+      .not.toBe(IntentReadiness.ACTIONABLE);
+  });
+
   it("does not let a yearless partial date satisfy an absolute deadline", () => {
     const deadlineIntent = {
       ...INTENT,

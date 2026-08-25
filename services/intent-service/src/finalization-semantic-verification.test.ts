@@ -54,6 +54,44 @@ async function fixture() {
 }
 
 describe("owner SEMANTIC_VERIFICATION artifact derivation", () => {
+  it("does not publish the finalized tip before its semantic verification is durable", async () => {
+    let releaseWrite!: () => void;
+    let writeStarted!: () => void;
+    const writeStartedPromise = new Promise<void>((resolve) => { writeStarted = resolve; });
+    const releaseWritePromise = new Promise<void>((resolve) => { releaseWrite = resolve; });
+    const { rows, store: base } = store();
+    const artifacts: SemanticArtifactStore = {
+      ...base,
+      putIfAbsent: async (record) => {
+        writeStarted();
+        await releaseWritePromise;
+        return base.putIfAbsent(record);
+      },
+    };
+    const baseFixture = await fixture();
+    const intents = new IntentService(undefined, artifacts);
+    const created = await intents.createIntent({
+      id: baseFixture.input.intentId,
+      principalId: "human-1",
+      rawText: "Buy containers before 5 PM",
+      createdAt: now,
+    });
+    expect(created.ok).toBe(true);
+
+    const finalizing = intents.finalizeVerifiedCompilation(baseFixture.input);
+    await writeStartedPromise;
+    const beforeArtifact = await intents.getCurrentIntentState(baseFixture.input.intentId);
+    expect(beforeArtifact.ok).toBe(false);
+
+    releaseWrite();
+    const finalized = await finalizing;
+    expect(finalized.ok).toBe(true);
+    if (!finalized.ok) return;
+    expect(rows.has(`semantic-verification-${finalized.value.id}`)).toBe(true);
+    const current = await intents.getCurrentIntentState(baseFixture.input.intentId);
+    expect(current.ok && current.value.id).toBe(finalized.value.id);
+  });
+
   it("creates the immutable artifact with deterministic identity, canonical hash, and IntentState binding on successful finalization", async () => {
     const { intents, rows, input } = await fixture();
     const result = await intents.finalizeVerifiedCompilation(input);
