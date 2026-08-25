@@ -173,63 +173,73 @@ export interface ProvenanceRepositoryPort {
   listEdges(): Promise<readonly ProvenanceEdgeRecord[]>;
 }
 
-interface IdList {
-  readonly ids: string[];
-}
-
 export class FirestoreProvenanceRepository implements ProvenanceRepositoryPort {
   constructor(private readonly store: DocumentStore) {}
 
   async appendNode(node: ProvenanceNodeRecord): Promise<void> {
-    await this.store.runTransaction(async (tx) => {
-      const path = docPath(COLLECTIONS.provenanceNodes, node.id);
-      const meta = docPath(`${COLLECTIONS.provenanceNodes}/_meta`, "all");
-      const existing = await tx.get(path);
-      const idx = (await tx.get<IdList>(meta)) ?? { ids: [] };
-      if (existing) {
-        const row = assertValidNodeRecord(existing);
-        if (
-          row.id !== node.id ||
-          row.createdAt !== node.createdAt ||
-          hashCanonical(row.payload) !== hashCanonical(node.payload)
-        ) {
-          throw new Error(`Divergent immutable provenance node: ${node.id}`);
+    const startedAt = Date.now();
+    try {
+      await this.store.runTransaction(async (tx) => {
+        const path = docPath(COLLECTIONS.provenanceNodes, node.id);
+        const existing = await tx.get(path);
+        if (existing) {
+          const row = assertValidNodeRecord(existing);
+          if (
+            row.id !== node.id ||
+            row.createdAt !== node.createdAt ||
+            hashCanonical(row.payload) !== hashCanonical(node.payload)
+          ) {
+            throw new Error(`Divergent immutable provenance node: ${node.id}`);
+          }
+          return;
         }
-        return;
-      }
-      await tx.set(path, {
-        ...node,
-        recordHash: nodeRecordHash(node),
-      } satisfies StoredProvenanceNodeRecord);
-      await tx.set(meta, { ids: [...idx.ids, node.id] });
-    });
+        await tx.set(path, {
+          ...node,
+          recordHash: nodeRecordHash(node),
+        } satisfies StoredProvenanceNodeRecord);
+      });
+      console.info(JSON.stringify({ event: "firestore_provenance_write", operation: "append_node", recordId: node.id, durationMs: Date.now() - startedAt, status: "COMPLETED" }));
+    } catch (error) {
+      const errorCode = typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "UNKNOWN";
+      console.warn(JSON.stringify({ event: "firestore_provenance_write", operation: "append_node", recordId: node.id, durationMs: Date.now() - startedAt, status: "FAILED", errorCode }));
+      throw error;
+    }
   }
 
   async appendEdge(edge: ProvenanceEdgeRecord): Promise<void> {
-    await this.store.runTransaction(async (tx) => {
-      const path = docPath(COLLECTIONS.provenanceEdges, edge.id);
-      const meta = docPath(`${COLLECTIONS.provenanceEdges}/_meta`, "all");
-      const existing = await tx.get(path);
-      const idx = (await tx.get<IdList>(meta)) ?? { ids: [] };
-      if (existing) {
-        const row = assertValidEdgeRecord(existing);
-        if (
-          row.id !== edge.id ||
-          row.fromId !== edge.fromId ||
-          row.toId !== edge.toId ||
-          row.createdAt !== edge.createdAt ||
-          hashCanonical(row.payload) !== hashCanonical(edge.payload)
-        ) {
-          throw new Error(`Divergent immutable provenance edge: ${edge.id}`);
+    const startedAt = Date.now();
+    try {
+      await this.store.runTransaction(async (tx) => {
+        const path = docPath(COLLECTIONS.provenanceEdges, edge.id);
+        const existing = await tx.get(path);
+        if (existing) {
+          const row = assertValidEdgeRecord(existing);
+          if (
+            row.id !== edge.id ||
+            row.fromId !== edge.fromId ||
+            row.toId !== edge.toId ||
+            row.createdAt !== edge.createdAt ||
+            hashCanonical(row.payload) !== hashCanonical(edge.payload)
+          ) {
+            throw new Error(`Divergent immutable provenance edge: ${edge.id}`);
+          }
+          return;
         }
-        return;
-      }
-      await tx.set(path, {
-        ...edge,
-        recordHash: edgeRecordHash(edge),
-      } satisfies StoredProvenanceEdgeRecord);
-      await tx.set(meta, { ids: [...idx.ids, edge.id] });
-    });
+        await tx.set(path, {
+          ...edge,
+          recordHash: edgeRecordHash(edge),
+        } satisfies StoredProvenanceEdgeRecord);
+      });
+      console.info(JSON.stringify({ event: "firestore_provenance_write", operation: "append_edge", recordId: edge.id, durationMs: Date.now() - startedAt, status: "COMPLETED" }));
+    } catch (error) {
+      const errorCode = typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "UNKNOWN";
+      console.warn(JSON.stringify({ event: "firestore_provenance_write", operation: "append_edge", recordId: edge.id, durationMs: Date.now() - startedAt, status: "FAILED", errorCode }));
+      throw error;
+    }
   }
 
   async getNode(id: string): Promise<ProvenanceNodeRecord | undefined> {
@@ -243,21 +253,17 @@ export class FirestoreProvenanceRepository implements ProvenanceRepositoryPort {
   }
 
   async listNodes(): Promise<readonly ProvenanceNodeRecord[]> {
-    const idx = await this.store.get<IdList>(
-      docPath(`${COLLECTIONS.provenanceNodes}/_meta`, "all"),
-    );
-    if (!idx) return [];
-    const rows = await Promise.all(idx.ids.map((id) => this.getNode(id)));
-    return rows.filter((n): n is ProvenanceNodeRecord => n !== undefined);
+    const rows = await this.store.listCollection<unknown>(COLLECTIONS.provenanceNodes);
+    return rows
+      .filter((row) => typeof row === "object" && row !== null && "recordHash" in row)
+      .map(assertValidNodeRecord);
   }
 
   async listEdges(): Promise<readonly ProvenanceEdgeRecord[]> {
-    const idx = await this.store.get<IdList>(
-      docPath(`${COLLECTIONS.provenanceEdges}/_meta`, "all"),
-    );
-    if (!idx) return [];
-    const rows = await Promise.all(idx.ids.map((id) => this.getEdge(id)));
-    return rows.filter((e): e is ProvenanceEdgeRecord => e !== undefined);
+    const rows = await this.store.listCollection<unknown>(COLLECTIONS.provenanceEdges);
+    return rows
+      .filter((row) => typeof row === "object" && row !== null && "recordHash" in row)
+      .map(assertValidEdgeRecord);
   }
 }
 

@@ -140,6 +140,24 @@ describe("deterministic authorization-readiness policy", () => {
     expect(readinessAfterVerification(saasIntent, executable, false, AmbiguityClass.A1)).toBe(IntentReadiness.PLANNABLE);
   });
 
+  it("treats a human-grounded SaaS term as a duration rather than a calendar date", () => {
+    const saasIntent = {
+      ...INTENT,
+      rawText: "Purchase an approved SaaS plan with a 12 month term under USD 12000.",
+    } as never;
+    const term = {
+      ...constraint({ id: "c-term", concept: "contract_term_months", value: 12, kind: ConstraintKind.TEMPORAL }),
+      grounding: { sourceText: "12 month term", quoteExact: true },
+    };
+    const budget = constraint({ id: "c-budget", concept: "budget_limit", value: 12000, kind: ConstraintKind.FINANCIAL });
+    expect(readinessAfterVerification(
+      saasIntent,
+      candidate({ constraints: [term, budget], readiness: IntentReadiness.SEARCHABLE }),
+      false,
+      AmbiguityClass.A1,
+    )).toBe(IntentReadiness.PLANNABLE);
+  });
+
   it("accepts human-grounded implied Travel dates at the planning floor", () => {
     const travelIntent = {
       ...INTENT,

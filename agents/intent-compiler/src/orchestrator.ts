@@ -116,6 +116,36 @@ export type CompileAndVerifyResult =
       readonly inspection: ModelSecurityInspectResult;
     };
 
+const MODEL_OUTPUT_RETRY_CODES = new Set<string>([
+  ErrorCode.GROUNDING_FAILED,
+  ErrorCode.INVENTED_CONSTRAINT,
+  ErrorCode.NEGATION_LOSS,
+  ErrorCode.TEMPORAL_MISMATCH,
+  ErrorCode.MODEL_OUTPUT_INVALID,
+  ErrorCode.SCHEMA_PARSE_FAILED,
+]);
+
+function retryableStageAttempt(result: Result<unknown>): boolean {
+  if (result.ok || result.details?.provenance !== undefined) return false;
+  return result.code === ErrorCode.MODEL_UNAVAILABLE ||
+    MODEL_OUTPUT_RETRY_CODES.has(result.code);
+}
+
+function terminalModelOutputFailure<T>(result: Result<T>, attempts: number): Result<T> {
+  if (result.ok || !MODEL_OUTPUT_RETRY_CODES.has(result.code)) return result;
+  return err(result.code, result.message, {
+    ...result.details,
+    retryable: false,
+    terminal: true,
+    attempts,
+    reason: "MODEL_OUTPUT_REJECTED",
+  });
+}
+
+export function isTerminalIntentFinalizationFailure(result: Result<unknown>): boolean {
+  return !result.ok && result.details?.terminal === true;
+}
+
 export function humanIntentTaint(): TaintMetadata {
   return { classes: [TaintClass.NONE], origins: [] };
 }
@@ -302,17 +332,38 @@ export async function compileAndVerify(
         deadlineAtMs: deps.modelBudget.deadlineAtMs,
         stageBudgetMs: deps.modelBudget.compilationMs,
         attemptTimeoutMs: Math.floor(deps.modelBudget.compilationMs / deps.modelBudget.maxAttempts),
-        maxAttempts: deps.modelBudget.maxAttempts,
+        maxAttempts: 1,
       })
     : deps.compilerModel;
-  const candidateResult = await compileIntent(intent, {
-    model: compilerModel,
-    provenance: deps.provenance,
-    intentNodeId,
-    now: input.now,
-    timezone: input.timezone,
-    inputTaint: taint,
-  });
+  const compilationAttempts = deps.modelBudget?.maxAttempts ?? 1;
+  let candidateResult: Result<CandidateInterpretation> = err(
+    ErrorCode.MODEL_UNAVAILABLE,
+    "Compilation did not execute",
+  );
+  for (let attempt = 1; attempt <= compilationAttempts; attempt += 1) {
+    logStructured("info", {
+      event: "intent_stage_attempt",
+      service: "intent-compiler",
+      intentId: intent.id,
+      workflowId: stageWorkflowId,
+      stage: WorkflowStage.COMPILATION,
+      attempt,
+      maxAttempts: compilationAttempts,
+    });
+    candidateResult = await compileIntent(intent, {
+      model: compilerModel,
+      provenance: deps.provenance,
+      intentNodeId,
+      now: input.now,
+      timezone: input.timezone,
+      requestId: `compile-${intent.id}-attempt-${attempt}`,
+      inputTaint: taint,
+    });
+    if (candidateResult.ok || !retryableStageAttempt(candidateResult) || attempt === compilationAttempts) {
+      break;
+    }
+  }
+  candidateResult = terminalModelOutputFailure(candidateResult, compilationAttempts);
   if (!candidateResult.ok) {
     logStructured("warn", {
       event: "intent_compilation_failed",
@@ -355,15 +406,36 @@ export async function compileAndVerify(
         deadlineAtMs: deps.modelBudget.deadlineAtMs,
         stageBudgetMs: deps.modelBudget.verificationMs,
         attemptTimeoutMs: Math.floor(deps.modelBudget.verificationMs / deps.modelBudget.maxAttempts),
-        maxAttempts: deps.modelBudget.maxAttempts,
+        maxAttempts: 1,
       })
     : deps.verifierModel;
-  const verificationResult = await verifyCandidate(intent, candidate, {
-    model: verifierModel,
-    provenance: deps.provenance,
-    intentNodeId,
-    inputTaint: taint,
-  });
+  const verificationAttempts = deps.modelBudget?.maxAttempts ?? 1;
+  let verificationResult: Result<SemanticVerificationResult> = err(
+    ErrorCode.MODEL_UNAVAILABLE,
+    "Verification did not execute",
+  );
+  for (let attempt = 1; attempt <= verificationAttempts; attempt += 1) {
+    logStructured("info", {
+      event: "intent_stage_attempt",
+      service: "intent-compiler",
+      intentId: intent.id,
+      workflowId: stageWorkflowId,
+      stage: WorkflowStage.VERIFICATION,
+      attempt,
+      maxAttempts: verificationAttempts,
+    });
+    verificationResult = await verifyCandidate(intent, candidate, {
+      model: verifierModel,
+      provenance: deps.provenance,
+      intentNodeId,
+      requestId: `verify-${candidate.id}-attempt-${attempt}`,
+      inputTaint: taint,
+    });
+    if (verificationResult.ok || !retryableStageAttempt(verificationResult) || attempt === verificationAttempts) {
+      break;
+    }
+  }
+  verificationResult = terminalModelOutputFailure(verificationResult, verificationAttempts);
   if (!verificationResult.ok) {
     logStructured("warn", {
       event: "intent_verification_failed",

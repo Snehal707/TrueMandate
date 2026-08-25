@@ -15,6 +15,7 @@ export interface DocumentStore {
   readonly kind: "memory" | "firestore";
   runTransaction<T>(fn: (tx: TxContext) => Promise<T> | T): Promise<T>;
   get<T = unknown>(path: DocPath): Promise<T | undefined>;
+  listCollection<T = unknown>(collection: string): Promise<readonly T[]>;
   set<T>(path: DocPath, value: T): Promise<void>;
   delete?(path: DocPath): Promise<void>;
   /** Real Get. Missing document is success. Thrown API errors are failure. */
@@ -36,6 +37,13 @@ export class MemoryTransactionalStore implements DocumentStore {
 
   async set<T>(path: DocPath, value: T): Promise<void> {
     this.docs.set(path, value);
+  }
+
+  async listCollection<T = unknown>(collection: string): Promise<readonly T[]> {
+    const prefix = `${collection}/`;
+    return [...this.docs.entries()]
+      .filter(([path]) => path.startsWith(prefix))
+      .map(([, value]) => value as T);
   }
 
   async delete(path: DocPath): Promise<void> {

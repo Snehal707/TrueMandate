@@ -42,6 +42,11 @@ export class GoogleFirestoreDocumentStore implements DocumentStore {
     return snap.exists ? (snap.data() as T) : undefined;
   }
 
+  async listCollection<T = unknown>(collection: string): Promise<readonly T[]> {
+    const snapshot = await this.db.collection(collection).get();
+    return snapshot.docs.map((doc) => doc.data() as T);
+  }
+
   async set<T>(path: DocPath, value: T): Promise<void> {
     await this.ref(path).set(stripUndefined(value) as DocumentData);
   }

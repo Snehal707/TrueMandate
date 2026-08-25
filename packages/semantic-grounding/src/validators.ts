@@ -12,6 +12,88 @@ import {
   type TemporalResolution,
 } from "@truemandate/protocol";
 
+export const TemporalFactShape = {
+  ABSOLUTE: "ABSOLUTE",
+  DURATION: "DURATION",
+  RANGE: "RANGE",
+  RECURRENCE: "RECURRENCE",
+} as const;
+export type TemporalFactShape =
+  (typeof TemporalFactShape)[keyof typeof TemporalFactShape];
+
+const TEMPORAL_UNIT = /^(?:milliseconds?|seconds?|minutes?|hours?|days?|weeks?|months?|years?)$/i;
+
+function isAbsoluteDate(value: unknown): boolean {
+  return typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}(?:T.*)?$/u.test(value.trim()) &&
+    Number.isFinite(Date.parse(value));
+}
+
+function groundedDuration(value: unknown, sourceText: string): boolean {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return false;
+  const match = sourceText.trim().match(
+    /\b(\d+(?:\.\d+)?)\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|months?|years?)\b/i,
+  );
+  return match !== null && Number(match[1]) === amount && TEMPORAL_UNIT.test(match[2] ?? "");
+}
+
+/**
+ * Classifies only canonical, structurally valid temporal facts. The result is
+ * domain-neutral and never turns a duration or recurrence into execution
+ * authority, which remains bound to an absolute human deadline elsewhere.
+ */
+export function classifyGroundedTemporalFact(
+  constraint: CandidateConstraint,
+): Result<TemporalFactShape> {
+  if (constraint.kind !== ConstraintKind.TEMPORAL) {
+    return err(ErrorCode.TEMPORAL_MISMATCH, "Constraint is not temporal");
+  }
+  if (
+    constraint.sourceType !== "HUMAN" ||
+    (constraint.meaningClass !== MeaningClass.EXPLICIT &&
+      constraint.meaningClass !== MeaningClass.IMPLIED) ||
+    constraint.grounding.quoteExact !== true ||
+    constraint.grounding.sourceText.trim().length === 0
+  ) {
+    return err(
+      ErrorCode.TEMPORAL_MISMATCH,
+      "Temporal fact is not exactly grounded in the human intent",
+    );
+  }
+
+  const resolved = constraint.temporalResolution?.resolvedValue;
+  if (resolved !== undefined) {
+    return isAbsoluteDate(resolved)
+      ? ok(TemporalFactShape.ABSOLUTE)
+      : err(ErrorCode.TEMPORAL_MISMATCH, "Temporal resolution is not an absolute date");
+  }
+  if (isAbsoluteDate(constraint.value)) return ok(TemporalFactShape.ABSOLUTE);
+  if (groundedDuration(constraint.value, constraint.grounding.sourceText)) {
+    return ok(TemporalFactShape.DURATION);
+  }
+
+  if (constraint.value && typeof constraint.value === "object" && !Array.isArray(constraint.value)) {
+    const value = constraint.value as Record<string, unknown>;
+    if (isAbsoluteDate(value.start) && isAbsoluteDate(value.end)) {
+      return Date.parse(value.start as string) <= Date.parse(value.end as string)
+        ? ok(TemporalFactShape.RANGE)
+        : err(ErrorCode.TEMPORAL_MISMATCH, "Temporal range is inverted");
+    }
+    const interval = Number(value.interval ?? value.every);
+    if (
+      Number.isFinite(interval) &&
+      interval > 0 &&
+      typeof value.unit === "string" &&
+      TEMPORAL_UNIT.test(value.unit)
+    ) {
+      return ok(TemporalFactShape.RECURRENCE);
+    }
+  }
+
+  return err(ErrorCode.TEMPORAL_MISMATCH, "Unsupported or malformed temporal fact");
+}
+
 const NEGATION_PATTERNS =
   /\b(do\s+not|don't|nothing|not\s+\w+|avoid|never|excluding|exclude|without)\b/i;
 

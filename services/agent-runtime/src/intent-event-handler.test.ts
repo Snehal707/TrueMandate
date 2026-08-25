@@ -616,7 +616,7 @@ describe("agent-runtime intent event handler", () => {
     await http.close();
   });
 
-  it("invalid model output is retryable and does not create IntentState or consume idempotency", async () => {
+  it("exhausted invalid model output is terminally ACKed without creating IntentState", async () => {
     const intents = new TestIntentOwner();
     const provenance = new ProvenanceService();
     const compilerModel = new FakeModel({
@@ -641,11 +641,8 @@ describe("agent-runtime intent event handler", () => {
         defaultStatus: ModelInspectionStatus.CLEAN,
       }),
     });
-    expect(first.ok).toBe(false);
-    if (!first.ok) {
-      expect(first.code).toBe(ErrorCode.MODEL_OUTPUT_INVALID);
-      expect(first.details?.retryable).toBe(true);
-    }
+    expect(first.ok).toBe(true);
+    if (first.ok) expect((first.value as { reason?: string }).reason).toBe("TERMINAL_SEMANTIC_FAILURE");
     expect(verifierModel.generationCount).toBe(0);
     const tip = await intents.getCurrentIntentState("intent-model-bad");
     expect(tip.ok).toBe(false);
@@ -702,15 +699,42 @@ describe("agent-runtime intent event handler", () => {
       headers: { "content-type": "application/json" },
       body: push,
     });
-    expect(httpFirst.status).toBe(503);
+    expect(httpFirst.status).toBe(200);
     const httpRetry = await fetch(`http://127.0.0.1:${port}/internal/events`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: push,
     });
-    expect(httpRetry.status).toBe(503);
-    expect(compilerModel.generationCount).toBeGreaterThanOrEqual(2);
+    expect(httpRetry.status).toBe(200);
+    expect(compilerModel.generationCount).toBe(4);
     await http.close();
+  });
+
+  it("retries one malformed compiler result inside the bounded delivery and then completes", async () => {
+    let attempt = 0;
+    const compilerModel = new FakeModel({
+      handlers: {
+        [COMPILER_SCHEMA_ID]: async (req) => {
+          attempt += 1;
+          return attempt === 1
+            ? { goal: 123 }
+            : cleanCompilerOutput((req.userPayload as { rawText: string }).rawText);
+        },
+      },
+    });
+    const verifierModel = new FakeModel({
+      handlers: { [VERIFIER_SCHEMA_ID]: async () => cleanVerifierOutput() },
+    });
+    const result = await handleIntentCompileEvent(sampleEnvelope("model-output-recovers"), {
+      intents: new TestIntentOwner(),
+      provenance: new ProvenanceService(),
+      compilerModel,
+      verifierModel,
+      modelSecurity: new FakeModelArmor({ defaultStatus: ModelInspectionStatus.CLEAN }),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect((result.value as { status: string }).status).toBe("COMPLETED");
+    expect(compilerModel.generationCount).toBe(2);
   });
 
   it("keeps compiler and verifier as separate model invocations", async () => {

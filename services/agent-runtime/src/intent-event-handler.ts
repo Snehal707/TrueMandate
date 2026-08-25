@@ -2,6 +2,7 @@ import type { CloudEventEnvelope } from "@truemandate/cloud-pubsub";
 import type { ModelSecurityPort } from "@truemandate/cloud-security";
 import {
   compileAndVerify,
+  isTerminalIntentFinalizationFailure,
   type CompileAndVerifyDeps,
 } from "@truemandate/intent-compiler";
 import { ErrorCode, err, type Result } from "@truemandate/protocol";
@@ -27,7 +28,7 @@ export async function handleIntentCompileEvent(
     );
   }
   const deadlineAtMs = Date.now() + 170_000;
-  return compileAndVerify(
+  const result = await compileAndVerify(
     {
       principalId: payload.principalId,
       rawText: payload.rawText,
@@ -44,4 +45,16 @@ export async function handleIntentCompileEvent(
       },
     },
   );
+  if (isTerminalIntentFinalizationFailure(result)) {
+    return {
+      ok: true,
+      value: {
+        status: "REJECTED",
+        reason: "TERMINAL_SEMANTIC_FAILURE",
+        intentId: typeof payload.intentId === "string" ? payload.intentId : undefined,
+        errorCode: result.ok ? undefined : result.code,
+      },
+    };
+  }
+  return result;
 }

@@ -12,11 +12,13 @@ import { describe, expect, it } from "vitest";
 import {
   assertSourceSpan,
   candidatePreservesNegation,
+  classifyGroundedTemporalFact,
   detectApproxLeak,
   normalizeCurrencyAmount,
   resolveRelativeDate,
   validateCandidateGrounding,
   validateComparisonOperator,
+  TemporalFactShape,
 } from "./validators.js";
 
 function c(
@@ -133,6 +135,49 @@ describe("semantic grounding validators", () => {
       expect(a.value.resolutionTimestamp).toBe(ctx.now);
       expect(a.value.timezone).toBe(ctx.timezone);
     }
+  });
+
+  it("classifies absolute dates, grounded durations, ranges, and recurrences", () => {
+    const temporal = (concept: string, value: unknown, sourceText: string) => c({
+      concept,
+      operator: ConstraintOperator.EQ,
+      value,
+      kind: ConstraintKind.TEMPORAL,
+      grounding: { sourceText, quoteExact: true },
+    });
+    expect(classifyGroundedTemporalFact(temporal("stay_start_date", "2026-11-10", "2026-11-10")))
+      .toMatchObject({ ok: true, value: TemporalFactShape.ABSOLUTE });
+    expect(classifyGroundedTemporalFact(temporal("contract_term_months", 12, "12 month term")))
+      .toMatchObject({ ok: true, value: TemporalFactShape.DURATION });
+    expect(classifyGroundedTemporalFact(temporal("stay_window", { start: "2026-11-10", end: "2026-11-12" }, "from 2026-11-10 to 2026-11-12")))
+      .toMatchObject({ ok: true, value: TemporalFactShape.RANGE });
+    expect(classifyGroundedTemporalFact(temporal("billing_interval", { interval: 1, unit: "month" }, "every month")))
+      .toMatchObject({ ok: true, value: TemporalFactShape.RECURRENCE });
+  });
+
+  it("rejects malformed or ungrounded duration representations", () => {
+    const malformed = c({
+      concept: "contract_term_months",
+      operator: ConstraintOperator.EQ,
+      value: 12,
+      kind: ConstraintKind.TEMPORAL,
+      grounding: { sourceText: "annual contract", quoteExact: true },
+    });
+    expect(classifyGroundedTemporalFact(malformed).ok).toBe(false);
+    expect(classifyGroundedTemporalFact({
+      ...malformed,
+      grounding: { sourceText: "12 month term", quoteExact: false },
+    }).ok).toBe(false);
+    expect(classifyGroundedTemporalFact({
+      ...malformed,
+      sourceType: SourceType.AGENT,
+      grounding: { sourceText: "12 month term", quoteExact: true },
+    }).ok).toBe(false);
+    expect(classifyGroundedTemporalFact({
+      ...malformed,
+      meaningClass: MeaningClass.INFERRED,
+      grounding: { sourceText: "12 month term", quoteExact: true },
+    }).ok).toBe(false);
   });
 
   it("rejects invented BPA_free", () => {

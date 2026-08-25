@@ -9,8 +9,10 @@ import {
 } from "@truemandate/protocol";
 import {
   candidatePreservesNegation,
+  classifyGroundedTemporalFact,
   detectNegationMarkers,
   normalizeCurrencyAmount,
+  TemporalFactShape,
 } from "@truemandate/semantic-grounding";
 
 /**
@@ -312,9 +314,7 @@ export function readinessAfterVerification(
           return false;
         }
         if (c.kind === "TEMPORAL") {
-          const temporalValue = c.temporalResolution?.resolvedValue ?? c.value;
-          return typeof temporalValue === "string" &&
-            Number.isFinite(Date.parse(temporalValue));
+          return classifyGroundedTemporalFact(c).ok;
         }
         if (c.kind === "FINANCIAL") return Number.isFinite(Number(c.value));
         return true;
@@ -332,9 +332,10 @@ export function readinessAfterVerification(
       c.sourceType === "HUMAN" &&
       (c.meaningClass === "EXPLICIT" || c.meaningClass === "IMPLIED") &&
       c.grounding.quoteExact === true &&
-      (c.temporalResolution !== undefined
-        ? Number.isFinite(Date.parse(c.temporalResolution.resolvedValue))
-        : typeof c.value === "string" && Number.isFinite(Date.parse(c.value))),
+      (() => {
+        const temporal = classifyGroundedTemporalFact(c);
+        return temporal.ok && temporal.value === TemporalFactShape.ABSOLUTE;
+      })(),
   );
   const planningComplete =
     hasGroundedPlanningConstraints &&
