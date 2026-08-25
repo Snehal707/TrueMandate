@@ -122,9 +122,9 @@ describe("four-item judge navigation with nested surfaces", () => {
 
   it("separates the current benchmark from historical SAFE evidence", () => {
     const html = renderToString(<BenchmarkPage />);
-    expect(html).toContain("Current system");
-    expect(html).toContain("Historical SAFE V1");
-    expect(html).toContain("Corpus construction");
+    expect(html).toContain("Current Multi-Domain");
+    expect(html).toContain("Canonical Historical");
+    expect(html).toContain("Corpus Construction");
     expect(html).toContain("No accepted current-system run");
   });
 

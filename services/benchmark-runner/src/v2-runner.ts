@@ -1,4 +1,5 @@
 import { createSdkCore, type SdkWorkflowRequest, type SdkWorkflowView } from "@truemandate/sdk-core";
+import { createHash } from "node:crypto";
 import {
   BENCHMARK_V2_DOMAINS,
   latencyPercentiles,
@@ -41,6 +42,7 @@ export interface BenchmarkV2ReadTarget {
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const inputHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 async function submitWhenReady(
   baseUrl: string,
@@ -145,8 +147,9 @@ export async function runWorkflowLoadLevel(
   const results: BenchmarkV2ScenarioResult[] = [];
   const readTargets: BenchmarkV2ReadTarget[] = [];
   await pool(jobs, concurrency, async ({ index, domain }) => {
-    const request = buildBenchmarkWorkflowRequest(domain, level * 10_000 + index, started.toISOString());
-    const scenarioId = `load-${level}-${index}-${domain}`;
+      const request = buildBenchmarkWorkflowRequest(domain, level * 10_000 + index, started.toISOString());
+      const scenarioId = `load-${level}-${index}-${domain}`;
+      const scenarioInputHash = inputHash(request);
     const before = performance.now();
     try {
       const submitted = await submitWhenReady(config.baseUrl, request, config, scenarioId);
@@ -155,7 +158,7 @@ export async function runWorkflowLoadLevel(
       if (workflow) readTargets.push({ workflowId: workflow.workflowId, intentId: request.intent.kind === "RAW" ? request.intent.id! : request.intent.intentId });
       const failureReason = submitted.result.ok ? undefined : submitted.result.message;
       results.push({
-        scenarioId,
+        scenarioId, pairId: scenarioId, scenarioInputHash, lane: "WORKFLOW_LOAD", systemVariant: "CURRENT_SYSTEM",
         domainId: domain,
         scenarioClass: "HAPPY_PATH",
         status: submitted.result.ok ? "PASS" : "FAIL",
@@ -166,10 +169,12 @@ export async function runWorkflowLoadLevel(
         unauthorizedExecution: false,
         provenanceComplete: Boolean(workflow?.artifacts),
         sideEffectCount: workflow?.execution?.status ? 1 : 0,
+        duplicateSideEffect: false,
+        criticalFailure: false,
         ...(workflow ? { workflowId: workflow.workflowId } : { reason: failureReason ?? "workflow submission failed" }),
       });
     } catch (error) {
-      results.push({ scenarioId, domainId: domain, scenarioClass: "HAPPY_PATH", status: "FAIL", expectedStatus: "WORKFLOW_CREATED", actualStatus: "TRANSPORT_ERROR", latencyMs: performance.now() - before, authorizationCorrect: false, unauthorizedExecution: false, provenanceComplete: false, sideEffectCount: 0, reason: error instanceof Error ? error.message : String(error) });
+      results.push({ scenarioId, pairId: scenarioId, scenarioInputHash, lane: "WORKFLOW_LOAD", systemVariant: "CURRENT_SYSTEM", domainId: domain, scenarioClass: "HAPPY_PATH", status: "FAIL", expectedStatus: "WORKFLOW_CREATED", actualStatus: "TRANSPORT_ERROR", latencyMs: performance.now() - before, authorizationCorrect: false, unauthorizedExecution: false, provenanceComplete: false, sideEffectCount: 0, duplicateSideEffect: false, criticalFailure: false, reason: error instanceof Error ? error.message : String(error) });
     }
   });
   const completed = config.now?.() ?? new Date();

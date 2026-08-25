@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BenchmarkV2AcceptedRunSchema, BenchmarkV2ManifestSchema, BenchmarkV2SummarySchema } from "../../packages/safe-benchmark/dist/index.js";
+import { BenchmarkV2AcceptedRunSchema, BenchmarkV2ManifestSchema, BenchmarkV2SummarySchema, benchmarkV2ConfigurationHash, benchmarkV2CorpusHash } from "../../packages/safe-benchmark/dist/index.js";
 import { benchmarkV2InputHash } from "../benchmark/v2-input-hash.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -16,6 +16,8 @@ const summary = BenchmarkV2SummarySchema.parse(JSON.parse(readFileSync(resolve(r
 const currentInputHash = benchmarkV2InputHash(root);
 if (accepted.sourceInputHash !== currentInputHash || manifest.metadata.sourceInputHash !== currentInputHash) throw new Error("accepted BENCHMARK_V2 run is stale for current benchmark/runtime inputs");
 if (accepted.commitSha !== manifest.metadata.commitSha || summary.metadata.commitSha !== accepted.commitSha) throw new Error("BENCHMARK_V2 source commit binding mismatch");
+if (accepted.corpusHash !== benchmarkV2CorpusHash() || manifest.metadata.corpusHash !== accepted.corpusHash) throw new Error("accepted BENCHMARK_V2 corpus hash mismatch");
+if (accepted.configurationHash !== benchmarkV2ConfigurationHash(manifest.configuration) || manifest.metadata.configurationHash !== accepted.configurationHash) throw new Error("accepted BENCHMARK_V2 configuration hash mismatch");
 
 const model = {
   available: true,
@@ -25,6 +27,9 @@ const model = {
   environment: summary.metadata.environment,
   commitSha: summary.metadata.commitSha,
   sourceInputHash: summary.metadata.sourceInputHash,
+  corpusHash: summary.metadata.corpusHash,
+  configurationHash: summary.metadata.configurationHash,
+  artifactHash: accepted.manifestSha256,
   totalScenarios: summary.totalScenarios,
   passedScenarios: summary.passedScenarios,
   successRate: summary.successRate,
@@ -36,8 +41,11 @@ const model = {
   peakThroughputPerSecond: summary.peakThroughputPerSecond,
   configuredCeilingReached: summary.configuredCeilingReached,
   firstBottleneck: summary.firstBottleneck,
+  variants: summary.variants,
   domains: summary.domains,
+  scenarioClasses: summary.scenarioClasses,
   load: summary.load,
+  resources: summary.resources,
 };
 writeFileSync(resolve(root, "apps/web/src/demo/current-benchmark-readmodel.ts"), `/** Generated from accepted BENCHMARK_V2 artifact ${accepted.runId}. */\nexport const CURRENT_BENCHMARK_READ_MODEL = ${JSON.stringify(model, null, 2)} as const;\n`);
 console.log(JSON.stringify({ runId: accepted.runId, sourceInputHash: currentInputHash }));

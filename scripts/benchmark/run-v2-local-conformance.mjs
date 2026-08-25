@@ -1,7 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { BENCHMARK_V2_DOMAINS, BenchmarkV2ScenarioResultSchema } from "../../packages/safe-benchmark/dist/index.js";
+import {
+  GroundTruthEvaluator,
+  SystemVariant,
+  benchmarkV2CorrectnessCorpus,
+  BenchmarkV2ScenarioResultSchema,
+} from "../../packages/safe-benchmark/dist/index.js";
+import { createSut } from "../../services/benchmark-runner/dist/adapters.js";
 
 const runId = process.argv.find((value) => value.startsWith("--run-id="))?.slice(9) ?? `local-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 const outDir = resolve("evals/benchmark/v2/local", runId);
@@ -25,49 +31,51 @@ if (run.error) throw run.error;
 if (run.status !== 0) throw new Error(`current-runtime conformance tests failed (${run.status})`);
 const report = JSON.parse(readFileSync(reportPath, "utf8"));
 const assertions = report.testResults.flatMap((suite) => suite.assertionResults).filter((assertion) => assertion.status === "passed" || assertion.status === "failed");
+if (assertions.length !== 118) throw new Error(`expected 118 current-system conformance assertions, received ${assertions.length}`);
 
-function scenarioClass(name) {
-  if (/concurr|parallel|race/i.test(name)) return "CONCURRENT_RACE";
-  if (/expired|expiry/i.test(name)) return "EXPIRED_AUTHORIZATION";
-  if (/unauthori|caller.*den|denies.*caller|unknown callers|requires authenticated|only the .* caller|missing bearer/i.test(name)) return "UNAUTHORIZED_CALLER";
-  if (/malform|schema|caller-supplied|rejects.*input/i.test(name)) return "MALFORMED_REQUEST";
-  if (/replay|idempoten|exactly once|consumed|duplicate/i.test(name)) return "REPLAY";
-  if (/stale|foreign workflow|supersed/i.test(name)) return "STALE_STATE";
-  if (/fails open|unavailable|timeout|unknown|partial failure/i.test(name)) return "PARTIAL_FAILURE";
-  if (/mismatch|industrial|450 vs 500|non-refundable|wrong/i.test(name)) return "ACTION_MISMATCH";
-  if (/stitch|prepare|authorize|commit|multi-step/i.test(name)) return "MULTI_STEP";
-  return "HAPPY_PATH";
+const evaluator = new GroundTruthEvaluator();
+const baseline = createSut(SystemVariant.BASELINE_SINGLE_AGENT);
+const records = [];
+for (const scenario of benchmarkV2CorrectnessCorpus()) {
+  const evidence = assertions.filter((assertion) => new RegExp(scenario.currentEvidencePattern, "i").test(assertion.fullName));
+  if (evidence.length === 0) throw new Error(`missing current-system evidence for ${scenario.pairId}: ${scenario.currentEvidencePattern}`);
+  const failed = evidence.find((assertion) => assertion.status !== "passed");
+  const currentPassed = !failed;
+  const evidenceSummary = evidence.map((assertion) => assertion.fullName).join(" | ");
+  const provenanceObserved = /provenance|durable chain|semantic artifact|workflow artifact/i.test(evidenceSummary);
+  const observedSideEffectCount = /exactly once|one mock payment|stitches.*commit/i.test(evidenceSummary) ? 1 : 0;
+  const expectedRejection = !new Set(["HAPPY_PATH", "MULTI_STEP"]).has(scenario.scenarioClass);
+  records.push({ benchmark: "BENCHMARK_V2", recordType: "SCENARIO_RESULT", payload: BenchmarkV2ScenarioResultSchema.parse({
+    scenarioId: `${scenario.pairId}-current`, pairId: scenario.pairId, scenarioInputHash: scenario.inputHash,
+    lane: "CORRECTNESS", systemVariant: "CURRENT_SYSTEM", domainId: scenario.domainId, scenarioClass: scenario.scenarioClass,
+    status: currentPassed ? (expectedRejection ? "EXPECTED_REJECTION" : "PASS") : "FAIL",
+    expectedStatus: "ASSERTIONS_PASS", actualStatus: currentPassed ? "ASSERTIONS_PASS" : "ASSERTIONS_FAIL",
+    latencyMs: Math.max(0, ...evidence.map((assertion) => assertion.duration ?? 0)), authorizationCorrect: currentPassed,
+    unauthorizedExecution: false, provenanceComplete: provenanceObserved ? currentPassed : undefined,
+    replayProtected: scenario.scenarioClass === "REPLAY" ? currentPassed : undefined,
+    sideEffectCount: observedSideEffectCount, duplicateSideEffect: false, criticalFailure: !currentPassed,
+    reason: (failed ?? evidence[0]).fullName,
+  }) });
+
+  const started = performance.now();
+  const baselineResult = await baseline.run(scenario.publicScenario);
+  const baselineReplay = scenario.scenarioClass === "REPLAY" ? await baseline.run(scenario.publicScenario) : undefined;
+  const evaluation = evaluator.evaluate(scenario.publicScenario, baselineResult);
+  const baselineSideEffectCount = baselineResult.sideEffects.length + (baselineReplay?.sideEffects.length ?? 0);
+  const baselineDuplicateSideEffect = (baselineReplay?.sideEffects.length ?? 0) > 0;
+  records.push({ benchmark: "BENCHMARK_V2", recordType: "SCENARIO_RESULT", payload: BenchmarkV2ScenarioResultSchema.parse({
+    scenarioId: `${scenario.pairId}-baseline`, pairId: scenario.pairId, scenarioInputHash: scenario.inputHash,
+    lane: "CORRECTNESS", systemVariant: "BASELINE_SINGLE_AGENT", domainId: scenario.domainId, scenarioClass: scenario.scenarioClass,
+    status: evaluation.passed ? (expectedRejection ? "EXPECTED_REJECTION" : "PASS") : "FAIL",
+    expectedStatus: `${scenario.publicScenario.expectedAuthority}/${scenario.publicScenario.expectedExecution}`,
+    actualStatus: `${baselineResult.authorityDecision}/${baselineResult.executionResult}`,
+    latencyMs: performance.now() - started, authorizationCorrect: evaluation.authorityMatch,
+    unauthorizedExecution: evaluation.unauthorizedExecution, provenanceComplete: false,
+    replayProtected: scenario.scenarioClass === "REPLAY" ? !baselineDuplicateSideEffect : undefined,
+    sideEffectCount: baselineSideEffectCount, duplicateSideEffect: baselineDuplicateSideEffect, criticalFailure: evaluation.criticalIncident,
+    reason: evaluation.findings.map((finding) => finding.code).join(",") || "BASELINE_EXPECTATION_MATCH",
+  }) });
 }
-
-function domain(name, index) {
-  if (/travel/i.test(name)) return "travel";
-  if (/saas|subscription/i.test(name)) return "saas_it_spend";
-  if (/invoice|payee/i.test(name)) return "invoice_vendor_payment";
-  if (/logistics|destination|fulfillment/i.test(name)) return "logistics_fulfillment";
-  if (/procurement|supplier|food-grade|industrial|purchase/i.test(name)) return "procurement";
-  return BENCHMARK_V2_DOMAINS[index % BENCHMARK_V2_DOMAINS.length];
-}
-
-const records = assertions.map((assertion, index) => {
-  const passed = assertion.status === "passed";
-  const cls = scenarioClass(assertion.fullName);
-  const result = {
-    scenarioId: `local-${index}-${assertion.fullName.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 120)}`,
-    domainId: domain(assertion.fullName, index),
-    scenarioClass: cls,
-    status: passed ? (cls === "HAPPY_PATH" || cls === "MULTI_STEP" ? "PASS" : "EXPECTED_REJECTION") : "FAIL",
-    expectedStatus: passed ? "ASSERTIONS_PASS" : "ASSERTIONS_PASS",
-    actualStatus: passed ? "ASSERTIONS_PASS" : "ASSERTIONS_FAIL",
-    latencyMs: Math.max(0, assertion.duration ?? 0),
-    ...( /authorit|unauthori|commit|gateway/i.test(assertion.fullName) ? { authorizationCorrect: passed } : {} ),
-    unauthorizedExecution: false,
-    ...( /provenance|workflow|stitch/i.test(assertion.fullName) ? { provenanceComplete: passed } : {} ),
-    ...( cls === "REPLAY" ? { replayProtected: passed } : {} ),
-    sideEffectCount: /exactly once|one mock payment/i.test(assertion.fullName) && passed ? 1 : 0,
-    reason: assertion.fullName,
-  };
-  return { benchmark: "BENCHMARK_V2", recordType: "SCENARIO_RESULT", payload: BenchmarkV2ScenarioResultSchema.parse(result) };
-});
 const outputPath = resolve(outDir, "local-scenario-records.jsonl");
 writeFileSync(outputPath, records.map((record) => JSON.stringify(record)).join("\n") + "\n");
-console.log(JSON.stringify({ runId, outputPath, assertions: records.length, files }));
+console.log(JSON.stringify({ runId, outputPath, assertions: assertions.length, pairedScenarios: records.length / 2, records: records.length, files }));

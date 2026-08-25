@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hashCanonical } from "@truemandate/crypto";
 
 export const BENCHMARK_V2 = "BENCHMARK_V2" as const;
 
@@ -26,6 +27,11 @@ export const BenchmarkV2ScenarioClassSchema = z.enum([
 export type BenchmarkV2ScenarioClass = z.infer<typeof BenchmarkV2ScenarioClassSchema>;
 
 export const BenchmarkV2StatusSchema = z.enum(["PASS", "FAIL", "EXPECTED_REJECTION"]);
+export const BenchmarkV2SystemVariantSchema = z.enum([
+  "CURRENT_SYSTEM",
+  "BASELINE_SINGLE_AGENT",
+]);
+export type BenchmarkV2SystemVariant = z.infer<typeof BenchmarkV2SystemVariantSchema>;
 
 export const BenchmarkV2PercentilesSchema = z.object({
   p50: z.number().nonnegative(),
@@ -40,6 +46,8 @@ export const BenchmarkV2RunMetadataSchema = z.object({
   environment: z.string().min(1),
   commitSha: z.string().regex(/^[0-9a-f]{40}$/),
   sourceInputHash: z.string().regex(/^[0-9a-f]{64}$/),
+  corpusHash: z.string().regex(/^[0-9a-f]{64}$/),
+  configurationHash: z.string().regex(/^[0-9a-f]{64}$/),
   jobExecutionId: z.string().min(1),
   serviceRevisions: z.record(z.string().min(1)),
   serviceDigests: z.record(z.string().regex(/^sha256:[0-9a-f]{64}$/)),
@@ -47,6 +55,10 @@ export const BenchmarkV2RunMetadataSchema = z.object({
 
 export const BenchmarkV2ScenarioResultSchema = z.object({
   scenarioId: z.string().min(1),
+  pairId: z.string().min(1),
+  scenarioInputHash: z.string().regex(/^[0-9a-f]{64}$/),
+  lane: z.enum(["CORRECTNESS", "WORKFLOW_LOAD"]),
+  systemVariant: BenchmarkV2SystemVariantSchema,
   domainId: BenchmarkV2DomainSchema,
   scenarioClass: BenchmarkV2ScenarioClassSchema,
   status: BenchmarkV2StatusSchema,
@@ -58,6 +70,8 @@ export const BenchmarkV2ScenarioResultSchema = z.object({
   provenanceComplete: z.boolean().optional(),
   replayProtected: z.boolean().optional(),
   sideEffectCount: z.number().int().nonnegative(),
+  duplicateSideEffect: z.boolean(),
+  criticalFailure: z.boolean(),
   workflowId: z.string().min(1).optional(),
   reason: z.string().min(1).optional(),
 }).strict();
@@ -93,6 +107,7 @@ export const BenchmarkV2ResourceSampleSchema = z.object({
 }).strict();
 
 export const BenchmarkV2DomainSummarySchema = z.object({
+  systemVariant: BenchmarkV2SystemVariantSchema,
   domainId: BenchmarkV2DomainSchema,
   total: z.number().int().nonnegative(),
   passed: z.number().int().nonnegative(),
@@ -101,6 +116,49 @@ export const BenchmarkV2DomainSummarySchema = z.object({
   unauthorizedExecutions: z.number().int().nonnegative(),
   provenanceComplete: z.number().int().nonnegative(),
 }).strict();
+
+export const BenchmarkV2ScenarioClassSummarySchema = z.object({
+  systemVariant: BenchmarkV2SystemVariantSchema,
+  scenarioClass: BenchmarkV2ScenarioClassSchema,
+  total: z.number().int().nonnegative(),
+  passed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  expectedRejections: z.number().int().nonnegative(),
+  criticalFailures: z.number().int().nonnegative(),
+  unauthorizedExecutions: z.number().int().nonnegative(),
+  latencyMs: BenchmarkV2PercentilesSchema,
+}).strict();
+
+export const BenchmarkV2VariantSummarySchema = z.object({
+  systemVariant: BenchmarkV2SystemVariantSchema,
+  total: z.number().int().positive(),
+  passed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  expectedRejections: z.number().int().nonnegative(),
+  criticalFailures: z.number().int().nonnegative(),
+  unauthorizedExecutions: z.number().int().nonnegative(),
+  duplicateSideEffects: z.number().int().nonnegative(),
+  latencyMs: BenchmarkV2PercentilesSchema,
+}).strict();
+
+export const BenchmarkV2ConfigurationSchema = z.object({
+  workflowConcurrencyLevels: z.array(z.number().int().positive()).nonempty(),
+  workflowsPerLevel: z.number().int().positive(),
+  readConcurrencyLevels: z.array(z.number().int().positive()).nonempty(),
+  readsPerLevel: z.number().int().positive(),
+  stopThresholds: z.object({
+    errorRate: z.number().min(0).max(1),
+    latencyMultiplier: z.number().positive(),
+    absoluteLatencyMs: z.number().positive(),
+    cpuUtilization: z.number().min(0).max(1),
+    memoryUtilization: z.number().min(0).max(1),
+  }).strict(),
+}).strict();
+export type BenchmarkV2Configuration = z.infer<typeof BenchmarkV2ConfigurationSchema>;
+
+export function benchmarkV2ConfigurationHash(configuration: BenchmarkV2Configuration): string {
+  return hashCanonical(BenchmarkV2ConfigurationSchema.parse(configuration));
+}
 
 export const BenchmarkV2SummarySchema = z.object({
   metadata: BenchmarkV2RunMetadataSchema,
@@ -115,8 +173,11 @@ export const BenchmarkV2SummarySchema = z.object({
   replayProtectionRate: z.number().min(0).max(1),
   latencyMs: BenchmarkV2PercentilesSchema,
   peakThroughputPerSecond: z.number().nonnegative(),
-  domains: z.array(BenchmarkV2DomainSummarySchema).length(5),
+  variants: z.array(BenchmarkV2VariantSummarySchema).length(2),
+  domains: z.array(BenchmarkV2DomainSummarySchema).length(10),
+  scenarioClasses: z.array(BenchmarkV2ScenarioClassSummarySchema).length(20),
   load: z.array(BenchmarkV2LoadSampleSchema),
+  resources: z.array(BenchmarkV2ResourceSampleSchema),
   firstBottleneck: z.object({
     observedAt: z.string().datetime(),
     service: z.string().min(1),
@@ -129,19 +190,7 @@ export type BenchmarkV2Summary = z.infer<typeof BenchmarkV2SummarySchema>;
 
 export const BenchmarkV2ManifestSchema = z.object({
   metadata: BenchmarkV2RunMetadataSchema,
-  configuration: z.object({
-    workflowConcurrencyLevels: z.array(z.number().int().positive()).nonempty(),
-    workflowsPerLevel: z.number().int().positive(),
-    readConcurrencyLevels: z.array(z.number().int().positive()).nonempty(),
-    readsPerLevel: z.number().int().positive(),
-    stopThresholds: z.object({
-      errorRate: z.number().min(0).max(1),
-      latencyMultiplier: z.number().positive(),
-      absoluteLatencyMs: z.number().positive(),
-      cpuUtilization: z.number().min(0).max(1),
-      memoryUtilization: z.number().min(0).max(1),
-    }).strict(),
-  }).strict(),
+  configuration: BenchmarkV2ConfigurationSchema,
   scenarioCount: z.number().int().positive(),
   requestCount: z.number().int().nonnegative(),
   files: z.record(z.object({
@@ -155,6 +204,8 @@ export const BenchmarkV2AcceptedRunSchema = z.object({
   runId: z.string().min(1),
   manifestSha256: z.string().regex(/^[0-9a-f]{64}$/),
   sourceInputHash: z.string().regex(/^[0-9a-f]{64}$/),
+  corpusHash: z.string().regex(/^[0-9a-f]{64}$/),
+  configurationHash: z.string().regex(/^[0-9a-f]{64}$/),
   commitSha: z.string().regex(/^[0-9a-f]{40}$/),
   acceptedAt: z.string().datetime(),
 }).strict();

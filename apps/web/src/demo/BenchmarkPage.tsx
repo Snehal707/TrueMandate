@@ -12,13 +12,13 @@ export function BenchmarkPage() {
     <>
       <div className="tm-subtabs" role="tablist" aria-label="Benchmark sections">
         <button type="button" role="tab" aria-selected={tab === "current"} className={tab === "current" ? "active" : undefined} onClick={() => setTab("current")}>
-          Current system
+          Current Multi-Domain
         </button>
         <button type="button" role="tab" aria-selected={tab === "benchmark"} className={tab === "benchmark" ? "active" : undefined} onClick={() => setTab("benchmark")}>
-          Historical SAFE V1
+          Canonical Historical
         </button>
         <button type="button" role="tab" aria-selected={tab === "stress"} className={tab === "stress" ? "active" : undefined} onClick={() => setTab("stress")}>
-          Corpus construction
+          Corpus Construction
         </button>
       </div>
       {tab === "current" ? <CurrentBenchmark /> : tab === "stress" ? <StressPage /> : <HistoricalSafeBenchmark />}

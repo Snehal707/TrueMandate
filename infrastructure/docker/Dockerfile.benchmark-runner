@@ -13,7 +13,10 @@ RUN pnpm install --frozen-lockfile \
   && pnpm --filter @truemandate/benchmark-runner... build
 
 FROM node:20-slim
+ARG TM_SOURCE_COMMIT
 WORKDIR /app
+LABEL org.opencontainers.image.revision=$TM_SOURCE_COMMIT
+ENV TM_SOURCE_COMMIT=$TM_SOURCE_COMMIT
 ENV NODE_ENV=production
 ENV TM_PERSISTENCE=memory
 ENV TM_REQUIRE_CONFIG=true

@@ -10,4 +10,5 @@ export * from "./counterfactual.js";
 export * from "./sensitivity.js";
 export * from "./stress/index.js";
 export * from "./v2-contract.js";
+export * from "./v2-corpus.js";
 

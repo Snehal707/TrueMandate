@@ -186,7 +186,7 @@ describe("DemoPage main proof render (V2)", () => {
     expect(bm).toContain("SAFE Benchmark");
     expect(bm).toContain("Current System Benchmark");
     expect(bm).toContain("No accepted current-system run");
-    expect(bm).toContain("Historical SAFE V1");
+    expect(bm).toContain("Canonical Historical");
     expect(bm).not.toMatch(/472<!-- --> \/ <!-- -->500/);
   });
 

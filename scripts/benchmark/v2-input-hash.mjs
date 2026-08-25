@@ -4,10 +4,13 @@ import { resolve } from "node:path";
 
 export const BENCHMARK_V2_INPUTS = [
   "packages/safe-benchmark/src/v2-contract.ts",
+  "packages/safe-benchmark/src/v2-corpus.ts",
   "services/benchmark-runner/src/v2-fixtures.ts",
   "services/benchmark-runner/src/v2-runner.ts",
   "services/benchmark-runner/src/bin/v2-load-job.ts",
   "scripts/benchmark/run-v2-local-conformance.mjs",
+  "scripts/benchmark/collect-v2-run.mjs",
+  "scripts/demo/build-current-benchmark-readmodel.mjs",
   "scripts/benchmark/collect-v2-run.mjs",
   "packages/sdk-core/src/client.ts",
   "services/agent-runtime/src/domain-pack.ts",
@@ -18,6 +21,8 @@ export const BENCHMARK_V2_INPUTS = [
   "services/agent-runtime/src/saas-it-spend-domain-pack.ts",
   "services/agent-runtime/src/invoice-vendor-payment-domain-pack.ts",
   "services/agent-runtime/src/logistics-fulfillment-domain-pack.ts",
+  "infrastructure/docker/Dockerfile.agent-runtime",
+  "infrastructure/docker/Dockerfile.benchmark-runner",
 ];
 
 export function benchmarkV2InputHash(root = process.cwd()) {

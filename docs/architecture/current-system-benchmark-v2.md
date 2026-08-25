@@ -22,13 +22,15 @@ Current DomainPack coverage is exactly:
 - `invoice_vendor_payment`
 - `logistics_fulfillment`
 
-All domains use `GenericWorkflowEngine`; Procurement has no benchmark-only execution path. The immutable run contract includes scenario results, workflow and read load samples, Cloud Run resource samples, summaries, manifests, content hashes, source-input hashes, a real commit SHA, service revisions/digests, environment, job execution, timestamp, configuration, concurrency, and request counts.
+All domains use `GenericWorkflowEngine`; Procurement has no benchmark-only execution path. The explicit 50-scenario correctness corpus pairs every DomainPack with every scenario class. Each pair binds the same public semantic input to production-shaped current-system conformance evidence and the deterministic `BASELINE_SINGLE_AGENT`; a scenario-input hash prevents either lane from receiving a different case.
+
+The immutable run contract includes paired correctness results, workflow and read load samples, Cloud Run resource samples, summaries, manifests, content hashes, source-input hashes, a corpus hash, a configuration hash, a real commit SHA, service revisions/digests, environment, job execution, timestamp, concurrency, and request counts.
 
 The source-input hash covers benchmark schemas, scenario definitions, collection logic, the public SDK interface, GenericWorkflowEngine, Gateway execution interface, DomainPack interface, and all five registered pack implementations. A changed input invalidates the accepted browser model until a new run is accepted.
 
 ## Execution Lanes
 
-The local production-shaped lane uses the real shared runtime/service seams, current DomainPacks, durable-store emulators, and deterministic economic adapter. It covers happy paths, action mismatches, stale state, replay and consumed authorization, expired authority, malformed requests, unauthorized callers, partial failures, concurrent races, provenance, multi-step materialization, and exactly-once commit behavior.
+The local production-shaped lane uses the real shared runtime/service seams, current DomainPacks, durable-store emulators, and deterministic economic adapter. Its independent 118-assertion conformance gate remains separate from the 50 paired comparison rows. It covers happy paths, action mismatches, stale state, replay and consumed authorization, expired authority, malformed requests, unauthorized callers, partial failures, concurrent races, provenance, multi-step materialization, and exactly-once commit behavior.
 
 The isolated `tm-dev` Cloud Run Job uses only the public web API. It runs fresh workflow load at concurrency `1, 2, 4, 8, 16, 32` with 50 workflows per level and public read load at concurrency `1, 10, 25, 50` with 200 reads per level. The benchmark identity receives no owner writes, verifier authority, raw Gateway access, or economic execution authority.
 
@@ -45,6 +47,8 @@ Collection fails closed when any of the following is absent or stale:
 - Cloud Run resource samples;
 - a real 40-character source commit SHA;
 - matching benchmark source-input hashes;
+- matching corpus, configuration, and paired scenario-input hashes;
+- both system variants for every domain/scenario-class pair;
 - valid artifact content hashes.
 
 An accepted run must have zero failed scenarios, zero unauthorized executions, and no duplicate economic effects. Load stops at the first sustained error or latency threshold. Resource samples identify CPU/memory pressure and the first observed bottleneck; otherwise the result explicitly records that no threshold was reached by the configured ceiling.

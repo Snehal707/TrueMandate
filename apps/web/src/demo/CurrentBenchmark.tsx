@@ -9,6 +9,7 @@ type AcceptedModel = {
   readonly environment: string;
   readonly commitSha: string;
   readonly sourceInputHash: string;
+  readonly artifactHash: string;
   readonly totalScenarios: number;
   readonly passedScenarios: number;
   readonly successRate: number;
@@ -20,8 +21,11 @@ type AcceptedModel = {
   readonly peakThroughputPerSecond: number;
   readonly configuredCeilingReached: boolean;
   readonly firstBottleneck: null | { readonly service: string; readonly threshold: string; readonly observedValue: number };
-  readonly domains: readonly { readonly domainId: string; readonly total: number; readonly passed: number; readonly failed: number; readonly unauthorizedExecutions: number }[];
+  readonly variants: readonly { readonly systemVariant: "CURRENT_SYSTEM" | "BASELINE_SINGLE_AGENT"; readonly total: number; readonly passed: number; readonly failed: number; readonly criticalFailures: number; readonly unauthorizedExecutions: number }[];
+  readonly domains: readonly { readonly systemVariant: "CURRENT_SYSTEM" | "BASELINE_SINGLE_AGENT"; readonly domainId: string; readonly total: number; readonly passed: number; readonly failed: number; readonly unauthorizedExecutions: number }[];
+  readonly scenarioClasses: readonly { readonly systemVariant: "CURRENT_SYSTEM" | "BASELINE_SINGLE_AGENT"; readonly scenarioClass: string; readonly total: number; readonly passed: number; readonly failed: number; readonly criticalFailures: number; readonly unauthorizedExecutions: number }[];
   readonly load: readonly { readonly lane: "WORKFLOW_WRITE" | "PUBLIC_READ"; readonly concurrency: number; readonly throughputPerSecond: number; readonly errorRate: number; readonly latencyMs: { readonly p50: number; readonly p95: number; readonly p99: number } }[];
+  readonly resources: readonly { readonly service: string; readonly observedAt: string; readonly instanceCount: number; readonly cpuUtilization?: number; readonly memoryUtilization?: number }[];
 };
 
 function LoadChart({ model }: { readonly model: AcceptedModel }) {
@@ -70,6 +74,21 @@ function LoadHealth({ model }: { readonly model: AcceptedModel }) {
   return <figure className="tm-benchmark-load-health"><figcaption>Throughput and errors from the same accepted run</figcaption><div className="tm-benchmark-load-grid">{model.load.map((sample) => <article key={`${sample.lane}-${sample.concurrency}`}><span>{sample.lane === "WORKFLOW_WRITE" ? "Workflow" : "Read"} c{sample.concurrency}</span><strong>{sample.throughputPerSecond.toFixed(2)} req/s</strong><small>{(sample.errorRate * 100).toFixed(2)}% errors</small></article>)}</div></figure>;
 }
 
+function VariantComparison({ model }: { readonly model: AcceptedModel }) {
+  const current = model.variants.find((row) => row.systemVariant === "CURRENT_SYSTEM")!;
+  const baseline = model.variants.find((row) => row.systemVariant === "BASELINE_SINGLE_AGENT")!;
+  return <div className="tm-safe-scoreboard" aria-label="Current-system correctness comparison"><article className="tm-safe-total truemandate"><span>TrueMandate current system</span><strong>{current.passed} / {current.total}</strong><small>{current.failed} failed · {current.criticalFailures} critical · {current.unauthorizedExecutions} unauthorized</small></article><article className="tm-safe-total baseline"><span>Baseline single agent</span><strong>{baseline.passed} / {baseline.total}</strong><small>{baseline.failed} failed · {baseline.criticalFailures} critical · {baseline.unauthorizedExecutions} unauthorized</small></article></div>;
+}
+
+function ResourceHealth({ model }: { readonly model: AcceptedModel }) {
+  const byService = new Map<string, { cpu: number; memory: number; instances: number }>();
+  for (const sample of model.resources) {
+    const row = byService.get(sample.service) ?? { cpu: 0, memory: 0, instances: 0 };
+    byService.set(sample.service, { cpu: Math.max(row.cpu, sample.cpuUtilization ?? 0), memory: Math.max(row.memory, sample.memoryUtilization ?? 0), instances: Math.max(row.instances, sample.instanceCount) });
+  }
+  return <figure className="tm-benchmark-load-health"><figcaption>Peak resource behavior</figcaption><div className="tm-benchmark-load-grid">{[...byService].map(([service, row]) => <article key={service}><span>{service}</span><strong>{(row.cpu * 100).toFixed(1)}% CPU</strong><small>{(row.memory * 100).toFixed(1)}% memory · {row.instances} instances</small></article>)}</div></figure>;
+}
+
 export function CurrentBenchmark() {
   if (!CURRENT_BENCHMARK_READ_MODEL.available) {
     return (
@@ -82,13 +101,16 @@ export function CurrentBenchmark() {
   const model = CURRENT_BENCHMARK_READ_MODEL as unknown as AcceptedModel;
   return (
     <section className="tm-view" aria-label="Current System Benchmark">
-      <header className="tm-safe-hero"><div><ProductTruthBadge truthClass="CANONICAL_HISTORICAL" detail={`RUN ${model.runId}`} /><p className="overline">Current five-domain architecture</p><h2>Current System Benchmark</h2><p>Measured through the shared governed workflow runtime. Procurement is one DomainPack among five.</p></div></header>
+      <header className="tm-safe-hero"><div><ProductTruthBadge truthClass="CANONICAL_HISTORICAL" detail="CURRENT_SYSTEM_ACCEPTED" /><p className="overline">Current five-domain architecture · run {model.runId}</p><h2>Current System Benchmark</h2><p>Measured through the shared governed workflow runtime. Procurement is one DomainPack among five.</p></div></header>
+      <VariantComparison model={model} />
       <div className="tm-bm-cards"><div className="tm-bm-card ok"><div className="k">Scenarios passed</div><div className="v">{model.passedScenarios} / {model.totalScenarios}</div></div><div className="tm-bm-card ok"><div className="k">Authorization correctness</div><div className="v">{(model.authorizationCorrectnessRate * 100).toFixed(1)}%</div></div><div className="tm-bm-card ok"><div className="k">Provenance completeness</div><div className="v">{(model.provenanceCompletenessRate * 100).toFixed(1)}%</div></div></div>
       <div className="tm-benchmark-visual-grid"><IntegrityBars model={model} /><LoadChart model={model} /></div>
       <LoadHealth model={model} />
+      <ResourceHealth model={model} />
       <div className="tm-benchmark-charts"><article><h3>Latency</h3><strong>p50 {model.latencyMs.p50.toFixed(0)} ms</strong><span>p95 {model.latencyMs.p95.toFixed(0)} ms · p99 {model.latencyMs.p99.toFixed(0)} ms</span></article><article><h3>Peak throughput</h3><strong>{model.peakThroughputPerSecond.toFixed(2)} workflows/s</strong><span>{model.firstBottleneck ? `${model.firstBottleneck.service}: ${model.firstBottleneck.threshold}` : "No threshold reached"}</span></article></div>
-      <div className="tm-bm-table" role="table" aria-label="DomainPack benchmark coverage"><div className="tm-bm-row head" role="row"><span>DomainPack</span><span>Passed</span><span>Failed</span><span>Unauthorized</span><span>Coverage</span></div>{model.domains.map((domain) => <div className="tm-bm-row" role="row" key={domain.domainId}><span className="name">{domain.domainId}</span><span>{domain.passed}</span><span>{domain.failed}</span><span>{domain.unauthorizedExecutions}</span><span>{domain.total}</span></div>)}</div>
-      <div className="tm-chips tm-safe-provenance"><span className="tm-chip"><b>Commit</b> {model.commitSha.slice(0, 12)}</span><span className="tm-chip"><b>Environment</b> {model.environment}</span><span className="tm-chip"><b>Accepted</b> {model.createdAt}</span></div>
+      <div className="tm-bm-table" role="table" aria-label="DomainPack benchmark coverage"><div className="tm-bm-row head" role="row"><span>Variant / DomainPack</span><span>Passed</span><span>Failed</span><span>Unauthorized</span><span>Coverage</span></div>{model.domains.map((domain) => <div className="tm-bm-row" role="row" key={`${domain.systemVariant}-${domain.domainId}`}><span className="name">{domain.systemVariant === "CURRENT_SYSTEM" ? "TrueMandate" : "Baseline"} · {domain.domainId}</span><span>{domain.passed}</span><span>{domain.failed}</span><span>{domain.unauthorizedExecutions}</span><span>{domain.total}</span></div>)}</div>
+      <div className="tm-bm-table" role="table" aria-label="Scenario class benchmark results"><div className="tm-bm-row head" role="row"><span>Variant / Scenario class</span><span>Passed</span><span>Failed</span><span>Critical</span><span>Unauthorized</span></div>{model.scenarioClasses.map((row) => <div className="tm-bm-row" role="row" key={`${row.systemVariant}-${row.scenarioClass}`}><span className="name">{row.systemVariant === "CURRENT_SYSTEM" ? "TrueMandate" : "Baseline"} · {row.scenarioClass}</span><span>{row.passed}</span><span>{row.failed}</span><span>{row.criticalFailures}</span><span>{row.unauthorizedExecutions}</span></div>)}</div>
+      <div className="tm-chips tm-safe-provenance"><span className="tm-chip"><b>Commit</b> {model.commitSha.slice(0, 12)}</span><span className="tm-chip"><b>Artifact</b> {model.artifactHash.slice(0, 12)}</span><span className="tm-chip"><b>Environment</b> {model.environment}</span><span className="tm-chip"><b>Accepted</b> {model.createdAt}</span></div>
     </section>
   );
 }

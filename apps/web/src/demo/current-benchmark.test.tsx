@@ -14,8 +14,9 @@ describe("Current System Benchmark truth boundary", () => {
 
   it("makes current architecture primary and keeps historical evidence separate", () => {
     const html = renderToString(<BenchmarkPage />);
-    expect(html).toContain("Current system");
-    expect(html).toContain("Historical SAFE V1");
+    expect(html).toContain("Current Multi-Domain");
+    expect(html).toContain("Canonical Historical");
+    expect(html).toContain("Corpus Construction");
     expect(html).toContain("Current System Benchmark");
   });
 
@@ -23,5 +24,16 @@ describe("Current System Benchmark truth boundary", () => {
     const source = readFileSync(new URL("./CurrentBenchmark.tsx", import.meta.url), "utf8");
     expect(source.match(/CURRENT_BENCHMARK_READ_MODEL/g)).toHaveLength(4);
     expect(source).not.toMatch(/472|425|325/);
+    expect(source).toContain("model.variants");
+    expect(source).toContain("model.scenarioClasses");
+    expect(source).toContain("model.resources");
+  });
+
+  it("keeps current V2 and historical SAFE labels semantically separate", () => {
+    const source = readFileSync(new URL("./BenchmarkPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain("Current Multi-Domain");
+    expect(source).toContain("Canonical Historical");
+    expect(source).toContain("Corpus Construction");
+    expect(source).not.toMatch(/CURRENT_SYSTEM_ACCEPTED[\s\S]*472 \/ 500/);
   });
 });
