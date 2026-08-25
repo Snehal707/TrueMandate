@@ -1,0 +1,34 @@
+{
+  "schema": "BENCHMARK_V2_REJECTED_CANARY_V1",
+  "runId": "benchmark-v2-canary-20260825T194838Z",
+  "executionId": "tm-dev-benchmark-v2-qqrwm",
+  "sourceCommit": "5f7d40ad606a3744190c72372bbf966da1927fdc",
+  "completed": 19,
+  "total": 20,
+  "errorRate": 0.05,
+  "latencyMs": {
+    "p50": 59279.892850000004,
+    "p95": 77353.51623900002,
+    "p99": 85984.06841200001
+  },
+  "stopReason": "ERROR_RATE_ABOVE_1_PERCENT",
+  "failure": {
+    "scenarioId": "load-1-9-logistics_fulfillment",
+    "code": "VALIDATION_FAILED",
+    "reason": "unexpected remote response (HTTP 503)",
+    "classification": "UNPARSEABLE_RETRYABLE_RAW_503",
+    "agentRuntimeStatus": 503,
+    "duplicateWorkflows": 0,
+    "sideEffects": 0
+  },
+  "cloudLogEvidence": {
+    "agentRuntimeRevision": "tm-dev-agent-runtime-00068-ncd",
+    "agentRuntimeStatus": 503,
+    "agentRuntimeLatency": "0.131068604s",
+    "publicBffStatus": 503,
+    "publicBffLatency": "0.176769258s",
+    "webStatus": 503,
+    "webLatency": "0.221922929s"
+  },
+  "immutable": true
+}

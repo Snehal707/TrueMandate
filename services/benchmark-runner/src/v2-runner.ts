@@ -44,6 +44,14 @@ export interface BenchmarkV2ReadTarget {
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const inputHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+function shouldPollRawReadiness(result: Awaited<ReturnType<ReturnType<typeof createSdkCore>["submitWorkflow"]>>): boolean {
+  if (result.ok) return false;
+  if (result.code === "INTENT_STATE_NOT_READY") return true;
+  return result.code === "VALIDATION_FAILED"
+    && result.details?.retryable === true
+    && result.details?.status === 503;
+}
+
 async function submitWhenReady(
   baseUrl: string,
   request: SdkWorkflowRequest,
@@ -62,7 +70,7 @@ async function submitWhenReady(
     ok: result.ok,
     status: result.ok ? result.value.state : result.code,
   });
-  if (result.ok || result.code !== "INTENT_STATE_NOT_READY" || request.intent.kind !== "RAW" || !request.intent.id) return { result, attempts: 1 };
+  if (result.ok || !shouldPollRawReadiness(result) || request.intent.kind !== "RAW" || !request.intent.id) return { result, attempts: 1 };
   let attempts = 1;
   let attemptedStateId: string | undefined;
   for (let index = 0; index < config.readinessAttempts; index += 1) {

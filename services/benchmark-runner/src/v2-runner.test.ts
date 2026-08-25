@@ -112,4 +112,46 @@ describe("current-system benchmark fixtures", () => {
       "RESPONSE_HANDOFF",
     ]);
   });
+
+  it("polls RAW readiness after an unparseable retryable 503 without resubmitting RAW", async () => {
+    let rawSubmissions = 0;
+    const server = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.method === "GET" && request.url?.includes("/workspace/")) {
+        response.writeHead(200);
+        response.end(JSON.stringify({
+          summary: { intentId: "intent-retryable", intentStateId: "state-retryable", stateHash: "hash-retryable" },
+          evidence: [], approvals: [], monitoring: [], execution: null, outcome: null, resolution: null,
+        }));
+        return;
+      }
+      let body = "";
+      request.on("data", (chunk) => { body += String(chunk); });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as { intent?: { kind?: string } };
+        if (parsed.intent?.kind === "RAW") {
+          rawSubmissions += 1;
+          response.writeHead(503);
+          response.end("truncated-json");
+          return;
+        }
+        response.writeHead(200);
+        response.end(JSON.stringify({ workflowId: "wf-retryable", state: "BLOCKED", artifacts: [] }));
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing test server port");
+
+    const run = await runWorkflowLoadLevel({
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      concurrencyLevels: [1], workflowsPerLevel: 1, timeoutMs: 5_000,
+      readinessPollMs: 1, readinessAttempts: 1,
+      domains: ["logistics_fulfillment"],
+    }, 1, 1);
+
+    expect(run.results[0]?.status).toBe("PASS");
+    expect(rawSubmissions).toBe(1);
+  });
 });

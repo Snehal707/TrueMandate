@@ -127,6 +127,10 @@ function toRemoteError(res: SdkHttpResponse): Result<never> {
   return err(
     ErrorCode.VALIDATION_FAILED,
     `unexpected remote response (HTTP ${res.status})`,
+    {
+      status: res.status,
+      retryable: res.status >= 500,
+    },
   );
 }
 

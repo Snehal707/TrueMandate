@@ -178,6 +178,24 @@ describe("sdk-core route truth", () => {
     }
   });
 
+  it("preserves status and retryability when a remote 5xx body is malformed", async () => {
+    const { transport } = recordingTransport(() => ({
+      status: 503,
+      body: undefined,
+    }));
+    const sdk = createSdkCore({ baseUrl: "https://tm.example", transport });
+
+    const result = await sdk.recordIntent({
+      principalId: "alice",
+      rawText: "retry safely",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("VALIDATION_FAILED");
+      expect(result.details).toEqual({ status: 503, retryable: true });
+    }
+  });
+
   it("verifies the canonical projection read-only contract", async () => {
     const { transport } = recordingTransport(() => ({
       status: 200,
