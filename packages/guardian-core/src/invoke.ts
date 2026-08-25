@@ -42,7 +42,9 @@ export async function invokeJudge(
   if (!generated.ok) {
     let status: JudgeInvocationStatus = JudgeInvocationStatus.PROVIDER_FAILURE;
     if (generated.code === ErrorCode.MODEL_UNAVAILABLE) {
-      status = JudgeInvocationStatus.UNAVAILABLE;
+      status = generated.details?.reason === "MODEL_DEADLINE_EXCEEDED"
+        ? JudgeInvocationStatus.TIMEOUT
+        : JudgeInvocationStatus.UNAVAILABLE;
     } else if (
       generated.code === ErrorCode.SCHEMA_PARSE_FAILED ||
       generated.code === ErrorCode.GUARDIAN_SCHEMA_PARSE_FAILED

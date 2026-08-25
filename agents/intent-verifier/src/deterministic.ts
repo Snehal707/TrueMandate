@@ -297,14 +297,28 @@ export function readinessAfterVerification(
   // it only prevents model tier variance from demoting the same grounded facts
   // below PLANNABLE. Financial and temporal language must have corresponding
   // structured constraints, otherwise the state remains fail-closed.
-  const hasGroundedExplicitConstraints =
+  const hasGroundedPlanningConstraints =
     constraints.length > 0 &&
     constraints.every(
-      (c) =>
-        c.sourceType === "HUMAN" &&
-        c.meaningClass === "EXPLICIT" &&
-        c.grounding.quoteExact === true &&
-        c.grounding.sourceText.trim().length > 0,
+      (c) => {
+        if (
+          c.sourceType !== "HUMAN" ||
+          (c.meaningClass !== "EXPLICIT" && c.meaningClass !== "IMPLIED") ||
+          c.grounding.quoteExact !== true ||
+          c.grounding.sourceText.trim().length === 0 ||
+          c.value === null || c.value === undefined ||
+          (typeof c.value === "string" && c.value.trim().length === 0)
+        ) {
+          return false;
+        }
+        if (c.kind === "TEMPORAL") {
+          const temporalValue = c.temporalResolution?.resolvedValue ?? c.value;
+          return typeof temporalValue === "string" &&
+            Number.isFinite(Date.parse(temporalValue));
+        }
+        if (c.kind === "FINANCIAL") return Number.isFinite(Number(c.value));
+        return true;
+      },
     );
   const hasFinancialLanguage =
     normalizeCurrencyAmount(intent.rawText).ok ||
@@ -316,14 +330,14 @@ export function readinessAfterVerification(
     (c) =>
       c.kind === "TEMPORAL" &&
       c.sourceType === "HUMAN" &&
-      c.meaningClass === "EXPLICIT" &&
+      (c.meaningClass === "EXPLICIT" || c.meaningClass === "IMPLIED") &&
       c.grounding.quoteExact === true &&
       (c.temporalResolution !== undefined
         ? Number.isFinite(Date.parse(c.temporalResolution.resolvedValue))
         : typeof c.value === "string" && Number.isFinite(Date.parse(c.value))),
   );
   const planningComplete =
-    hasGroundedExplicitConstraints &&
+    hasGroundedPlanningConstraints &&
     (!hasFinancialLanguage || hasGroundedFinancial) &&
     (!hasTemporalLanguage || hasStructurallyRepresentedTemporal);
 

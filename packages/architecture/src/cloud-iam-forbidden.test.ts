@@ -101,6 +101,14 @@ describe("cloud IAM forbidden relationships", () => {
     expect(vars).not.toMatch(/web->gateway/);
   });
 
+  it("extends only intent compilation delivery beyond the bounded handler budget", () => {
+    const main = readFileSync(runtimeMain, "utf8");
+    expect(main).toContain(
+      'ack_deadline_seconds = each.value.consumer == "agent-runtime" && each.value.topic == "intent.events" ? 180 : 60',
+    );
+    expect(occurrences(main, "ack_deadline_seconds =")).toBe(1);
+  });
+
   it("isolates public-bff governed commit from raw execution", () => {
     const main = readFileSync(runtimeMain, "utf8");
     expect(occurrences(main, 'name  = "TM_WORKFLOW_COMMIT_CALLER_EMAILS"')).toBe(1);
@@ -108,7 +116,7 @@ describe("cloud IAM forbidden relationships", () => {
       /name\s*=\s*"TM_WORKFLOW_COMMIT_CALLER_EMAILS"[\s\S]{0,120}service_account_emails\["public-bff"\]/,
     );
     const executionCallerBlock = main.match(
-      /name\s*=\s*"TM_EXECUTION_CALLER_EMAIL"[\s\S]*?\n\s*}\n\s*}/,
+      /name\s*=\s*"TM_EXECUTION_CALLER_EMAIL"[\s\S]*?\]\)/,
     )?.[0];
     expect(executionCallerBlock).toContain('service_account_emails["phase-b-verifier"]');
     expect(executionCallerBlock).toContain('service_account_emails["phase-c-verifier"]');
@@ -142,7 +150,7 @@ describe("cloud IAM forbidden relationships", () => {
       /name\s*=\s*"TM_OUTCOME_READER_CALLER_EMAILS"[\s\S]{0,120}service_account_emails\["public-bff"\]/,
     );
     const outcomeGlobalPolicy = main.match(
-      /name\s*=\s*"TM_INTERNAL_ALLOWED_CALLERS"[\s\S]{0,300}service_account_emails\["gateway"\][\s\S]*?\n\s*}\n\s*}/,
+      /name\s*=\s*"TM_INTERNAL_ALLOWED_CALLERS"[\s\S]{0,300}service_account_emails\["gateway"\][\s\S]*?\]\)/,
     )?.[0];
     expect(outcomeGlobalPolicy).toBeDefined();
     expect(outcomeGlobalPolicy).not.toContain('service_account_emails["public-bff"]');

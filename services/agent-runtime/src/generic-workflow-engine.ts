@@ -11,7 +11,7 @@ import { planIntent } from "@truemandate/planner";
 import { verifyPlan } from "@truemandate/plan-verifier";
 import type { AuthorityS2SClient, EvidenceS2SClient, IntentProvenanceS2SClient, MonitoringS2SClient, OutcomeS2SClient } from "@truemandate/cloud-runtime";
 import type { GatewayS2SClient } from "@truemandate/cloud-runtime";
-import type { ModelPort } from "@truemandate/model";
+import { createBudgetedModelPort, type ModelPort } from "@truemandate/model";
 import { ErrorCode, ProvenanceNodeKind, SemanticRelation, TrustClass, TaintClass, AuthorityDecision, err, ok, type ActionProposal, type IntentState, type Result } from "@truemandate/protocol";
 import type { ProvenanceService } from "@truemandate/provenance-service";
 import {
@@ -327,6 +327,7 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
   }
 
   async run(raw: unknown): Promise<Result<unknown>> {
+    const workflowDeadlineAtMs = Date.now() + 280_000;
     const parsed = this.deps.pack.requestSchema.safeParse(raw);
     if (!parsed.success) {
       return err(ErrorCode.SCHEMA_PARSE_FAILED, `Invalid ${this.deps.pack.id} workflow request`, { issues: parsed.error.issues });
@@ -390,7 +391,12 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       },
     } as const;
     const planResult = await planIntent(intent.value, state.value, verification.value, {
-      model: this.deps.model,
+      model: createBudgetedModelPort(this.deps.model, {
+        deadlineAtMs: workflowDeadlineAtMs,
+        stageBudgetMs: 70_000,
+        attemptTimeoutMs: 35_000,
+        maxAttempts: 2,
+      }),
       requestId: workflowId.value,
       planningContext,
     });
@@ -398,7 +404,12 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
     const plan = await this.append({ id: `plan-${workflowId.value}`, intentId: input.intentId, workflowId: workflowId.value, kind: "PLAN", createdAt, payload: { intentStateId: state.value.id, intentStateHash: state.value.stateHash, plan: planResult.value, proofObligations: planResult.value.proofObligations, provenanceNodeId: offerNodeId } });
     if (!plan.ok) return plan;
     const checked = await verifyPlan(intent.value, state.value, planResult.value, verification.value, {
-      model: this.deps.model,
+      model: createBudgetedModelPort(this.deps.model, {
+        deadlineAtMs: workflowDeadlineAtMs,
+        stageBudgetMs: 50_000,
+        attemptTimeoutMs: 25_000,
+        maxAttempts: 2,
+      }),
       requestId: `${workflowId.value}-verify`,
       planningContext,
     });
@@ -521,7 +532,16 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       stage: WorkflowStage.GUARDIAN,
       status: WorkflowStageEventStatus.STARTED,
     });
-    const guardianResult = await evaluateActionProposal({ action, plan: planResult.value, actionNodeId: `action-provenance-${workflowId.value}`, expectedActionHash: hashActionProposal(action), createdAt }, { model: this.deps.model, intents: this.deps.intents, provenance: this.deps.provenance });
+    const guardianResult = await evaluateActionProposal({ action, plan: planResult.value, actionNodeId: `action-provenance-${workflowId.value}`, expectedActionHash: hashActionProposal(action), createdAt }, {
+      model: createBudgetedModelPort(this.deps.model, {
+        deadlineAtMs: workflowDeadlineAtMs,
+        stageBudgetMs: 110_000,
+        attemptTimeoutMs: 55_000,
+        maxAttempts: 2,
+      }),
+      intents: this.deps.intents,
+      provenance: this.deps.provenance,
+    });
     if (!guardianResult.ok) {
       await recordStage(this.deps.stageRecorder, {
         workflowId: workflowId.value,
@@ -563,6 +583,13 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       verification.value.readiness === "EXECUTABLE";
     const actionPreservesIntent = actionFidelity.preservesIntent;
     const eligible = checked.value.status === "VERIFIED" && completeProofs && actionPreservesIntent && guardianResult.value.decision !== AuthorityDecision.BLOCK && !guardianResult.value.criticalFailure && privilegedReady;
+    if (eligible && Date.now() >= workflowDeadlineAtMs) {
+      return err(ErrorCode.MODEL_UNAVAILABLE, "Governed workflow budget exhausted before Authority", {
+        retryable: true,
+        reason: "MODEL_DEADLINE_EXCEEDED",
+        workflowId: workflowId.value,
+      });
+    }
     const workflow = await this.append({ id: workflowId.value, intentId: input.intentId, workflowId: workflowId.value, kind: "WORKFLOW", createdAt, predecessors: [ref(guardian.value)], payload: { intentStateId: state.value.id, intentStateHash: state.value.stateHash, packId: this.deps.pack.id, state: eligible ? "AUTHORITY_EVALUATION" : "BLOCKED" } });
     if (!workflow.ok) return workflow;
     const references = { workflowId: workflowId.value, intentStateId: state.value.id, intentStateHash: state.value.stateHash, workflow: { id: workflow.value.id, hash: workflow.value.contentHash }, plan: { id: plan.value.id, hash: plan.value.contentHash }, planVerification: { id: planVerification.value.id, hash: planVerification.value.contentHash }, action: { id: actionArtifact.value.id, hash: actionArtifact.value.contentHash }, guardian: { id: guardian.value.id, hash: guardian.value.contentHash }, proofs: proofRows.map((p) => ({ id: p.id, hash: p.contentHash })), idempotencyKey: input.idempotencyKey };

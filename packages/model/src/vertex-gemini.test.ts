@@ -647,4 +647,30 @@ describe("VertexGeminiModel telemetry", () => {
     expect(telemetry.events[0]?.httpStatus).toBe(429);
     expect(telemetry.events[0]?.retryCount).toBe(2);
   });
+
+  it("aborts a slow provider attempt at the internal model deadline", async () => {
+    const model = new VertexGeminiModel(
+      { project: "p", location: "global", model: "gemini-3.7-flash" },
+      { getAccessToken: async () => "t" },
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      }),
+    );
+
+    const result = await model.generateStructured({
+      ...baseRequest,
+      requestId: "r-budget-timeout",
+      deadlineAtMs: Date.now() + 50,
+      attemptTimeoutMs: 10,
+      maxAttempts: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe(ErrorCode.MODEL_UNAVAILABLE);
+      expect(result.details?.reason).toBe("MODEL_DEADLINE_EXCEEDED");
+    }
+  });
 });

@@ -28,6 +28,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function remainingBudgetMs(request: StructuredGenerateRequest<unknown>): number {
+  return request.deadlineAtMs === undefined
+    ? Number.POSITIVE_INFINITY
+    : request.deadlineAtMs - Date.now();
+}
+
 function logModelAttempt(
   level: "info" | "warn",
   request: StructuredGenerateRequest<unknown>,
@@ -273,8 +279,10 @@ export class VertexGeminiModel implements ModelPort {
 
     let response: Response;
     let retryCount = 0;
-    const maxRetries =
-      this.config.maxRateLimitRetries ?? DEFAULT_MAX_RATE_LIMIT_RETRIES;
+    const configuredMaxAttempts = request.maxAttempts === undefined
+      ? (this.config.maxRateLimitRetries ?? DEFAULT_MAX_RATE_LIMIT_RETRIES) + 1
+      : Math.max(1, Math.floor(request.maxAttempts));
+    const maxRetries = configuredMaxAttempts - 1;
     const backoffBase =
       this.config.rateLimitBackoffMs ?? DEFAULT_RATE_LIMIT_BACKOFF_MS;
     const requestBody = JSON.stringify({
@@ -298,11 +306,34 @@ export class VertexGeminiModel implements ModelPort {
       },
     });
 
-    // Bounded 429 retry loop. Non-429 failures exit immediately.
+    // Bounded provider retry loop. Every attempt is clamped to the enclosing
+    // stage deadline so a slow provider cannot consume the response reserve.
     for (;;) {
       const attempt = retryCount + 1;
       const attemptStarted = Date.now();
-      logModelAttempt("info", request, { phase: "STARTED", attempt });
+      const remainingMs = remainingBudgetMs(request);
+      if (remainingMs <= 0) {
+        const message = "Vertex model deadline exhausted before provider attempt";
+        await this.recordTelemetry(request, started, "MODEL_UNAVAILABLE", {
+          errorCode: ErrorCode.MODEL_UNAVAILABLE,
+          errorMessage: message,
+          retryCount,
+        });
+        return err(ErrorCode.MODEL_UNAVAILABLE, message, {
+          retryable: true,
+          reason: "MODEL_DEADLINE_EXCEEDED",
+          retryCount,
+        });
+      }
+      const attemptTimeoutMs = Number.isFinite(remainingMs) || request.attemptTimeoutMs !== undefined
+        ? Math.max(1, Math.min(request.attemptTimeoutMs ?? remainingMs, remainingMs))
+        : undefined;
+      logModelAttempt("info", request, {
+        phase: "STARTED",
+        attempt,
+        ...(Number.isFinite(remainingMs) ? { remainingMs } : {}),
+        attemptTimeoutMs,
+      });
       try {
         response = await fetch(endpoint, {
           method: "POST",
@@ -311,22 +342,36 @@ export class VertexGeminiModel implements ModelPort {
             "Content-Type": "application/json",
           },
           body: requestBody,
+          ...(attemptTimeoutMs === undefined
+            ? {}
+            : { signal: AbortSignal.timeout(attemptTimeoutMs) }),
         });
       } catch (e) {
-        const message = e instanceof Error ? e.message : "Vertex fetch failed";
+        const timedOut = attemptTimeoutMs !== undefined &&
+          Date.now() - attemptStarted >= attemptTimeoutMs;
+        const message = timedOut
+          ? "Vertex provider attempt exceeded its model budget"
+          : e instanceof Error ? e.message : "Vertex fetch failed";
         logModelAttempt("warn", request, {
           phase: "COMPLETED",
           attempt,
           latencyMs: Date.now() - attemptStarted,
-          status: "TRANSPORT_ERROR",
+          status: timedOut ? "TIMEOUT" : "TRANSPORT_ERROR",
           errorCode: ErrorCode.MODEL_UNAVAILABLE,
         });
+        if (request.maxAttempts !== undefined &&
+            retryCount < maxRetries && remainingBudgetMs(request) > 0) {
+          retryCount += 1;
+          continue;
+        }
         await this.recordTelemetry(request, started, "MODEL_UNAVAILABLE", {
-          errorCode: ErrorCode.MODEL_UNAVAILABLE,
-          errorMessage: message,
+          errorCode: ErrorCode.MODEL_UNAVAILABLE, errorMessage: message, retryCount,
+        });
+        return err(ErrorCode.MODEL_UNAVAILABLE, message, {
+          retryable: true,
+          reason: timedOut ? "MODEL_DEADLINE_EXCEEDED" : "MODEL_TRANSPORT_ERROR",
           retryCount,
         });
-        return err(ErrorCode.MODEL_UNAVAILABLE, message);
       }
 
       const retryDelayMs =
@@ -343,7 +388,8 @@ export class VertexGeminiModel implements ModelPort {
 
       if (response.ok) break;
 
-      if (response.status === 429 && retryCount < maxRetries) {
+      if (response.status === 429 && retryCount < maxRetries &&
+          remainingBudgetMs(request) > retryDelayMs) {
         retryCount += 1;
         await sleep(retryDelayMs);
         continue;

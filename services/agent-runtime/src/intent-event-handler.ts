@@ -26,6 +26,7 @@ export async function handleIntentCompileEvent(
       "Intent event missing rawText or principalId",
     );
   }
+  const deadlineAtMs = Date.now() + 170_000;
   return compileAndVerify(
     {
       principalId: payload.principalId,
@@ -33,6 +34,14 @@ export async function handleIntentCompileEvent(
       intentId: typeof payload.intentId === "string" ? payload.intentId : undefined,
       taint: payload.taint,
     },
-    deps,
+    {
+      ...deps,
+      modelBudget: {
+        deadlineAtMs,
+        compilationMs: 80_000,
+        verificationMs: 70_000,
+        maxAttempts: 2,
+      },
+    },
   );
 }

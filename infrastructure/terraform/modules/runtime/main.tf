@@ -1051,7 +1051,7 @@ resource "google_pubsub_subscription" "push" {
   project = var.project_id
   topic   = "projects/${var.project_id}/topics/${var.name_prefix}-${each.value.topic}"
 
-  ack_deadline_seconds = 60
+  ack_deadline_seconds = each.value.consumer == "agent-runtime" && each.value.topic == "intent.events" ? 180 : 60
 
   push_config {
     push_endpoint = "${local.run_services[each.value.consumer].uri}/internal/events"

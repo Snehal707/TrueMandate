@@ -140,6 +140,55 @@ describe("deterministic authorization-readiness policy", () => {
     expect(readinessAfterVerification(saasIntent, executable, false, AmbiguityClass.A1)).toBe(IntentReadiness.PLANNABLE);
   });
 
+  it("accepts human-grounded implied Travel dates at the planning floor", () => {
+    const travelIntent = {
+      ...INTENT,
+      rawText: "Book a refundable stay from 2026-11-10 to 2026-11-12 under USD 2000 before 2026-10-31.",
+    } as never;
+    const impliedDate = (id: string, concept: string, value: string) => ({
+      ...constraint({ id, concept, value, kind: ConstraintKind.TEMPORAL }),
+      meaningClass: MeaningClass.IMPLIED,
+      grounding: { sourceText: value, sourceSpan: { start: 0, end: value.length }, quoteExact: true },
+    });
+    const travel = candidate({
+      readiness: IntentReadiness.EXECUTABLE,
+      constraints: [
+        constraint({ id: "c-provider", concept: "booking_provider", value: "Meridian" }),
+        constraint({ id: "c-refundable", concept: "refundable", value: true }),
+        constraint({ id: "c-budget", concept: "total_budget", value: 2000, kind: ConstraintKind.FINANCIAL }),
+        impliedDate("c-checkin", "check_in_date", "2026-11-10"),
+        impliedDate("c-checkout", "check_out_date", "2026-11-12"),
+        constraint({ id: "c-deadline", concept: "completion_deadline", value: "2026-10-31", kind: ConstraintKind.TEMPORAL }),
+      ],
+    });
+
+    expect(readinessAfterVerification(travelIntent, travel, false, AmbiguityClass.A0))
+      .toBe(IntentReadiness.PLANNABLE);
+  });
+
+  it("does not let implied temporal facts satisfy the stricter ACTIONABLE purchase rule", () => {
+    const constraints = purchaseConstraints(false).map((row: { concept: string }) =>
+      row.concept === "delivery_deadline"
+        ? { ...row, meaningClass: MeaningClass.IMPLIED }
+        : row,
+    );
+    expect(readinessAfterVerification(INTENT, candidate({ constraints }), false, AmbiguityClass.A0))
+      .toBe(IntentReadiness.PLANNABLE);
+  });
+
+  it("rejects missing, malformed, inferred, and ungrounded planning facts", () => {
+    const base = constraint({ id: "c-date", concept: "stay_start_date", value: "2026-11-10", kind: ConstraintKind.TEMPORAL });
+    for (const invalid of [
+      { ...base, value: null },
+      { ...base, value: "not-a-date" },
+      { ...base, meaningClass: MeaningClass.INFERRED },
+      { ...base, grounding: { ...base.grounding, quoteExact: false } },
+    ]) {
+      expect(readinessAfterVerification(INTENT, candidate({ constraints: [invalid] }), false, AmbiguityClass.A1))
+        .toBe(IntentReadiness.SEARCHABLE);
+    }
+  });
+
   it("keeps incomplete and ungrounded A0/A1 candidates fail-closed", () => {
     const incomplete = candidate({ constraints: [], readiness: IntentReadiness.EXECUTABLE });
     const ungroundedConstraint = {

@@ -4,7 +4,10 @@ import {
   ModelInspectionStatus,
   type ModelSecurityInspectResult,
 } from "@truemandate/cloud-security";
-import type { ModelPort } from "@truemandate/model";
+import {
+  createBudgetedModelPort,
+  type ModelPort,
+} from "@truemandate/model";
 import {
   ErrorCode,
   ProvenanceNodeKind,
@@ -77,6 +80,12 @@ export interface CompileAndVerifyDeps {
    * can fail or delay compile/verify (see `recordStage` above).
    */
   readonly stageRecorder?: WorkflowStageRecorder;
+  readonly modelBudget?: {
+    readonly deadlineAtMs: number;
+    readonly compilationMs: number;
+    readonly verificationMs: number;
+    readonly maxAttempts: number;
+  };
 }
 
 export interface CompileAndVerifyInput {
@@ -288,8 +297,16 @@ export async function compileAndVerify(
     stage: WorkflowStage.COMPILATION,
     status: WorkflowStageEventStatus.STARTED,
   });
+  const compilerModel = deps.modelBudget
+    ? createBudgetedModelPort(deps.compilerModel, {
+        deadlineAtMs: deps.modelBudget.deadlineAtMs,
+        stageBudgetMs: deps.modelBudget.compilationMs,
+        attemptTimeoutMs: Math.floor(deps.modelBudget.compilationMs / deps.modelBudget.maxAttempts),
+        maxAttempts: deps.modelBudget.maxAttempts,
+      })
+    : deps.compilerModel;
   const candidateResult = await compileIntent(intent, {
-    model: deps.compilerModel,
+    model: compilerModel,
     provenance: deps.provenance,
     intentNodeId,
     now: input.now,
@@ -333,8 +350,16 @@ export async function compileAndVerify(
     stage: WorkflowStage.VERIFICATION,
     status: WorkflowStageEventStatus.STARTED,
   });
+  const verifierModel = deps.modelBudget
+    ? createBudgetedModelPort(deps.verifierModel, {
+        deadlineAtMs: deps.modelBudget.deadlineAtMs,
+        stageBudgetMs: deps.modelBudget.verificationMs,
+        attemptTimeoutMs: Math.floor(deps.modelBudget.verificationMs / deps.modelBudget.maxAttempts),
+        maxAttempts: deps.modelBudget.maxAttempts,
+      })
+    : deps.verifierModel;
   const verificationResult = await verifyCandidate(intent, candidate, {
-    model: deps.verifierModel,
+    model: verifierModel,
     provenance: deps.provenance,
     intentNodeId,
     inputTaint: taint,
@@ -368,6 +393,14 @@ export async function compileAndVerify(
     durationMs: Date.now() - verifyStarted,
   });
   const verification = verificationResult.value;
+
+  if (deps.modelBudget && Date.now() >= deps.modelBudget.deadlineAtMs) {
+    return err(ErrorCode.MODEL_UNAVAILABLE, "Intent finalization budget exhausted", {
+      retryable: true,
+      reason: "MODEL_DEADLINE_EXCEEDED",
+      intentId: intent.id,
+    });
+  }
 
   let intentState: IntentState | undefined;
   // Persist every completed verification attempt durably — including REJECTED

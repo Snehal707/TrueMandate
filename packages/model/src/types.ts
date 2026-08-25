@@ -15,6 +15,12 @@ export interface StructuredGenerateRequest<T = unknown> {
   /** Optional workflow/intent correlation, forwarded into telemetry when present. */
   readonly workflowId?: string;
   readonly intentId?: string;
+  /** Internal execution budget. Never serialized into public workflow DTOs. */
+  readonly deadlineAtMs?: number;
+  /** Maximum wall time for one provider attempt. */
+  readonly attemptTimeoutMs?: number;
+  /** Maximum provider attempts, including the first attempt. */
+  readonly maxAttempts?: number;
 }
 
 /**
