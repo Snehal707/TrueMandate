@@ -14,6 +14,7 @@ import {
 
 export const TemporalFactShape = {
   ABSOLUTE: "ABSOLUTE",
+  PARTIAL_CALENDAR_DATE: "PARTIAL_CALENDAR_DATE",
   DURATION: "DURATION",
   RANGE: "RANGE",
   RECURRENCE: "RECURRENCE",
@@ -22,11 +23,54 @@ export type TemporalFactShape =
   (typeof TemporalFactShape)[keyof typeof TemporalFactShape];
 
 const TEMPORAL_UNIT = /^(?:milliseconds?|seconds?|minutes?|hours?|days?|weeks?|months?|years?)$/i;
+const CALENDAR_MONTHS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+] as const;
+const MAX_DAY_BY_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
 
 function isAbsoluteDate(value: unknown): boolean {
-  return typeof value === "string" &&
-    /^\d{4}-\d{2}-\d{2}(?:T.*)?$/u.test(value.trim()) &&
-    Number.isFinite(Date.parse(value));
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/u);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    calendarDate.getUTCFullYear() !== year ||
+    calendarDate.getUTCMonth() !== month - 1 ||
+    calendarDate.getUTCDate() !== day
+  ) {
+    return false;
+  }
+  return !trimmed.includes("T") || Number.isFinite(Date.parse(trimmed));
+}
+
+function isGroundedPartialCalendarDate(value: unknown, sourceText: string): boolean {
+  if (typeof value !== "string") return false;
+  const match = value.trim().match(
+    /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?$/iu,
+  );
+  if (!match) return false;
+
+  const monthIndex = CALENDAR_MONTHS.indexOf(match[1]!.toLowerCase() as (typeof CALENDAR_MONTHS)[number]);
+  const day = Number(match[2]);
+  if (monthIndex < 0 || day < 1 || day > MAX_DAY_BY_MONTH[monthIndex]!) return false;
+
+  const escapedValue = value.trim().replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`\\b${escapedValue}\\b`, "iu").test(sourceText);
 }
 
 function groundedDuration(value: unknown, sourceText: string): boolean {
@@ -69,6 +113,9 @@ export function classifyGroundedTemporalFact(
       : err(ErrorCode.TEMPORAL_MISMATCH, "Temporal resolution is not an absolute date");
   }
   if (isAbsoluteDate(constraint.value)) return ok(TemporalFactShape.ABSOLUTE);
+  if (isGroundedPartialCalendarDate(constraint.value, constraint.grounding.sourceText)) {
+    return ok(TemporalFactShape.PARTIAL_CALENDAR_DATE);
+  }
   if (groundedDuration(constraint.value, constraint.grounding.sourceText)) {
     return ok(TemporalFactShape.DURATION);
   }

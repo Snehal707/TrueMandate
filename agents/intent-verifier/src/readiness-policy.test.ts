@@ -184,6 +184,53 @@ describe("deterministic authorization-readiness policy", () => {
       .toBe(IntentReadiness.PLANNABLE);
   });
 
+  it("keeps grounded yearless Travel dates at PLANNABLE without inventing a year", () => {
+    const travelIntent = {
+      ...INTENT,
+      rawText: "Book 2 refundable hotel stays at Seaside Lodge with Meridian Travel Partners for under USD 5000 before December 31, 2026, with check-in on December 20 and checkout on December 22.",
+    } as never;
+    const partialDate = (id: string, concept: string, value: string, sourceText: string) => ({
+      ...constraint({ id, concept, value, kind: ConstraintKind.TEMPORAL }),
+      grounding: { sourceText, quoteExact: true },
+    });
+    const travel = candidate({
+      readiness: IntentReadiness.PLANNABLE,
+      constraints: [
+        constraint({ id: "c-quantity", concept: "quantity", value: 2 }),
+        constraint({ id: "c-refundable", concept: "cancellation_policy", value: "refundable" }),
+        constraint({ id: "c-property", concept: "hotel_name", value: "Seaside Lodge" }),
+        constraint({ id: "c-provider", concept: "booking_partner", value: "Meridian Travel Partners" }),
+        constraint({ id: "c-budget", concept: "total_budget", value: 5000, operator: "LT", kind: ConstraintKind.FINANCIAL }),
+        partialDate("c-deadline", "booking_deadline", "2026-12-31", "before December 31, 2026"),
+        partialDate("c-checkin", "check_in_date", "December 20", "check-in on December 20"),
+        partialDate("c-checkout", "checkout_date", "December 22", "checkout on December 22"),
+      ],
+    });
+
+    expect(readinessAfterVerification(travelIntent, travel, false, AmbiguityClass.A1))
+      .toBe(IntentReadiness.PLANNABLE);
+    expect(readinessAfterVerification(travelIntent, travel, false, AmbiguityClass.A1))
+      .not.toBe(IntentReadiness.ACTIONABLE);
+  });
+
+  it("does not let a yearless partial date satisfy an absolute deadline", () => {
+    const deadlineIntent = {
+      ...INTENT,
+      rawText: "Book a refundable stay by December 20.",
+    } as never;
+    const partialDeadline = {
+      ...constraint({ id: "c-deadline", concept: "booking_deadline", value: "December 20", kind: ConstraintKind.TEMPORAL }),
+      grounding: { sourceText: "by December 20", quoteExact: true },
+    };
+
+    expect(readinessAfterVerification(
+      deadlineIntent,
+      candidate({ constraints: [partialDeadline] }),
+      false,
+      AmbiguityClass.A1,
+    )).toBe(IntentReadiness.SEARCHABLE);
+  });
+
   it("does not let implied temporal facts satisfy the stricter ACTIONABLE purchase rule", () => {
     const constraints = purchaseConstraints(false).map((row: { concept: string }) =>
       row.concept === "delivery_deadline"

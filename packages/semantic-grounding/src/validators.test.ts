@@ -187,7 +187,7 @@ describe("semantic grounding validators", () => {
     }
   });
 
-  it("classifies absolute dates, grounded durations, ranges, and recurrences", () => {
+  it("classifies absolute dates, partial calendar dates, grounded durations, ranges, and recurrences", () => {
     const temporal = (concept: string, value: unknown, sourceText: string) => c({
       concept,
       operator: ConstraintOperator.EQ,
@@ -197,12 +197,36 @@ describe("semantic grounding validators", () => {
     });
     expect(classifyGroundedTemporalFact(temporal("stay_start_date", "2026-11-10", "2026-11-10")))
       .toMatchObject({ ok: true, value: TemporalFactShape.ABSOLUTE });
+    expect(classifyGroundedTemporalFact(temporal("stay_start_date", "December 20", "check-in on December 20")))
+      .toMatchObject({ ok: true, value: TemporalFactShape.PARTIAL_CALENDAR_DATE });
     expect(classifyGroundedTemporalFact(temporal("contract_term_months", 12, "12 month term")))
       .toMatchObject({ ok: true, value: TemporalFactShape.DURATION });
     expect(classifyGroundedTemporalFact(temporal("stay_window", { start: "2026-11-10", end: "2026-11-12" }, "from 2026-11-10 to 2026-11-12")))
       .toMatchObject({ ok: true, value: TemporalFactShape.RANGE });
     expect(classifyGroundedTemporalFact(temporal("billing_interval", { interval: 1, unit: "month" }, "every month")))
       .toMatchObject({ ok: true, value: TemporalFactShape.RECURRENCE });
+  });
+
+  it("rejects impossible or ungrounded partial calendar dates", () => {
+    const temporal = (value: string, sourceText: string) => c({
+      concept: "stay_start_date",
+      operator: ConstraintOperator.EQ,
+      value,
+      kind: ConstraintKind.TEMPORAL,
+      grounding: { sourceText, quoteExact: true },
+    });
+    expect(classifyGroundedTemporalFact(temporal("February 30", "check-in on February 30")).ok)
+      .toBe(false);
+    expect(classifyGroundedTemporalFact(temporal("April 31", "check-in on April 31")).ok)
+      .toBe(false);
+    expect(classifyGroundedTemporalFact(temporal("December 20", "check-in date unavailable")).ok)
+      .toBe(false);
+    expect(classifyGroundedTemporalFact(temporal("2026-02-30", "check-in on 2026-02-30")).ok)
+      .toBe(false);
+    expect(classifyGroundedTemporalFact({
+      ...temporal("December 20", "check-in on December 20"),
+      meaningClass: MeaningClass.INFERRED,
+    }).ok).toBe(false);
   });
 
   it("rejects malformed or ungrounded duration representations", () => {
