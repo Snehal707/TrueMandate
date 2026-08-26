@@ -1,0 +1,127 @@
+{
+  "schema": "BENCHMARK_V2_C1_EVIDENCE_V1",
+  "runId": "benchmark-v2-c1-20260826T191532Z",
+  "executionId": "tm-dev-benchmark-v2-6mn2w",
+  "jobGeneration": 10,
+  "sourceCommit": "6bda7ced32840c66e40875596547c12d224bdb0c",
+  "sourceInputHash": "e14adbc15d30745c36907e2cf57bf5e0fbc1aeea01b889249fc219d380dd09f8",
+  "corpusHash": "b6d9ceeacc9f0815066ff46691caef09f89a72cbbd7f100e67db9e173e78cc70",
+  "configurationHash": "e63a409a9ffa42f65b5c83c9ba0274f3d67dbf6fd31eef55130b94385036af82",
+  "acceptedDataset": false,
+  "workflowOnly": true,
+  "benchmarkImage": "sha256:8d188ad3702ebae70122151afc52074789ef5e783b5f010a870d2a8734ca0acd",
+  "scenarioCount": 50,
+  "passed": 50,
+  "failed": 0,
+  "errorRate": 0,
+  "unauthorizedExecutions": 0,
+  "sideEffects": 0,
+  "duplicates": 0,
+  "provenanceIncomplete": 0,
+  "uniqueWorkflows": 50,
+  "loadSample": {
+    "durationMs": 3391429,
+    "concurrency": 1,
+    "lane": "WORKFLOW_WRITE",
+    "startedAt": "2026-08-26T19:18:16.947Z",
+    "failedRequests": 0,
+    "requestCount": 50,
+    "level": 1,
+    "successfulRequests": 50,
+    "completedAt": "2026-08-26T20:14:48.376Z",
+    "stopped": false,
+    "latencyMs": {
+      "p99": 107212.579467,
+      "p95": 85110.46245000022,
+      "p50": 64970.074616000056
+    },
+    "errorRate": 0,
+    "throughputPerSecond": 0.01474304784207483
+  },
+  "modelConcurrency": {
+    "maxActive": 0,
+    "maxQueued": 4,
+    "maxQueueDepthField": 18,
+    "queueWaitMs": {
+      "p50": 67,
+      "p95": 142,
+      "p99": 228
+    },
+    "permitReleases": 452,
+    "queueDeadlineFailures": 0,
+    "modelUnavailableAttempts": 0,
+    "concurrencyLimit": 12,
+    "perStageConcurrency": {
+      "compiler.candidate.v1": {
+        "maxStageActive": 0,
+        "maxStageQueued": 1
+      },
+      "verifier.result.v1": {
+        "maxStageActive": 0,
+        "maxStageQueued": 1
+      },
+      "planner.plan.v1": {
+        "maxStageActive": 0,
+        "maxStageQueued": 1
+      },
+      "plan-verifier.result.v1": {
+        "maxStageActive": 0,
+        "maxStageQueued": 1
+      },
+      "judge.fidelity.v1": {
+        "maxStageActive": 0,
+        "maxStageQueued": 1
+      },
+      "judge.devils_advocate.v1": {
+        "maxStageActive": 0,
+        "maxStageQueued": 1
+      },
+      "judge.contradiction.v1": {
+        "maxStageActive": 0,
+        "maxStageQueued": 1
+      },
+      "judge.evidence.v1": {
+        "maxStageActive": 0,
+        "maxStageQueued": 1
+      },
+      "judge.provenance.v1": {
+        "maxStageActive": 0,
+        "maxStageQueued": 1
+      }
+    }
+  },
+  "model": {
+    "attempts": 452,
+    "successfulAttempts": 452,
+    "provider429s": 0,
+    "timedOutAttempts": 0,
+    "retries": 0
+  },
+  "guardian": {
+    "aggregateDecisions": 50,
+    "criticalFailures": 0,
+    "judgesObserved": [
+      "judge.contradiction.v1",
+      "judge.devils_advocate.v1",
+      "judge.evidence.v1",
+      "judge.fidelity.v1",
+      "judge.provenance.v1"
+    ],
+    "allFiveJudgesRequired": true
+  },
+  "resources": {
+    "peakCpu": 0.1395,
+    "peakMemory": 0.34950000000000003,
+    "peakInstances": 1
+  },
+  "thresholds": {
+    "errorRateMaximum": 0.01,
+    "p95AbsoluteMaximumMs": 270000,
+    "resourceSustainedMaximum": 0.85,
+    "crossed": false
+  },
+  "runStopped": null,
+  "runFailed": null,
+  "c1Passed": true,
+  "immutable": true
+}
