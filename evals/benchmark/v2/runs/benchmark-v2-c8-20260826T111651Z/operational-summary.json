@@ -1,0 +1,107 @@
+{
+  "schema": "BENCHMARK_V2_OPERATIONAL_EVIDENCE_V1",
+  "runId": "benchmark-v2-c8-20260826T111651Z",
+  "window": {
+    "start": "2026-08-26T11:18:07.442Z",
+    "end": "2026-08-26T11:28:10.034Z"
+  },
+  "domains": {
+    "procurement": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 84206.36 },
+    "travel": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 96953.77 },
+    "saas_it_spend": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 83094.76 },
+    "invoice_vendor_payment": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 83237.06 },
+    "logistics_fulfillment": { "count": 10, "passed": 9, "failed": 1, "averageLatencyMs": 77944.96 }
+  },
+  "failureClassifications": [
+    {
+      "scenarioId": "load-1-39-logistics_fulfillment",
+      "classification": "PUBLIC_EDGE_OR_TRANSPORT_502",
+      "runnerStatus": "VALIDATION_FAILED",
+      "runnerReason": "unexpected remote response (HTTP 502)",
+      "latencyMs": 57516.646554999985,
+      "workflowId": null,
+      "downstreamAcceptanceTrace": null,
+      "note": "The runner observed HTTP 502, but no Cloud Run service recorded a 502 request or matching downstream trace. The exact failing edge subdivision is not directly observable."
+    }
+  ],
+  "http": {
+    "structuredRawNotReadyHandoffs": 50,
+    "benchmarkUnexpected5xxFailures": 1,
+    "cloudRunRecorded502Responses": 0,
+    "timeoutFailures": 0,
+    "internalEventResponses": { "success200": 50, "retryable400": 2 }
+  },
+  "semanticStages": {
+    "semanticReadinessFailures": 0,
+    "compilerFailures": 0,
+    "verifierFailures": 0,
+    "plannerFailures": 0,
+    "planVerifierFailures": 0
+  },
+  "guardian": {
+    "aggregateDecisions": 50,
+    "allow": 45,
+    "allowWithMonitoring": 4,
+    "requireApproval": 1,
+    "aggregateFailures": 0,
+    "judgeRetries": 2,
+    "judgeTimeouts": 1,
+    "exhaustedJudgeRetries": 0
+  },
+  "model": {
+    "attempts": 457,
+    "successfulAttempts": 454,
+    "provider429s": 1,
+    "timedOutAttempts": 2,
+    "retries": 3,
+    "expectedWorkflowStageCalls": 450,
+    "extraCallsFromTwoPubSubRedeliveries": 4,
+    "extraCallsFromRetries": 3,
+    "successfulLatencyMs": { "p50": 6930, "p95": 27772, "p99": 39696, "max": 47354 },
+    "successfulLatencyBySchema": {
+      "compiler.candidate.v1": { "count": 52, "p50": 11599, "p95": 16382, "p99": 21900, "max": 21900 },
+      "verifier.result.v1": { "count": 52, "p50": 6848, "p95": 10685, "p99": 11803, "max": 11803 },
+      "planner.plan.v1": { "count": 50, "p50": 18436, "p95": 27723, "p99": 28530, "max": 28530 },
+      "plan-verifier.result.v1": { "count": 50, "p50": 4255, "p95": 7942, "p99": 11774, "max": 11774 },
+      "judge.contradiction.v1": { "count": 50, "p50": 4761, "p95": 7636, "p99": 11548, "max": 11548 },
+      "judge.devils_advocate.v1": { "count": 50, "p50": 7423, "p95": 13212, "p99": 31193, "max": 31193 },
+      "judge.evidence.v1": { "count": 50, "p50": 3910, "p95": 6636, "p99": 42376, "max": 42376 },
+      "judge.fidelity.v1": { "count": 50, "p50": 5264, "p95": 7744, "p99": 16289, "max": 16289 },
+      "judge.provenance.v1": { "count": 50, "p50": 24814, "p95": 44135, "p99": 47354, "max": 47354 }
+    },
+    "nonSuccessfulAttempts": [
+      { "schema": "judge.fidelity.v1", "status": "HTTP_429", "count": 1 },
+      { "schema": "judge.provenance.v1", "status": "TIMEOUT", "durationMs": 55002, "count": 1 },
+      { "schema": "verifier.result.v1", "status": "TIMEOUT", "durationMs": 35001, "count": 1 }
+    ]
+  },
+  "pubsub": {
+    "deliveryRequests": 52,
+    "redeliveriesObserved": 2,
+    "redeliveryLoops": 0,
+    "duplicateWorkflowEffects": 0
+  },
+  "firestore": {
+    "permissionFailures": 0,
+    "transactionFailures": 0,
+    "contentionFailures": 0,
+    "writeFailures": 0
+  },
+  "comparisonPercent": {
+    "c8VsC1": { "p50": 28.52, "p95": 51.44, "p99": 76.76, "throughput": 430.23, "peakCpu": 869.23, "peakMemory": 20.01, "peakInstances": 100.00, "modelAttempts": 0.66, "provider429s": null, "retries": null },
+    "c8VsC2": { "p50": 19.91, "p95": 27.35, "p99": 31.79, "throughput": 198.28, "peakCpu": -58.59, "peakMemory": 12.50, "peakInstances": 0.00, "modelAttempts": 0.88, "provider429s": null, "retries": 200.00 },
+    "c8VsC4": { "p50": 5.80, "p95": 20.43, "p99": 8.14, "throughput": 64.53, "peakCpu": 31.91, "peakMemory": 9.09, "peakInstances": -33.33, "modelAttempts": 0.44, "provider429s": -66.67, "retries": 0.00 }
+  },
+  "throughputScalingEfficiencyPercent": {
+    "c4ToC8": 82.27,
+    "c2ToC8": 74.57,
+    "c1ToC8": 66.28
+  },
+  "providerThrottlingAssessment": "One 429 among 457 attempts (0.22%) was retried successfully. This is lower than C4's three 429s and did not cause the failed workflow. Two bounded model timeouts were also recovered; provider pressure did not cross an existing latency or safety gate.",
+  "notes": [
+    "Structured scenario records are authoritative for workload acceptance; Cloud Run request counts are window-correlated.",
+    "Expected RAW 503 handoffs are excluded from unexpected 5xx counts.",
+    "The failed scenario has no workflow and therefore contributes one incomplete-provenance result; it created no side effect.",
+    "Database and network subdivisions not emitted by public operational telemetry are not directly observable."
+  ]
+}
