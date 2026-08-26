@@ -1,0 +1,74 @@
+{
+  "schema": "BENCHMARK_V2_OPERATIONAL_EVIDENCE_V1",
+  "runId": "benchmark-v2-c4-20260826T104241Z",
+  "window": {
+    "start": "2026-08-26T10:45:00.427Z",
+    "end": "2026-08-26T11:01:31.899Z"
+  },
+  "domains": {
+    "procurement": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 80182.90 },
+    "travel": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 81226.89 },
+    "saas_it_spend": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 79420.13 },
+    "invoice_vendor_payment": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 74801.06 },
+    "logistics_fulfillment": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 74595.72 }
+  },
+  "failureClassifications": [],
+  "http": {
+    "structuredRawNotReadyHandoffs": 50,
+    "benchmark5xxFailures": 0,
+    "timeoutFailures": 0,
+    "internalEventResponses": { "success200": 50, "retryable400": 1 }
+  },
+  "semanticStages": {
+    "semanticReadinessFailures": 0,
+    "compilerFailures": 0,
+    "verifierFailures": 0,
+    "plannerFailures": 0,
+    "planVerifierFailures": 0
+  },
+  "guardian": {
+    "aggregateDecisions": 50,
+    "allow": 43,
+    "allowWithMonitoring": 7,
+    "aggregateFailures": 0,
+    "judgeRetries": 1,
+    "terminalJudgeTimeouts": 1,
+    "timeoutDisposition": "UNCERTAIN_ALLOW_WITH_MONITORING"
+  },
+  "model": {
+    "attempts": 455,
+    "successfulAttempts": 451,
+    "provider429s": 3,
+    "timedOutAttempts": 1,
+    "retries": 3,
+    "expectedWorkflowStageCalls": 450,
+    "extraCallsFromOnePubSubRedelivery": 2,
+    "extraCallsFromRetries": 3
+  },
+  "pubsub": {
+    "deliveryRequests": 51,
+    "redeliveriesObserved": 1,
+    "redeliveryLoops": 0,
+    "duplicateWorkflowEffects": 0
+  },
+  "firestore": {
+    "permissionFailures": 0,
+    "transactionFailures": 0,
+    "contentionFailures": 0,
+    "writeFailures": 0
+  },
+  "comparisonPercent": {
+    "c4VsC1": { "p50": 21.47, "p95": 25.75, "p99": 63.46, "throughput": 222.26, "peakCpu": 634.78, "peakMemory": 10.00, "peakInstances": 200.00 },
+    "c4VsC2": { "p50": 13.34, "p95": 5.75, "p99": 21.88, "throughput": 81.29, "peakCpu": -68.61, "peakMemory": 3.13, "peakInstances": 50.00 }
+  },
+  "throughputScalingEfficiencyPercent": {
+    "c1ToC2": 88.88,
+    "c2ToC4": 90.64,
+    "c1ToC4": 80.56
+  },
+  "notes": [
+    "Structured scenario records are authoritative for workload acceptance; Cloud Run request counts are window-correlated.",
+    "CPU and memory peaks use Cloud Monitoring 60-second aligned p99 utilization values.",
+    "The Guardian judge timeout did not expand authority and produced a conservative monitored decision."
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "schema": "BENCHMARK_V2_C4_EVIDENCE_V1",
+  "runId": "benchmark-v2-c4-20260826T104241Z",
+  "executionId": "tm-dev-benchmark-v2-n5kfs",
+  "sourceCommit": "d2d47c9e47bf2e18083a8c9ee976dd46668ac7d6",
+  "sourceInputHash": "e14adbc15d30745c36907e2cf57bf5e0fbc1aeea01b889249fc219d380dd09f8",
+  "corpusHash": "b6d9ceeacc9f0815066ff46691caef09f89a72cbbd7f100e67db9e173e78cc70",
+  "configurationHash": "3044b594bf44db000d5876805d9a7fa79a2ef100746a4e42e7318303b3cab4c2",
+  "acceptedDataset": false,
+  "workflowOnly": true,
+  "jobGeneration": 8,
+  "benchmarkImage": "sha256:4da839b7d25a7f538b99605d938404f971dbdbd0dbdf011daaa2e97dcc27c12c",
+  "resolvedLinuxAmd64Image": "sha256:bc72dcd52a328ef71ffe9db2a67bf6eceaa858ed25751ee802ef839bd2d3f727",
+  "scenarioCount": 50,
+  "passed": 50,
+  "failed": 0,
+  "errorRate": 0,
+  "unauthorizedExecutions": 0,
+  "sideEffects": 0,
+  "duplicates": 0,
+  "provenanceIncomplete": 0,
+  "uniqueWorkflows": 50,
+  "loadSample": {
+    "startedAt": "2026-08-26T10:45:00.427Z",
+    "completedAt": "2026-08-26T11:01:31.899Z",
+    "concurrency": 4,
+    "durationMs": 991472,
+    "requestCount": 50,
+    "successfulRequests": 50,
+    "failedRequests": 0,
+    "latencyMs": {
+      "p50": 75235.87466900004,
+      "p95": 104105.326592,
+      "p99": 139333.44677299995
+    },
+    "throughputPerSecond": 0.05043006761663466,
+    "stopped": false
+  },
+  "thresholds": {
+    "errorRateMaximum": 0.01,
+    "p95AbsoluteMaximumMs": 270000,
+    "p95C1RelativeMaximumMs": 165575.765,
+    "resourceSustainedMaximum": 0.85,
+    "crossed": false
+  },
+  "c4Passed": true,
+  "readyForC8": true,
+  "immutable": true
+}
