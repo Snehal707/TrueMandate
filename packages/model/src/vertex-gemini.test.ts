@@ -8,6 +8,7 @@ import { z } from "zod";
 import { VertexGeminiModel, type TokenProvider } from "./vertex-gemini.js";
 import { vertexObjectRequiredFields } from "./vertex-response-schema.js";
 import type { ModelCallTelemetryEvent, ModelTelemetryPort } from "./types.js";
+import type { ModelConcurrencyLimiter } from "./model-concurrency.js";
 
 const SampleSchema = z.object({ answer: z.string() }).strict();
 
@@ -68,6 +69,124 @@ describe("VertexGeminiModel token resolution", () => {
     expect((init?.headers as Record<string, string>).Authorization).toBe(
       "Bearer injected-token",
     );
+  });
+
+  it("releases and reacquires capacity around a bounded 429 retry", async () => {
+    delete process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
+    let active = 0;
+    let maxActive = 0;
+    let acquisitions = 0;
+    const limiter: ModelConcurrencyLimiter = {
+      limit: 12,
+      async acquire(input) {
+        acquisitions += 1;
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        return {
+          ok: true,
+          value: {
+            leaseId: input.requestId,
+            slotId: String(acquisitions),
+            queueWaitMs: 0,
+            release: async () => { active -= 1; },
+          },
+        };
+      },
+    };
+    const telemetry: ModelCallTelemetryEvent[] = [];
+    const model = new VertexGeminiModel(
+      { project: "p", location: "global", model: "gemini-3.7-flash", rateLimitBackoffMs: 1 },
+      { getAccessToken: async () => "test-token" },
+      { record: async (event) => { telemetry.push(event); } },
+      limiter,
+    );
+    let calls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      expect(active).toBe(1);
+      calls += 1;
+      if (calls === 1) {
+        return new Response(JSON.stringify({
+          error: {
+            status: "RESOURCE_EXHAUSTED",
+            details: [{
+              "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+              reason: "RATE_LIMIT_EXCEEDED",
+              domain: "googleapis.com",
+              metadata: { quotaMetric: "generate_content_requests" },
+            }],
+          },
+        }), { status: 429, headers: { "retry-after": "0" } });
+      }
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: '{"answer":"ok"}' }] } }],
+      }), { status: 200 });
+    });
+
+    const result = await model.generateStructured({
+      modelId: "gemini-3.7-flash",
+      promptVersion: "v1",
+      schemaId: "sample",
+      schemaVersion: "1",
+      schema: SampleSchema,
+      systemInstruction: "test",
+      userPayload: {},
+      requestId: "retry-capacity",
+      deadlineAtMs: Date.now() + 5_000,
+      attemptTimeoutMs: 1_000,
+      maxAttempts: 2,
+    });
+    expect(result.ok).toBe(true);
+    expect(acquisitions).toBe(2);
+    expect(active).toBe(0);
+    expect(maxActive).toBe(1);
+    expect(telemetry.at(-1)?.providerError).toMatchObject({
+      status: "RESOURCE_EXHAUSTED",
+      reason: "RATE_LIMIT_EXCEEDED",
+    });
+  });
+
+  it("fails closed when queue wait consumes the remaining stage deadline", async () => {
+    delete process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
+    let released = 0;
+    const limiter: ModelConcurrencyLimiter = {
+      limit: 12,
+      async acquire(input) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return {
+          ok: true,
+          value: {
+            leaseId: input.requestId,
+            slotId: "slot-00",
+            queueWaitMs: 30,
+            release: async () => { released += 1; },
+          },
+        };
+      },
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const model = new VertexGeminiModel(
+      { project: "p", location: "global", model: "gemini-3.7-flash" },
+      { getAccessToken: async () => "test-token" },
+      undefined,
+      limiter,
+    );
+    const result = await model.generateStructured({
+      modelId: "gemini-3.7-flash",
+      promptVersion: "v1",
+      schemaId: "sample",
+      schemaVersion: "1",
+      schema: SampleSchema,
+      systemInstruction: "test",
+      userPayload: {},
+      requestId: "queue-deadline",
+      deadlineAtMs: Date.now() + 20,
+      attemptTimeoutMs: 1_000,
+      maxAttempts: 1,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.details?.reason).toBe("MODEL_QUEUE_DEADLINE_EXCEEDED");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(released).toBe(1);
   });
 
   it("fail-closed when no token source is available", async () => {
@@ -409,10 +528,26 @@ describe("VertexGeminiModel telemetry", () => {
 
   it("records MODEL_UNAVAILABLE when the fetch call throws", async () => {
     const telemetry = collectingTelemetry();
+    let releases = 0;
+    const limiter: ModelConcurrencyLimiter = {
+      limit: 12,
+      async acquire(input) {
+        return {
+          ok: true,
+          value: {
+            leaseId: input.requestId,
+            slotId: "slot-00",
+            queueWaitMs: 0,
+            release: async () => { releases += 1; },
+          },
+        };
+      },
+    };
     const model = new VertexGeminiModel(
       { project: "p", location: "global", model: "gemini-3.7-flash" },
       { getAccessToken: async () => "t" },
       telemetry.port,
+      limiter,
     );
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
 
@@ -421,6 +556,7 @@ describe("VertexGeminiModel telemetry", () => {
     expect(telemetry.events).toHaveLength(1);
     expect(telemetry.events[0]?.status).toBe("MODEL_UNAVAILABLE");
     expect(telemetry.events[0]?.errorMessage).toBe("network down");
+    expect(releases).toBe(1);
   });
 
   it("records MODEL_UNAVAILABLE with httpStatus on a non-2xx response", async () => {

@@ -174,6 +174,7 @@ export const COLLECTIONS = {
   modelCalls: "modelCalls",
   workflowStageEvents: "workflowStageEvents",
   workflowStageIndexes: "workflowStageIndexes",
+  modelConcurrencySlots: "modelConcurrencySlots",
   health: "_health",
 } as const;
 

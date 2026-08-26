@@ -518,6 +518,9 @@ importers:
       '@truemandate/crypto':
         specifier: workspace:*
         version: link:../crypto
+      '@truemandate/model':
+        specifier: workspace:*
+        version: link:../model
       '@truemandate/observability':
         specifier: workspace:*
         version: link:../observability

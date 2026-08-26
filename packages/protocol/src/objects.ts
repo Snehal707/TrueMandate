@@ -1045,6 +1045,16 @@ export interface ModelCallTelemetryEvent {
   readonly outputTokens?: number;
   /** Number of 429 retries attempted before this terminal status (0 = no retry). */
   readonly retryCount?: number;
+  readonly providerError?: Readonly<{
+    status?: string;
+    reason?: string;
+    domain?: string;
+    metadata?: Readonly<Record<string, string>>;
+    quotaViolations?: readonly Readonly<{ subject?: string; description?: string }>[];
+    retryDelayMs?: number;
+    retryAfterMs?: number;
+    providerRequestId?: string;
+  }>;
   readonly errorCode?: string;
   readonly errorMessage?: string;
   readonly traceId?: string;

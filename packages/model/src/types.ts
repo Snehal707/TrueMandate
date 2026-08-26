@@ -1,5 +1,6 @@
 import type { Result } from "@truemandate/protocol";
 import type { z } from "zod";
+import type { SanitizedProviderError } from "./provider-error.js";
 
 export const PROTOCOL_VERSION = "0.1.0";
 
@@ -54,6 +55,7 @@ export interface ModelCallTelemetryEvent {
   readonly outputTokens?: number;
   /** Number of 429 retries attempted before this terminal status (0 = no retry). */
   readonly retryCount?: number;
+  readonly providerError?: SanitizedProviderError;
   readonly errorCode?: string;
   readonly errorMessage?: string;
   readonly traceId?: string;

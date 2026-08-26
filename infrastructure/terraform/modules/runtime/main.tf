@@ -521,6 +521,14 @@ resource "google_cloud_run_v2_service" "s2s" {
         }
       }
 
+      dynamic "env" {
+        for_each = each.key == "agent-runtime" ? [1] : []
+        content {
+          name  = "TM_VERTEX_MODEL_CONCURRENCY"
+          value = "12"
+        }
+      }
+
       # Route-specific caller isolation: both verifiers may drive a fresh
       # authorized workflow chain; only the Phase B verifier may trigger
       # explicit economic execution.

@@ -25,7 +25,11 @@ import {
   staticTokenProvider,
 } from "@truemandate/cloud-runtime";
 import { ModelArmorAdapter } from "@truemandate/cloud-security";
-import { VertexGeminiModel } from "@truemandate/model";
+import {
+  VertexGeminiModel,
+  modelConcurrencyLimitFromEnv,
+  type ModelConcurrencyObserver,
+} from "@truemandate/model";
 import { initTracing } from "@truemandate/observability";
 import { ProvenanceService } from "@truemandate/provenance-service";
 import { handleIntentCompileEvent } from "../intent-event-handler.js";
@@ -52,10 +56,28 @@ async function main(): Promise<void> {
   requireOutcomeResolutionUrl(config);
   requireGatewayUrl(config);
   const persist = await initRuntimePersistence();
+  const concurrencyLimit = modelConcurrencyLimitFromEnv();
+  const concurrencyObserver: ModelConcurrencyObserver = {
+    record: (event) => console.info(JSON.stringify({
+      ...event,
+      service: config.serviceName,
+      revision: process.env.K_REVISION,
+      instanceId: process.env.HOSTNAME,
+    })),
+  };
+  const modelConcurrency = persist.bundle.createModelConcurrencyLimiter({
+    limit: concurrencyLimit,
+    ownerId: `${process.env.K_REVISION ?? "local"}:${process.env.HOSTNAME ?? process.pid}`,
+    observer: concurrencyObserver,
+  });
   // Wave 2: durable production model-call telemetry (success and every
   // documented failure branch). Fail-open — a Firestore write failure inside
   // the store never throws into generateStructured().
-  const vertex = VertexGeminiModel.fromEnv(undefined, persist.bundle.modelTelemetry);
+  const vertex = VertexGeminiModel.fromEnv(
+    undefined,
+    persist.bundle.modelTelemetry,
+    modelConcurrency,
+  );
   if (!vertex.ok) {
     throw new Error(vertex.message);
   }
@@ -179,6 +201,7 @@ async function main(): Promise<void> {
       vertex: "initialized",
       geminiModel: config.geminiModel,
       vertexLocation: config.vertexLocation,
+      vertexModelConcurrency: concurrencyLimit,
       armorConfigured: armor.configured,
       armorLive: armor.liveEnabled,
       firestoreClient: persist.firestoreClient ? "initialized" : "none",

@@ -19,6 +19,7 @@
     "@truemandate/authority": "workspace:*",
     "@truemandate/crypto": "workspace:*",
     "@truemandate/observability": "workspace:*",
+    "@truemandate/model": "workspace:*",
     "@truemandate/outcome-core": "workspace:*",
     "@truemandate/protocol": "workspace:*",
     "@truemandate/schemas": "workspace:*",

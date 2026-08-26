@@ -45,6 +45,7 @@ import {
   FirestoreWorkflowStageStore,
 } from "./telemetry-stores.js";
 import { createMonitoringContractRepository } from "./monitoring-store.js";
+import { FirestoreModelConcurrencyLimiter } from "./model-concurrency-limiter.js";
 
 export * from "./document-store.js";
 export * from "./google-store.js";
@@ -58,6 +59,7 @@ export * from "./prepared-action-store.js";
 export * from "./repositories.js";
 export * from "./telemetry-stores.js";
 export * from "./monitoring-store.js";
+export * from "./model-concurrency-limiter.js";
 
 export interface FirestorePersistenceBundle {
   readonly store: DocumentStore;
@@ -113,6 +115,9 @@ export interface FirestorePersistenceBundle {
   readonly modelTelemetry: FirestoreModelTelemetryStore;
   /** Wave 2 observability: durable workflow stage-timing events. */
   readonly workflowStages: FirestoreWorkflowStageStore;
+  readonly createModelConcurrencyLimiter: (
+    options: ConstructorParameters<typeof FirestoreModelConcurrencyLimiter>[1],
+  ) => FirestoreModelConcurrencyLimiter;
 }
 
 /**
@@ -163,6 +168,8 @@ export function createFirestorePersistence(
     semanticArtifacts: new FirestoreSemanticArtifactRepository(store),
     modelTelemetry: new FirestoreModelTelemetryStore(store),
     workflowStages: new FirestoreWorkflowStageStore(store),
+    createModelConcurrencyLimiter: (options) =>
+      new FirestoreModelConcurrencyLimiter(store, options),
   };
 }
 

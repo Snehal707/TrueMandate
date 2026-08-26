@@ -61,6 +61,29 @@ locals {
       description = "RemediationMandate issuances"
     }
   }
+
+  model_concurrency_gauges = {
+    active = {
+      field       = "active"
+      description = "Active outbound Vertex model attempts"
+    }
+    queued = {
+      field       = "queued"
+      description = "Queued outbound Vertex model attempts"
+    }
+    max_queue_depth = {
+      field       = "maxQueueDepth"
+      description = "Maximum Agent Runtime model queue depth"
+    }
+    stage_active = {
+      field       = "stageActive"
+      description = "Active outbound Vertex attempts by model stage"
+    }
+    stage_queued = {
+      field       = "stageQueued"
+      description = "Queued outbound Vertex attempts by model stage"
+    }
+  }
 }
 
 resource "google_logging_metric" "decision" {
@@ -71,13 +94,85 @@ resource "google_logging_metric" "decision" {
   filter  = each.value.filter
 
   metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    unit        = "1"
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
     display_name = each.value.description
   }
 
   description = each.value.description
+}
+
+resource "google_logging_metric" "model_concurrency" {
+  for_each = local.model_concurrency_gauges
+
+  name            = "${local.prefix}-model-${replace(each.key, "_", "-")}"
+  project         = var.project_id
+  filter          = "jsonPayload.event=\"tm.model.concurrency.state\" OR jsonPayload.event=\"tm.model.queue.wait\" OR jsonPayload.event=\"tm.model.permit.release\""
+  value_extractor = "EXTRACT(jsonPayload.${each.value.field})"
+
+  metric_descriptor {
+    metric_kind  = "GAUGE"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = each.value.description
+    labels {
+      key         = "stage"
+      value_type  = "STRING"
+      description = "Model schema/stage"
+    }
+  }
+  label_extractors = {
+    stage = "EXTRACT(jsonPayload.schemaId)"
+  }
+  description = each.value.description
+}
+
+resource "google_logging_metric" "model_queue_wait" {
+  name            = "${local.prefix}-model-queue-wait-ms"
+  project         = var.project_id
+  filter          = "jsonPayload.event=\"tm.model.queue.wait\" AND jsonPayload.outcome=\"ACQUIRED\""
+  value_extractor = "EXTRACT(jsonPayload.queueWaitMs)"
+
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "DISTRIBUTION"
+    unit         = "ms"
+    display_name = "Vertex model queue wait"
+    labels {
+      key         = "stage"
+      value_type  = "STRING"
+      description = "Model schema/stage"
+    }
+  }
+  bucket_options {
+    exponential_buckets {
+      num_finite_buckets = 20
+      growth_factor      = 2
+      scale              = 1
+    }
+  }
+  label_extractors = {
+    stage = "EXTRACT(jsonPayload.schemaId)"
+  }
+}
+
+resource "google_logging_metric" "model_events" {
+  for_each = {
+    rate_limited = "jsonPayload.event=\"vertex_model_attempt\" AND jsonPayload.httpStatus=429"
+    retry        = "jsonPayload.event=\"vertex_model_attempt\" AND jsonPayload.phase=\"STARTED\" AND jsonPayload.attempt>1"
+    timeout      = "jsonPayload.event=\"vertex_model_attempt\" AND jsonPayload.status=\"TIMEOUT\""
+  }
+
+  name    = "${local.prefix}-model-${replace(each.key, "_", "-")}"
+  project = var.project_id
+  filter  = each.value
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "Vertex model ${replace(each.key, "_", " ")}"
+  }
 }
 
 resource "google_monitoring_dashboard" "wave2" {
@@ -126,12 +221,57 @@ resource "google_monitoring_dashboard" "wave2" {
               }]
             }
           }
+        ],
+        [
+          for key, meta in local.model_concurrency_gauges : {
+            title = meta.description
+            xyChart = {
+              dataSets = [{
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"logging.googleapis.com/user/${local.prefix}-model-${replace(key, "_", "-")}\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_MAX"
+                      crossSeriesReducer = key == "max_queue_depth" ? "REDUCE_MAX" : "REDUCE_SUM"
+                    }
+                  }
+                }
+                plotType = "LINE"
+              }]
+            }
+          }
+        ],
+        [
+          {
+            title = "Vertex model queue wait (p95)"
+            xyChart = {
+              dataSets = [{
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"logging.googleapis.com/user/${local.prefix}-model-queue-wait-ms\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_PERCENTILE_95"
+                      crossSeriesReducer = "REDUCE_PERCENTILE_95"
+                    }
+                  }
+                }
+                plotType = "LINE"
+              }]
+            }
+          }
         ]
       )
     }
   })
 
-  depends_on = [google_logging_metric.decision]
+  depends_on = [
+    google_logging_metric.decision,
+    google_logging_metric.model_concurrency,
+    google_logging_metric.model_queue_wait,
+    google_logging_metric.model_events,
+  ]
 }
 
 # Non-authoritative alerts. These notify operators; they must never be wired
@@ -221,7 +361,12 @@ resource "google_monitoring_alert_policy" "guardian_authority_anomalies" {
 }
 
 output "log_metric_names" {
-  value = { for k, m in google_logging_metric.decision : k => m.name }
+  value = merge(
+    { for k, m in google_logging_metric.decision : k => m.name },
+    { for k, m in google_logging_metric.model_concurrency : "model_${k}" => m.name },
+    { model_queue_wait = google_logging_metric.model_queue_wait.name },
+    { for k, m in google_logging_metric.model_events : "model_${k}" => m.name },
+  )
 }
 
 output "dashboard_id" {

@@ -36,6 +36,14 @@ The isolated `tm-dev` Cloud Run Job uses only the public web API. It runs fresh 
 
 Consequently, successful governed commit integrity is measured in the local production-shaped lane. The public load lane measures real cross-service workflow orchestration and public reads, but cannot manufacture trusted evidence or privileged execution. Granting such authority merely to satisfy a benchmark would violate the production boundary.
 
+## Model Backpressure
+
+Agent Runtime applies one service-wide concurrency budget to every outbound Vertex attempt used by intent compilation, semantic verification, planning, plan verification, and Guardian. The default and deployed value is `TM_VERTEX_MODEL_CONCURRENCY=12`: the prior immutable evidence showed a clean peak of 10 at C2, initial throttling around 20 at C4, and failed C8 runs reaching 23 simultaneous model requests. The limit is therefore below the first observed provider-pressure range while retaining concurrency across workflows and Guardian judges.
+
+Each runtime instance maintains FIFO admission, while Firestore-backed lease slots enforce the shared ceiling across instances. A permit covers only one provider attempt and is released before retry backoff. Queue wait consumes the existing stage deadline; storage uncertainty or deadline exhaustion returns `MODEL_UNAVAILABLE` and cannot advance Authority. The limiter changes scheduling only. It does not remove model stages, alter retry counts or budgets, weaken deterministic grounding, or change the Benchmark V2 acceptance contract.
+
+The earlier C1/C2/C4 and rejected C8 artifacts remain immutable evidence for their original runtime. Because scheduling behavior and source provenance changed, they cannot be reused as acceptance evidence for the backpressured runtime; qualification restarts from C1.
+
 ## Acceptance
 
 Collection fails closed when any of the following is absent or stale:
