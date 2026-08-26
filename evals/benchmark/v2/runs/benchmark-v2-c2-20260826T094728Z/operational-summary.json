@@ -1,0 +1,63 @@
+{
+  "schema": "BENCHMARK_V2_OPERATIONAL_EVIDENCE_V1",
+  "runId": "benchmark-v2-c2-20260826T094728Z",
+  "window": {
+    "start": "2026-08-26T09:50:30.845Z",
+    "end": "2026-08-26T10:20:28.275Z"
+  },
+  "domains": {
+    "procurement": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 70939.36 },
+    "travel": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 82148.71 },
+    "saas_it_spend": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 67801.16 },
+    "invoice_vendor_payment": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 69036.65 },
+    "logistics_fulfillment": { "count": 10, "passed": 10, "failed": 0, "averageLatencyMs": 66448.57 }
+  },
+  "failureClassifications": [],
+  "http": {
+    "structuredRawNotReadyHandoffs": 50,
+    "benchmark5xxFailures": 0,
+    "timeoutFailures": 0,
+    "internalEventResponses": { "success200": 50, "retryable400": 1 }
+  },
+  "semanticStages": {
+    "semanticReadinessFailures": 0,
+    "compilerFailures": 0,
+    "verifierFailures": 0,
+    "plannerFailures": 0,
+    "planVerifierFailures": 0
+  },
+  "model": {
+    "attempts": 453,
+    "successfulAttempts": 452,
+    "timedOutAttempts": 1,
+    "retries": 1,
+    "provider429s": 0,
+    "expectedWorkflowStageCalls": 450,
+    "extraCallsFromOnePubSubRedelivery": 2
+  },
+  "pubsub": {
+    "redeliveriesObserved": 1,
+    "redeliveryLoops": 0,
+    "duplicateWorkflowEffects": 0
+  },
+  "firestore": {
+    "permissionFailures": 0,
+    "transactionFailures": 0,
+    "contentionFailures": 0,
+    "writeFailures": 0
+  },
+  "comparisonToC1Percent": {
+    "p50": 7.18,
+    "p95": 18.91,
+    "p99": 34.12,
+    "throughput": 77.76,
+    "peakCpu": 2240.8,
+    "peakMemory": 6.67,
+    "peakInstanceCount": 100.0
+  },
+  "notes": [
+    "Cloud Run request counts are window-correlated; structured scenario records are the authoritative workload counts.",
+    "CPU and memory peaks use Cloud Monitoring 60-second aligned p99 utilization values.",
+    "The frozen OCI index resolves to the recorded linux/amd64 child manifest in Cloud Run."
+  ]
+}

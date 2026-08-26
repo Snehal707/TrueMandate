@@ -1,0 +1,27 @@
+{
+  "schema": "BENCHMARK_V2_RESOURCE_EVIDENCE_V1",
+  "alignment": "60s",
+  "utilizationAligner": "ALIGN_PERCENTILE_99",
+  "instanceAligner": "ALIGN_MAX",
+  "c1": {
+    "tm-dev-agent-runtime": { "cpu": 0.0199, "memory": 0.2999, "instances": 1 },
+    "tm-dev-authority": { "cpu": 0.0099, "memory": 0.2299, "instances": 1 },
+    "tm-dev-gateway": { "cpu": 0.0099, "memory": 0.2999, "instances": 1 },
+    "tm-dev-intent-provenance": { "cpu": 0.0299, "memory": 0.2699, "instances": 1 },
+    "tm-dev-public-bff": { "cpu": 0.0099, "memory": 0.2799, "instances": 1 },
+    "tm-dev-web": { "cpu": 0.0099, "memory": 0.1599, "instances": 1 }
+  },
+  "c2": {
+    "tm-dev-agent-runtime": { "cpu": 0.0299, "memory": 0.3199, "instances": 1 },
+    "tm-dev-authority": { "cpu": 0.6999, "memory": 0.2299, "instances": 1 },
+    "tm-dev-gateway": { "cpu": 0.0099, "memory": 0.2999, "instances": 1 },
+    "tm-dev-intent-provenance": { "cpu": 0.3498, "memory": 0.2899, "instances": 1 },
+    "tm-dev-public-bff": { "cpu": 0.0199, "memory": 0.2399, "instances": 1 },
+    "tm-dev-web": { "cpu": 0.0399, "memory": 0.1599, "instances": 2 }
+  },
+  "overall": {
+    "c1": { "peakCpu": 0.0299, "peakMemory": 0.2999, "peakInstances": 1 },
+    "c2": { "peakCpu": 0.6999, "peakMemory": 0.3199, "peakInstances": 2 },
+    "twoConsecutiveSamplesAbove85Percent": false
+  }
+}
