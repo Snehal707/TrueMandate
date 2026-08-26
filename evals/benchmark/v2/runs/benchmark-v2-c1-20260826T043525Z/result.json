@@ -1,0 +1,35 @@
+{
+  "schema": "BENCHMARK_V2_C1_EVIDENCE_V1",
+  "runId": "benchmark-v2-c1-20260826T043525Z",
+  "executionId": "tm-dev-benchmark-v2-7hfsp",
+  "sourceCommit": "d2d47c9e47bf2e18083a8c9ee976dd46668ac7d6",
+  "acceptedDataset": false,
+  "workflowOnly": true,
+  "scenarioCount": 50,
+  "passed": 50,
+  "failed": 0,
+  "unauthorizedExecutions": 0.0,
+  "sideEffects": 0.0,
+  "duplicates": 0,
+  "provenanceIncomplete": 0,
+  "loadSample": {
+    "completedAt": "2026-08-26T05:30:53.892Z",
+    "concurrency": 1,
+    "durationMs": 3195106,
+    "errorRate": 0,
+    "failedRequests": 0,
+    "lane": "WORKFLOW_WRITE",
+    "latencyMs": {
+      "p50": 61935.325811000075,
+      "p95": 82787.88256299996,
+      "p99": 85240.66116000002
+    },
+    "level": 1,
+    "requestCount": 50,
+    "startedAt": "2026-08-26T04:37:38.786Z",
+    "stopped": false,
+    "successfulRequests": 50,
+    "throughputPerSecond": 0.01564893308703999
+  },
+  "immutable": true
+}

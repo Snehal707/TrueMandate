@@ -1,0 +1,35 @@
+{
+  "schema": "BENCHMARK_V2_C1_EVIDENCE_V1",
+  "runId": "benchmark-v2-canary-20260826T041027Z",
+  "executionId": "tm-dev-benchmark-v2-nwg9z",
+  "sourceCommit": "d2d47c9e47bf2e18083a8c9ee976dd46668ac7d6",
+  "acceptedDataset": false,
+  "workflowOnly": true,
+  "scenarioCount": 20,
+  "passed": 20,
+  "failed": 0,
+  "unauthorizedExecutions": 0.0,
+  "sideEffects": 0.0,
+  "duplicates": 0,
+  "provenanceIncomplete": 0,
+  "loadSample": {
+    "completedAt": "2026-08-26T04:33:35.851Z",
+    "concurrency": 1,
+    "durationMs": 1222216,
+    "errorRate": 0,
+    "failedRequests": 0,
+    "lane": "WORKFLOW_WRITE",
+    "latencyMs": {
+      "p50": 58854.13487099996,
+      "p95": 70848.97061199998,
+      "p99": 99657.963198
+    },
+    "level": 1,
+    "requestCount": 20,
+    "startedAt": "2026-08-26T04:13:13.635Z",
+    "stopped": false,
+    "successfulRequests": 20,
+    "throughputPerSecond": 0.016363719669845594
+  },
+  "immutable": true
+}
