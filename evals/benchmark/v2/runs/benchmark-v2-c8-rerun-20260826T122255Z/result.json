@@ -1,0 +1,86 @@
+{
+  "schema": "BENCHMARK_V2_C8_EVIDENCE_V1",
+  "runId": "benchmark-v2-c8-rerun-20260826T122255Z",
+  "executionId": "tm-dev-benchmark-v2-vsc9s",
+  "sourceCommit": "d2d47c9e47bf2e18083a8c9ee976dd46668ac7d6",
+  "sourceInputHash": "e14adbc15d30745c36907e2cf57bf5e0fbc1aeea01b889249fc219d380dd09f8",
+  "corpusHash": "b6d9ceeacc9f0815066ff46691caef09f89a72cbbd7f100e67db9e173e78cc70",
+  "configurationHash": "e15eb91d3836ec028c106253b0264d9c222840e2921a1237b2e5bab162208f2e",
+  "acceptedDataset": false,
+  "workflowOnly": true,
+  "jobGeneration": 8,
+  "benchmarkImage": "sha256:4da839b7d25a7f538b99605d938404f971dbdbd0dbdf011daaa2e97dcc27c12c",
+  "resolvedLinuxAmd64Image": "sha256:bc72dcd52a328ef71ffe9db2a67bf6eceaa858ed25751ee802ef839bd2d3f727",
+  "scenarioCount": 50,
+  "passed": 45,
+  "failed": 5,
+  "errorRate": 0.1,
+  "unauthorizedExecutions": 0,
+  "sideEffects": 0.0,
+  "duplicates": 0,
+  "provenanceIncomplete": 5,
+  "uniqueWorkflows": 45,
+  "domains": {
+    "saas_it_spend": {
+      "count": 10,
+      "passed": 10,
+      "failed": 0,
+      "averageLatencyMs": 109959.03
+    },
+    "logistics_fulfillment": {
+      "count": 10,
+      "passed": 9,
+      "failed": 1,
+      "averageLatencyMs": 87826.09
+    },
+    "invoice_vendor_payment": {
+      "count": 10,
+      "passed": 8,
+      "failed": 2,
+      "averageLatencyMs": 104746.58
+    },
+    "travel": {
+      "count": 10,
+      "passed": 9,
+      "failed": 1,
+      "averageLatencyMs": 97678.45
+    },
+    "procurement": {
+      "count": 10,
+      "passed": 9,
+      "failed": 1,
+      "averageLatencyMs": 87728.61
+    }
+  },
+  "loadSample": {
+    "completedAt": "2026-08-26T12:36:47.405Z",
+    "concurrency": 8,
+    "durationMs": 668999,
+    "errorRate": 0.1,
+    "failedRequests": 5,
+    "lane": "WORKFLOW_WRITE",
+    "latencyMs": {
+      "p50": 99250.98580800003,
+      "p95": 139449.13367399998,
+      "p99": 174898.67715100007
+    },
+    "level": 1,
+    "requestCount": 50,
+    "startedAt": "2026-08-26T12:25:38.406Z",
+    "stopReason": "ERROR_RATE_ABOVE_1_PERCENT",
+    "stopped": true,
+    "successfulRequests": 45,
+    "throughputPerSecond": 0.07473852726237258
+  },
+  "thresholds": {
+    "errorRateMaximum": 0.01,
+    "p95AbsoluteMaximumMs": 270000,
+    "p95C1RelativeMaximumMs": 165575.765,
+    "resourceSustainedMaximum": 0.85,
+    "crossed": true,
+    "firstCrossed": "ERROR_RATE_ABOVE_1_PERCENT"
+  },
+  "c8Passed": false,
+  "readyForC16": false,
+  "immutable": true
+}

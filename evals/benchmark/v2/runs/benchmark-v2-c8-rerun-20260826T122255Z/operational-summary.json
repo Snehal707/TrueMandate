@@ -1,0 +1,344 @@
+{
+  "schema": "BENCHMARK_V2_OPERATIONAL_EVIDENCE_V1",
+  "runId": "benchmark-v2-c8-rerun-20260826T122255Z",
+  "executionId": "tm-dev-benchmark-v2-vsc9s",
+  "window": {
+    "start": "2026-08-26T12:25:38.406Z",
+    "end": "2026-08-26T12:36:47.405Z"
+  },
+  "domains": {
+    "saas_it_spend": {
+      "count": 10,
+      "passed": 10,
+      "failed": 0,
+      "averageLatencyMs": 109959.03
+    },
+    "logistics_fulfillment": {
+      "count": 10,
+      "passed": 9,
+      "failed": 1,
+      "averageLatencyMs": 87826.09
+    },
+    "invoice_vendor_payment": {
+      "count": 10,
+      "passed": 8,
+      "failed": 2,
+      "averageLatencyMs": 104746.58
+    },
+    "travel": {
+      "count": 10,
+      "passed": 9,
+      "failed": 1,
+      "averageLatencyMs": 97678.45
+    },
+    "procurement": {
+      "count": 10,
+      "passed": 9,
+      "failed": 1,
+      "averageLatencyMs": 87728.61
+    }
+  },
+  "failureClassifications": [
+    {
+      "scenarioId": "load-1-38-invoice_vendor_payment",
+      "domainId": "invoice_vendor_payment",
+      "classification": "PUBLIC_EDGE_OR_TRANSPORT_502",
+      "actualStatus": "VALIDATION_FAILED",
+      "reason": "unexpected remote response (HTTP 502)",
+      "latencyMs": 111425.06321200001,
+      "workflowId": null
+    },
+    {
+      "scenarioId": "load-1-44-logistics_fulfillment",
+      "domainId": "logistics_fulfillment",
+      "classification": "MODEL_RATE_LIMIT_EXHAUSTED",
+      "actualStatus": "MODEL_UNAVAILABLE",
+      "reason": "Vertex HTTP 429 (rate limited after 0 retries)",
+      "latencyMs": 38242.19508899993,
+      "workflowId": null
+    },
+    {
+      "scenarioId": "load-1-45-procurement",
+      "domainId": "procurement",
+      "classification": "MODEL_RATE_LIMIT_EXHAUSTED",
+      "actualStatus": "MODEL_UNAVAILABLE",
+      "reason": "Vertex HTTP 429 (rate limited after 0 retries)",
+      "latencyMs": 31808.484001000004,
+      "workflowId": null
+    },
+    {
+      "scenarioId": "load-1-46-travel",
+      "domainId": "travel",
+      "classification": "MODEL_BUDGET_TIMEOUT",
+      "actualStatus": "MODEL_UNAVAILABLE",
+      "reason": "Vertex provider attempt exceeded its model budget",
+      "latencyMs": 66173.99961900001,
+      "workflowId": null
+    },
+    {
+      "scenarioId": "load-1-48-invoice_vendor_payment",
+      "domainId": "invoice_vendor_payment",
+      "classification": "MODEL_RATE_LIMIT_EXHAUSTED",
+      "actualStatus": "MODEL_UNAVAILABLE",
+      "reason": "Vertex HTTP 429 (rate limited after 0 retries)",
+      "latencyMs": 87630.80523199996,
+      "workflowId": null
+    }
+  ],
+  "http": {
+    "structuredRawNotReadyHandoffs": 50,
+    "benchmarkUnexpected5xxFailures": 1,
+    "cloudRunRecorded502Responses": 0,
+    "workflowTimeouts": 0
+  },
+  "semanticStages": {
+    "semanticReadinessFailures": 0,
+    "finalCompilerFailures": 0,
+    "transientCompilerFailures": 1,
+    "finalVerifierFailures": 0,
+    "plannerFailures": 4
+  },
+  "guardian": {
+    "aggregateDecisions": 46,
+    "decisions": [
+      {
+        "decision": "ALLOW",
+        "count": 42
+      },
+      {
+        "decision": "ALLOW_WITH_MONITORING",
+        "count": 4
+      }
+    ],
+    "aggregateFailures": 0
+  },
+  "model": {
+    "attempts": 468,
+    "successfulAttempts": 425,
+    "provider429s": 25,
+    "timedOutAttempts": 18,
+    "retries": 29,
+    "successfulLatencyMs": {
+      "p50": 6907.0,
+      "p95": 30484.0,
+      "p99": 45084.0,
+      "max": 53355.0
+    },
+    "bySchema": [
+      {
+        "schema": "compiler.candidate.v1",
+        "attempts": 57,
+        "successful": 52,
+        "http429": 4,
+        "timeouts": 1,
+        "latencyMs": {
+          "p50": 12127.0,
+          "p95": 24017.0,
+          "p99": 24728.0,
+          "max": 24728.0
+        }
+      },
+      {
+        "schema": "judge.contradiction.v1",
+        "attempts": 48,
+        "successful": 46,
+        "http429": 1,
+        "timeouts": 1,
+        "latencyMs": {
+          "p50": 4524.0,
+          "p95": 25896.0,
+          "p99": 30920.0,
+          "max": 30920.0
+        }
+      },
+      {
+        "schema": "judge.devils_advocate.v1",
+        "attempts": 52,
+        "successful": 45,
+        "http429": 6,
+        "timeouts": 1,
+        "latencyMs": {
+          "p50": 6766.0,
+          "p95": 11354.0,
+          "p99": 45084.0,
+          "max": 45084.0
+        }
+      },
+      {
+        "schema": "judge.evidence.v1",
+        "attempts": 48,
+        "successful": 46,
+        "http429": 0,
+        "timeouts": 2,
+        "latencyMs": {
+          "p50": 3713.0,
+          "p95": 23989.0,
+          "p99": 49070.0,
+          "max": 49070.0
+        }
+      },
+      {
+        "schema": "judge.fidelity.v1",
+        "attempts": 49,
+        "successful": 46,
+        "http429": 3,
+        "timeouts": 0,
+        "latencyMs": {
+          "p50": 4962.0,
+          "p95": 23933.0,
+          "p99": 28894.0,
+          "max": 28894.0
+        }
+      },
+      {
+        "schema": "judge.provenance.v1",
+        "attempts": 48,
+        "successful": 46,
+        "http429": 0,
+        "timeouts": 2,
+        "latencyMs": {
+          "p50": 27739.0,
+          "p95": 50448.0,
+          "p99": 53355.0,
+          "max": 53355.0
+        }
+      },
+      {
+        "schema": "plan-verifier.result.v1",
+        "attempts": 51,
+        "successful": 46,
+        "http429": 0,
+        "timeouts": 5,
+        "latencyMs": {
+          "p50": 4306.0,
+          "p95": 11800.0,
+          "p99": 24852.0,
+          "max": 24852.0
+        }
+      },
+      {
+        "schema": "planner.plan.v1",
+        "attempts": 59,
+        "successful": 46,
+        "http429": 10,
+        "timeouts": 3,
+        "latencyMs": {
+          "p50": 17465.0,
+          "p95": 26111.0,
+          "p99": 30893.0,
+          "max": 30893.0
+        }
+      },
+      {
+        "schema": "verifier.result.v1",
+        "attempts": 56,
+        "successful": 52,
+        "http429": 1,
+        "timeouts": 3,
+        "latencyMs": {
+          "p50": 5852.0,
+          "p95": 9448.0,
+          "p99": 12853.0,
+          "max": 12853.0
+        }
+      }
+    ]
+  },
+  "pubsub": {
+    "deliveryRequests": 53,
+    "redeliveriesObserved": 3,
+    "redeliveryLoops": 0,
+    "statuses": [
+      {
+        "status": 200,
+        "count": 50
+      },
+      {
+        "status": 400,
+        "count": 2
+      },
+      {
+        "status": 503,
+        "count": 1
+      }
+    ]
+  },
+  "firestore": {
+    "provenanceWrites": 1409,
+    "completedWrites": 1409,
+    "permissionFailures": 0,
+    "transactionFailures": 0,
+    "contentionFailures": 0,
+    "writeFailures": 0
+  },
+  "safety": {
+    "unauthorizedExecutions": 0,
+    "sideEffects": 0,
+    "duplicates": 0,
+    "incompleteProvenance": 5
+  },
+  "resources": {
+    "peakCpu": 0.2797,
+    "peakMemory": 0.3899,
+    "peakInstances": 3.0,
+    "twoConsecutiveSamplesAbove85Percent": false
+  },
+  "comparisonPercent": {
+    "c1": {
+      "p50": 60.25,
+      "p95": 68.44,
+      "p99": 105.18,
+      "throughput": 377.6,
+      "peakCpu": 835.45,
+      "peakMemory": 30.01,
+      "peakInstances": 200.0
+    },
+    "rejectedC8": {
+      "p50": 24.69,
+      "p95": 11.23,
+      "p99": 16.08,
+      "throughput": -9.93,
+      "peakCpu": -3.49,
+      "peakMemory": 8.34,
+      "peakInstances": 50.0
+    },
+    "c2": {
+      "p50": 49.52,
+      "p95": 41.65,
+      "p99": 52.99,
+      "throughput": 168.67,
+      "peakCpu": -60.04,
+      "peakMemory": 21.88,
+      "peakInstances": 50.0
+    },
+    "c4": {
+      "p50": 31.92,
+      "p95": 33.95,
+      "p99": 25.53,
+      "throughput": 48.2,
+      "peakCpu": 27.31,
+      "peakMemory": 18.19,
+      "peakInstances": 0.0
+    }
+  },
+  "throughputScalingEfficiencyPercent": {
+    "c4ToC8": 74.1,
+    "c2ToC8": 67.17,
+    "c1ToC8": 59.7
+  },
+  "thresholds": {
+    "errorRateMaximum": 0.01,
+    "p95AbsoluteMaximumMs": 270000,
+    "p95C1RelativeMaximumMs": 165575.765,
+    "resourceSustainedMaximum": 0.85,
+    "crossed": true,
+    "firstCrossed": "ERROR_RATE_ABOVE_1_PERCENT"
+  },
+  "notes": [
+    "The run completed all 50 workflow attempts and stopped after the C8 level because the error rate exceeded 1%.",
+    "The non-structured HTTP 502 has no matching Cloud Run 502 log; exact edge origin is not directly observable.",
+    "Expected RAW 503 INTENT_STATE_NOT_READY handoffs are excluded from unexpected 5xx failures.",
+    "Failed submissions produced no workflow or economic side effect.",
+    "Resource saturation was not observed."
+  ]
+}
