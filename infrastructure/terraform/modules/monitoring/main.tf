@@ -62,7 +62,7 @@ locals {
     }
   }
 
-  model_concurrency_gauges = {
+  model_concurrency_samples = {
     active = {
       field       = "active"
       description = "Active outbound Vertex model attempts"
@@ -104,7 +104,7 @@ resource "google_logging_metric" "decision" {
 }
 
 resource "google_logging_metric" "model_concurrency" {
-  for_each = local.model_concurrency_gauges
+  for_each = local.model_concurrency_samples
 
   name            = "${local.prefix}-model-${replace(each.key, "_", "-")}"
   project         = var.project_id
@@ -112,14 +112,21 @@ resource "google_logging_metric" "model_concurrency" {
   value_extractor = "EXTRACT(jsonPayload.${each.value.field})"
 
   metric_descriptor {
-    metric_kind  = "GAUGE"
-    value_type   = "INT64"
+    metric_kind  = "DELTA"
+    value_type   = "DISTRIBUTION"
     unit         = "1"
     display_name = each.value.description
     labels {
       key         = "stage"
       value_type  = "STRING"
       description = "Model schema/stage"
+    }
+  }
+  bucket_options {
+    exponential_buckets {
+      num_finite_buckets = 16
+      growth_factor      = 2
+      scale              = 1
     }
   }
   label_extractors = {
@@ -223,7 +230,7 @@ resource "google_monitoring_dashboard" "wave2" {
           }
         ],
         [
-          for key, meta in local.model_concurrency_gauges : {
+          for key, meta in local.model_concurrency_samples : {
             title = meta.description
             xyChart = {
               dataSets = [{
