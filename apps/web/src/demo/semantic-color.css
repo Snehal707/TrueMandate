@@ -1,0 +1,160 @@
+/* ============================================================
+   SEMANTIC COLOUR SYSTEM
+   ============================================================
+
+   One idea: the governed pipeline changes colour at the trust boundary.
+
+     blue   → proposal side   (Intent · Verification · Planning)
+     amber  → the gate        (Guardian)
+     emerald→ authorized side (Authority · Execution · Provenance)
+
+   So the boundary is legible without needing a caption, and we avoid seven
+   arbitrary hues. Every value is a color-mix() of the four accents already
+   defined in demo-v2.css — no new palette is introduced.
+
+   Usage: put data-stage="<id>" on an element. It sets --stage-accent and
+   --stage-accent-soft for itself and its subtree; components consume those.
+   The ids are the RailStageId values from live-stage-rail.ts, so the same
+   concept is styled identically on Landing, Architecture, and Live Proof.
+   ============================================================ */
+
+[data-stage] {
+  --stage-accent: var(--blue);
+  --stage-accent-soft: var(--blue-soft);
+}
+
+[data-stage="intent"] {
+  --stage-accent: var(--blue);
+  --stage-accent-soft: var(--blue-soft);
+}
+[data-stage="verification"] {
+  --stage-accent: color-mix(in srgb, var(--blue) 82%, var(--emerald));
+  --stage-accent-soft: color-mix(in srgb, var(--blue-soft) 82%, var(--emerald-soft));
+}
+[data-stage="planning"] {
+  --stage-accent: color-mix(in srgb, var(--blue) 64%, var(--emerald));
+  --stage-accent-soft: color-mix(in srgb, var(--blue-soft) 64%, var(--emerald-soft));
+}
+/* The gate. Amber = requires scrutiny, consistent with monitoring status. */
+[data-stage="guardian"] {
+  --stage-accent: var(--amber);
+  --stage-accent-soft: var(--amber-soft);
+}
+[data-stage="authority"] {
+  --stage-accent: color-mix(in srgb, var(--blue) 36%, var(--emerald));
+  --stage-accent-soft: color-mix(in srgb, var(--blue-soft) 36%, var(--emerald-soft));
+}
+[data-stage="execution"] {
+  --stage-accent: color-mix(in srgb, var(--blue) 18%, var(--emerald));
+  --stage-accent-soft: color-mix(in srgb, var(--blue-soft) 18%, var(--emerald-soft));
+}
+[data-stage="provenance"] {
+  --stage-accent: var(--emerald);
+  --stage-accent-soft: var(--emerald-soft);
+}
+/* Infrastructure is context, not a governed stage — deliberately neutral. */
+[data-stage="infrastructure"] {
+  --stage-accent: var(--text-dim);
+  --stage-accent-soft: rgba(120, 152, 220, 0.1);
+}
+
+/* ---------- Shared stage primitives ---------- */
+
+/* Small uppercase label that takes the stage accent. */
+.tm-stage-label {
+  display: inline-block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 650;
+  color: var(--stage-accent);
+}
+
+/* Round numeral / icon chip. */
+.tm-stage-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--stage-accent-soft);
+  color: var(--stage-accent);
+  font-size: 0.75rem;
+  font-weight: 650;
+  flex-shrink: 0;
+}
+.tm-stage-chip svg { width: 13px; height: 13px; display: block; }
+
+/* Accent rule used as a card top-border or connector. */
+.tm-stage-rule {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--stage-accent);
+  opacity: 0.85;
+}
+
+/* ---------- Identity: TrueMandate vs Baseline ---------- */
+
+[data-identity] {
+  --id-accent: var(--text-dim);
+  --id-accent-soft: rgba(120, 152, 220, 0.1);
+}
+[data-identity="truemandate"] {
+  --id-accent: var(--emerald);
+  --id-accent-soft: var(--emerald-soft);
+}
+[data-identity="baseline"] {
+  --id-accent: var(--red);
+  --id-accent-soft: var(--red-soft);
+}
+
+.tm-identity-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 650;
+  color: var(--id-accent);
+}
+.tm-identity-tag::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--id-accent);
+  flex-shrink: 0;
+}
+
+/* ---------- Status badges (existing vocabulary, unified) ---------- */
+
+.tm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.tm-badge.good { color: var(--emerald); background: var(--emerald-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emerald) 40%, transparent); }
+.tm-badge.info { color: var(--blue); background: var(--blue-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 40%, transparent); }
+.tm-badge.warn { color: var(--amber); background: var(--amber-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 44%, transparent); }
+/* Monitoring is amber like Guardian, but dashed so the two never read alike. */
+.tm-badge.monitoring { color: var(--amber); background: var(--amber-soft); box-shadow: inset 0 0 0 1px transparent; border: 1px dashed color-mix(in srgb, var(--amber) 55%, transparent); }
+.tm-badge.bad { color: var(--red); background: var(--red-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 42%, transparent); }
+.tm-badge.neutral { color: var(--text-dim); background: rgba(120, 152, 220, 0.09); box-shadow: inset 0 0 0 1px var(--line-soft); }
+.tm-badge.stage { color: var(--stage-accent); background: var(--stage-accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stage-accent) 40%, transparent); }
+
+/* Numbers that carry meaning read as data, not prose. */
+.tm-figure {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  font-weight: 680;
+}

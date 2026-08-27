@@ -77,3 +77,52 @@
   .tm-mutation-arrow { justify-content: center; transform: rotate(90deg); }
   .tm-attack-scenario-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- Visual polish pass: identity + emphasis ---------- */
+
+/* Lanes carry the shared TrueMandate / Baseline identity. */
+.tm-lane { border-left: 3px solid var(--id-accent); }
+.tm-lane[data-side="baseline"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--id-accent) 30%, transparent); }
+.tm-lane[data-side="governed"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--id-accent) 38%, transparent); }
+.tm-lane > header { border-bottom-color: color-mix(in srgb, var(--id-accent) 24%, transparent); }
+.tm-lane .who { color: var(--id-accent); }
+
+/* Terminal verdict is the dominant element in each lane. */
+.tm-lane .state {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Detection / enforcement badges. */
+.tm-lane-detection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* Injected payload reads as the adversarial content it is. */
+.tm-mutation-payload {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--red-soft);
+  border-left: 2px solid color-mix(in srgb, var(--red) 60%, transparent);
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.tm-mutation-meta { gap: 8px; }
+.tm-mutation-original blockquote {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--emerald-soft);
+  border-left: 2px solid color-mix(in srgb, var(--emerald) 55%, transparent);
+}
+
+/* Curated cards: family badge takes an accent, selection is unmistakable. */
+.tm-attack-scenario-card .fam { font-weight: 650; }
+.tm-attack-scenario-card.active .fam { background: var(--blue); color: var(--bg); }

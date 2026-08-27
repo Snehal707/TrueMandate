@@ -31,12 +31,12 @@ import {
 const sdk = createSdkCore({ baseUrl: "", timeoutMs: 120_000 });
 
 /** The governed path, in the order this page runs it. */
-const LIVE_PIPELINE_STAGES: readonly { title: string; body: string }[] = [
-  { title: "Human intent", body: "Recorded immutably, before any agent touches it." },
-  { title: "Semantic verification", body: "What it means is proven, not assumed." },
-  { title: "Authority", body: "Permission is bounded, scoped, and revocable." },
-  { title: "Execution", body: "The governed action runs exactly once, or not at all." },
-  { title: "Provenance", body: "Evidence shows what actually happened." },
+const LIVE_PIPELINE_STAGES: readonly { stage: string; title: string; body: string }[] = [
+  { stage: "intent", title: "Human intent", body: "Recorded immutably, before any agent touches it." },
+  { stage: "verification", title: "Semantic verification", body: "What it means is proven, not assumed." },
+  { stage: "authority", title: "Authority", body: "Permission is bounded, scoped, and revocable." },
+  { stage: "execution", title: "Execution", body: "The governed action runs exactly once, or not at all." },
+  { stage: "provenance", title: "Provenance", body: "Evidence shows what actually happened." },
 ];
 
 type AsyncState = "idle" | "working";
@@ -284,7 +284,12 @@ export function StageRail(props: { readonly stages: readonly RailStage[] }) {
       </header>
       <ol className="tm-rail-track">
         {props.stages.map((stage) => (
-          <li key={stage.id} className={`tm-rail-stage ${stage.status}`} aria-current={stage.status === "active" ? "step" : undefined}>
+          <li
+            key={stage.id}
+            className={`tm-rail-stage ${stage.status}`}
+            data-stage={stage.id}
+            aria-current={stage.status === "active" ? "step" : undefined}
+          >
             <span className="dot" aria-hidden="true" />
             <span className="label">{stage.label}</span>
             <span className="status">{railStatusLabel(stage.status)}</span>
@@ -602,7 +607,7 @@ export function LiveDemoPage() {
         </p>
         <ol className="tm-pipeline" aria-label="How TrueMandate governs an agent action">
           {LIVE_PIPELINE_STAGES.map((stage, index) => (
-            <li key={stage.title}>
+            <li key={stage.title} data-stage={stage.stage}>
               <span className="tm-pipeline-num">{index + 1}</span>
               <span className="tm-pipeline-title">{stage.title}</span>
               <span className="tm-pipeline-body">{stage.body}</span>

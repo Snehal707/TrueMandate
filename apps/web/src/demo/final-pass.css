@@ -29,11 +29,12 @@
   width: 6px;
   height: 6px;
   margin-top: -3px;
-  border-top: 2px solid var(--line-strong);
-  border-right: 2px solid var(--line-strong);
+  border-top: 2px solid color-mix(in srgb, var(--stage-accent, var(--blue)) 66%, transparent);
+  border-right: 2px solid color-mix(in srgb, var(--stage-accent, var(--blue)) 66%, transparent);
   transform: rotate(45deg);
   opacity: 0.7;
 }
+.tm-pipeline li { border-top: 2px solid color-mix(in srgb, var(--stage-accent, var(--blue)) 70%, transparent); }
 .tm-pipeline-num {
   display: inline-flex;
   align-items: center;
@@ -41,8 +42,8 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--blue-soft);
-  color: var(--blue);
+  background: var(--stage-accent-soft, var(--blue-soft));
+  color: var(--stage-accent, var(--blue));
   font-size: 0.74rem;
   font-weight: 650;
   margin-bottom: 9px;
@@ -210,9 +211,11 @@
   opacity: 0.85;
 }
 
-.tm-rail-stage.done { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emerald) 38%, transparent); }
-.tm-rail-stage.done .dot { background: var(--emerald); opacity: 1; }
+.tm-rail-stage .label { color: var(--text-strong); }
+.tm-rail-stage.done { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stage-accent, var(--emerald)) 40%, transparent); }
+.tm-rail-stage.done .dot { background: var(--stage-accent, var(--emerald)); opacity: 1; }
 .tm-rail-stage.done .status { color: var(--emerald); }
+.tm-rail-stage.done .label { color: var(--stage-accent, var(--text-strong)); }
 
 .tm-rail-stage.active {
   box-shadow: inset 0 0 0 1px var(--blue), 0 0 24px rgba(78, 161, 255, 0.14);

@@ -32,14 +32,14 @@ function ComparisonBar(props: {
         </div>
         <span>{better}</span>
       </header>
-      <div className="tm-qual-measure">
+      <div className="tm-qual-measure" data-identity="truemandate">
         <span className="who">TrueMandate</span>
         <div className="track">
           <i className="truemandate" style={{ width: width(props.trueMandate) }} />
         </div>
         <b className="good">{props.trueMandate}</b>
       </div>
-      <div className="tm-qual-measure">
+      <div className="tm-qual-measure" data-identity="baseline">
         <span className="who">Baseline agent</span>
         <div className="track">
           <i className="baseline" style={{ width: width(props.baseline) }} />
@@ -65,9 +65,9 @@ function SectionA() {
       </header>
 
       <div className="tm-qual-headline">
-        <article className="win">
-          <span>TrueMandate</span>
-          <strong>
+        <article className="win" data-identity="truemandate">
+          <span className="tm-identity-tag">TrueMandate</span>
+          <strong className="tm-figure">
             {pc.trueMandate.correct} / {pc.totalScenarios}
           </strong>
           <small>
@@ -75,9 +75,9 @@ function SectionA() {
             {pc.trueMandate.criticalFailures} critical
           </small>
         </article>
-        <article className="lose">
-          <span>Baseline single agent</span>
-          <strong>
+        <article className="lose" data-identity="baseline">
+          <span className="tm-identity-tag">Baseline single agent</span>
+          <strong className="tm-figure">
             {pc.baseline.correct} / {pc.totalScenarios}
           </strong>
           <small>
@@ -119,14 +119,14 @@ function SectionA() {
         {pc.domains.map((domain) => (
           <article key={domain.domainId}>
             <span className="dom">{domain.label}</span>
-            <div className="pair">
-              <span className="good">
+            <div className="pair" data-identity="truemandate">
+              <span className="tm-figure">
                 {domain.trueMandateCorrect} / {domain.total}
               </span>
               <small>TrueMandate</small>
             </div>
-            <div className="pair">
-              <span className="bad">
+            <div className="pair" data-identity="baseline">
+              <span className="tm-figure">
                 {domain.baselineCorrect} / {domain.total}
               </span>
               <small>Baseline</small>
@@ -222,6 +222,9 @@ function SectionB() {
             className={level.verdict === "PASS" ? "lvl pass" : "lvl boundary"}
           >
             <span className="name">{level.level}</span>
+            <span className={level.verdict === "PASS" ? "tm-badge good" : "tm-badge warn"}>
+              {level.verdict === "PASS" ? "Qualified" : "Boundary"}
+            </span>
             <strong>{level.verdict === "PASS" ? "PASS" : "Provider degradation boundary"}</strong>
             <small>
               {level.passed} / {level.total} scenarios · {(level.errorRate * 100).toFixed(1)}% error
@@ -269,8 +272,14 @@ function SectionC() {
       <div className="tm-qual-safety-cards">
         {cards.map((card) => (
           <article key={card.label}>
-            <strong>{card.value}</strong>
-            <span>{card.label}</span>
+            <span className="tm-qual-safety-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M10 2.4l6 2.5v4.6c0 3.8-2.5 6.6-6 7.6-3.5-1-6-3.8-6-7.6V4.9z" strokeLinejoin="round" />
+                <path d="M7.2 10.2l2 2 3.6-3.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <strong className="tm-figure">{card.value}</strong>
+            <span className="tm-qual-safety-label">{card.label}</span>
           </article>
         ))}
       </div>

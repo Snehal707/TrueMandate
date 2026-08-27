@@ -254,9 +254,9 @@ export function TwoLaneVerdict(props: { readonly result: AttackComparisonResult 
 
   return (
     <section className="tm-lane-verdict" aria-label="Baseline versus TrueMandate verdict">
-      <div className="tm-lane" data-side="baseline">
+      <div className="tm-lane" data-side="baseline" data-identity="baseline">
         <header>
-          <span className="who">Baseline agent</span>
+          <span className="who tm-identity-tag">Baseline agent</span>
           <strong className={`state ${stateTone(baselineState, "baseline")}`}>{display(baselineState)}</strong>
         </header>
         <dl>
@@ -269,9 +269,9 @@ export function TwoLaneVerdict(props: { readonly result: AttackComparisonResult 
         </dl>
       </div>
 
-      <div className="tm-lane" data-side="governed">
+      <div className="tm-lane" data-side="governed" data-identity="truemandate">
         <header>
-          <span className="who">TrueMandate</span>
+          <span className="who tm-identity-tag">TrueMandate</span>
           <strong className={`state ${stateTone(governedState, "governed")}`}>{display(governedState)}</strong>
         </header>
         <dl>
@@ -282,11 +282,16 @@ export function TwoLaneVerdict(props: { readonly result: AttackComparisonResult 
             </div>
           ))}
         </dl>
-        <p className="tm-lane-detection">
-          {firstDetected
-            ? `Detected at ${ATTACK_STAGE_LABELS[firstDetected.stage]} — vector ${firstDetected.order} ${display(firstDetected.status)}`
-            : "No vector was rejected, neutralized, or escalated in this run."}
-        </p>
+        <div className="tm-lane-detection">
+          {firstDetected ? (
+            <>
+              <span className="tm-badge info">Detected at {ATTACK_STAGE_LABELS[firstDetected.stage]}</span>
+              <span className="tm-badge good">Vector {firstDetected.order} {display(firstDetected.status)}</span>
+            </>
+          ) : (
+            <span className="tm-badge neutral">No vector rejected, neutralized, or escalated</span>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -307,10 +312,10 @@ export function MutationPanel(props: { readonly scenario: AttackScenarioDefiniti
           <div className="tm-mutation-vector" key={vector.id}>
             <span className="tm-mutation-meta">
               <b>{vector.order}</b>
-              <code>{vector.mutation}</code>
-              <em>enters at {ATTACK_STAGE_LABELS[vector.stage]}</em>
+              <span className="tm-badge bad">{vector.mutation.replaceAll("_", " ")}</span>
+              <span className="tm-badge neutral">enters at {ATTACK_STAGE_LABELS[vector.stage]}</span>
             </span>
-            <p>{vector.payload}</p>
+            <p className="tm-mutation-payload">{vector.payload}</p>
           </div>
         ))}
       </article>

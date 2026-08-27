@@ -9,7 +9,7 @@ import { useDemoController } from "./demoMachine";
 import { BenchmarkPage } from "./BenchmarkPage";
 import { AttackLabPage } from "./AttackLabPage";
 import { ProvenancePage } from "./ProvenancePage";
-import { STRESS_READ_MODEL } from "./stress-readmodel";
+import { QUALIFICATION_READ_MODEL } from "./qualification-readmodel";
 import { LiveDemoPage } from "./LiveDemoPage";
 import { ProductTruthBadge } from "./ProductTruth";
 import {
@@ -36,12 +36,12 @@ const VIEWS: readonly { id: DemoView; label: string }[] = [
 ];
 
 /** The governed path, in the order a judge sees it run. */
-const PIPELINE_STAGES: readonly { title: string; body: string }[] = [
-  { title: "Human intent", body: "Recorded immutably, before any agent touches it." },
-  { title: "Semantic verification", body: "What it means is proven, not assumed." },
-  { title: "Authority", body: "Permission is bounded, scoped, and revocable." },
-  { title: "Execution", body: "The governed action runs exactly once, or not at all." },
-  { title: "Provenance", body: "Evidence shows what actually happened." },
+const PIPELINE_STAGES: readonly { stage: string; title: string; body: string }[] = [
+  { stage: "intent", title: "Human intent", body: "Recorded immutably, before any agent touches it." },
+  { stage: "verification", title: "Semantic verification", body: "What it means is proven, not assumed." },
+  { stage: "authority", title: "Authority", body: "Permission is bounded, scoped, and revocable." },
+  { stage: "execution", title: "Execution", body: "The governed action runs exactly once, or not at all." },
+  { stage: "provenance", title: "Provenance", body: "Evidence shows what actually happened." },
 ];
 
 const HERO_DOMAINS: readonly string[] = [
@@ -198,7 +198,7 @@ function Hero(props: {
         <>
           <ol className="tm-pipeline" aria-label="How TrueMandate governs an agent action">
             {PIPELINE_STAGES.map((stage, index) => (
-              <li key={stage.title}>
+              <li key={stage.title} data-stage={stage.stage}>
                 <span className="tm-pipeline-num">{index + 1}</span>
                 <span className="tm-pipeline-title">{stage.title}</span>
                 <span className="tm-pipeline-body">{stage.body}</span>
@@ -533,6 +533,98 @@ function ResolutionPanel(props: { readonly projection: CanonicalProjection; read
   );
 }
 
+/** Minimal inline icons. No external assets; sized by the stage chip. */
+const STAGE_ICONS: Readonly<Record<string, ReactNode>> = {
+  intent: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="8" cy="5" r="2.6" /><path d="M2.6 14c0-3 2.4-4.6 5.4-4.6S13.4 11 13.4 14" strokeLinecap="round" /></svg>,
+  verification: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 8.4l3.2 3.2L13 4.8" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+  planning: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="2" /><path d="M5.4 6.6h5.2M5.4 9.6h3.2" strokeLinecap="round" /></svg>,
+  guardian: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 2.2l4.8 2v3.6c0 3-2 5.2-4.8 6-2.8-.8-4.8-3-4.8-6V4.2z" strokeLinejoin="round" /></svg>,
+  authority: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3.4" y="7" width="9.2" height="6.4" rx="1.6" /><path d="M5.8 7V5.2a2.2 2.2 0 014.4 0V7" strokeLinecap="round" /></svg>,
+  execution: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8.8 2L3.6 9.2h3.4L7.2 14l5.2-7.2H9z" strokeLinejoin="round" /></svg>,
+  provenance: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="4.4" cy="4" r="1.8" /><circle cx="11.6" cy="8" r="1.8" /><circle cx="4.4" cy="12" r="1.8" /><path d="M6 4.9l4 2.2M6 11.1l4-2.2" strokeLinecap="round" /></svg>,
+  infrastructure: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="2.4" y="3" width="11.2" height="4" rx="1.3" /><rect x="2.4" y="9" width="11.2" height="4" rx="1.3" /><path d="M5 5h.01M5 11h.01" strokeLinecap="round" /></svg>,
+};
+
+const ARCH_LAYERS: readonly {
+  stage: string;
+  title: string;
+  body: string;
+}[] = [
+  { stage: "intent", title: "Human / Client", body: "The economic intent enters, recorded immutably." },
+  { stage: "verification", title: "Semantic interpretation & verification", body: "Meaning is compiled and proven — never assumed." },
+  { stage: "planning", title: "Planning", body: "Steps are proposed, then checked back against the verified intent." },
+  { stage: "guardian", title: "Guardian", body: "Five independent judges review before authority is considered." },
+  { stage: "authority", title: "Authority", body: "Bounded, scoped, revocable permission — or refusal." },
+  { stage: "execution", title: "Execution", body: "Prepare → authorize → commit, exactly once." },
+  { stage: "provenance", title: "Provenance", body: "Evidence records what actually happened." },
+  { stage: "infrastructure", title: "Google Cloud", body: "Cloud Run · Firestore · Pub/Sub · Vertex AI · IAM." },
+];
+
+/**
+ * Judge-first architecture. The colour shifts from blue to emerald across the
+ * Guardian gate, so the trust boundary is visible before it is read.
+ */
+function SimplifiedArchitecture() {
+  const before = ARCH_LAYERS.slice(0, 3);
+  const after = ARCH_LAYERS.slice(3, 7);
+  const substrate = ARCH_LAYERS[7]!;
+  const layerCard = (layer: (typeof ARCH_LAYERS)[number], index: number) => (
+    <li className="tm-arch-card" data-stage={layer.stage} key={layer.stage}>
+      <span className="tm-stage-rule" aria-hidden="true" />
+      <span className="tm-arch-card-head">
+        <span className="tm-stage-chip">{STAGE_ICONS[layer.stage]}</span>
+        <span className="tm-arch-card-index">{String(index + 1).padStart(2, "0")}</span>
+      </span>
+      <strong className="tm-arch-card-title">{layer.title}</strong>
+      <span className="tm-arch-card-body">{layer.body}</span>
+    </li>
+  );
+
+  return (
+    <section className="tm-arch-simple" aria-label="How TrueMandate is layered">
+      <header className="tm-arch-simple-head">
+        <h3>How an agent action is governed</h3>
+        <p>
+          Model output enters as a proposal. It becomes an authorized action only after it clears
+          the Guardian gate.
+        </p>
+      </header>
+
+      <p className="tm-arch-side-label proposal">Proposal side — model output is data</p>
+      <ol className="tm-arch-stack">{before.map((layer, i) => layerCard(layer, i))}</ol>
+
+      <div className="tm-arch-boundary" role="separator" aria-label="Trust boundary">
+        <span className="tm-arch-boundary-label">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+            <rect x="3.4" y="7" width="9.2" height="6.4" rx="1.6" />
+            <path d="M5.8 7V5.2a2.2 2.2 0 014.4 0V7" strokeLinecap="round" />
+          </svg>
+          Trust boundary
+        </span>
+        <span className="tm-arch-boundary-rule" aria-hidden="true" />
+        <span className="tm-arch-boundary-note">Data crosses. Authority does not.</span>
+      </div>
+
+      <p className="tm-arch-blocked">
+        <span className="tm-badge bad">Blocked</span>
+        <span>
+          A model can never go straight from output to execution. There is no path around the
+          Guardian gate and the Authority decision.
+        </span>
+      </p>
+
+      <p className="tm-arch-side-label authorized">Authorized side — infrastructure decides</p>
+      <ol className="tm-arch-stack">{after.map((layer, i) => layerCard(layer, i + before.length))}</ol>
+
+      <div className="tm-arch-substrate" data-stage={substrate.stage}>
+        <span className="tm-stage-chip">{STAGE_ICONS[substrate.stage]}</span>
+        <strong>{substrate.title}</strong>
+        <span>{substrate.body}</span>
+      </div>
+    </section>
+  );
+}
+
 function ArchitectureView() {
   const [tab, setTab] = useState<"architecture" | "sdk" | "adk" | "registry">("architecture");
   return (
@@ -564,6 +656,12 @@ function ArchitectureView() {
           <div className="tm-surface-classification">
             <ProductTruthBadge truthClass="PRESENTATION_DERIVED" detail="VERIFIED SYSTEM MAP" />
           </div>
+
+          <SimplifiedArchitecture />
+
+          <details className="tm-arch-detail">
+            <summary>Full technical architecture</summary>
+            <div className="tm-arch-detail-body">
           <div className="tm-arch-layer l1">
             <div className="tm-layer-label">
               <span className="k">REASONING PLANE</span> Agents and interoperability
@@ -651,11 +749,12 @@ function ArchitectureView() {
             <div className="tm-layer-items">
               <div className="tm-layer-item"><b>Live canonical proof</b><small>one governed action, end to end</small></div>
               <div className="tm-layer-item">
-                <b>SAFE evaluation</b>
+                <b>Paired correctness</b>
                 <small>
-                  {STRESS_READ_MODEL.combined.trumandateFull.passed} / {STRESS_READ_MODEL.combined.trumandateFull.total}
-                  {" · "}{STRESS_READ_MODEL.combined.trumandateFull.unauthorizedExecutionCount} unauthorized
-                  {" · "}{STRESS_READ_MODEL.combined.trumandateFull.criticalIncidentCount} critical
+                  {QUALIFICATION_READ_MODEL.pairedCorrectness.trueMandate.correct} of{" "}
+                  {QUALIFICATION_READ_MODEL.pairedCorrectness.totalScenarios} correct
+                  {" · "}{QUALIFICATION_READ_MODEL.pairedCorrectness.trueMandate.unauthorizedExecutions} unauthorized
+                  {" · "}{QUALIFICATION_READ_MODEL.pairedCorrectness.trueMandate.criticalFailures} critical
                 </small>
               </div>
               <div className="tm-layer-item"><b>Attack Lab</b><small>deterministic adversarial runs</small></div>
@@ -676,6 +775,8 @@ function ArchitectureView() {
             <strong>LLMs reason.</strong> Deterministic infrastructure owns authorization,
             execution eligibility, replay safety, outcome state, and resolution authority.
           </p>
+            </div>
+          </details>
         </div>
       )}
     </section>
