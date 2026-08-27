@@ -120,12 +120,18 @@ describe("four-item judge navigation with nested surfaces", () => {
     expect(html).toContain("Historical immutable evidence");
   });
 
-  it("separates the current benchmark from historical SAFE evidence", () => {
+  it("separates the current qualification evidence from historical SAFE evidence", () => {
     const html = renderToString(<BenchmarkPage />);
-    expect(html).toContain("Current Multi-Domain");
-    expect(html).toContain("Canonical Historical");
-    expect(html).toContain("Corpus Construction");
-    expect(html).toContain("No accepted current-system run");
+    // Current, multi-domain qualification is the judge-facing surface.
+    expect(html).toContain("Production Qualification");
+    expect(html).toContain("Five DomainPacks");
+    // The superseded corpus is reachable but clearly labelled and not current.
+    expect(html).toContain("Historical benchmark");
+    expect(html).toContain("superseded procurement-era corpus");
+    // Its numbers are not mounted until a judge deliberately opens it.
+    expect(html).not.toContain("472 / 500");
+    // Acceptance is never claimed.
+    expect(html).toContain("Benchmark V2 full acceptance was not achieved");
   });
 
   it("nests SDK / ADK / A2A / Registry under Architecture", () => {

@@ -1,29 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { BENCHMARK_READ_MODEL } from "./benchmark-readmodel";
 import { ProductTruthBadge } from "./ProductTruth";
 import { STRESS_READ_MODEL } from "./stress-readmodel";
-import { StressPage } from "./StressPage";
-import { CurrentBenchmark } from "./CurrentBenchmark";
+import { QualificationPage } from "./QualificationPage";
 
-/** Canonical SAFE evidence. All headline values come from immutable read models. */
+/**
+ * The judge-facing benchmark surface is Production Qualification.
+ *
+ * The superseded procurement-era SAFE corpus stays reachable inside a collapsed
+ * disclosure at the bottom of that page — preserved as evidence, off the main
+ * judge path, and never presented as current.
+ */
 export function BenchmarkPage() {
-  const [tab, setTab] = useState<"current" | "benchmark" | "stress">("current");
-  return (
-    <>
-      <div className="tm-subtabs" role="tablist" aria-label="Benchmark sections">
-        <button type="button" role="tab" aria-selected={tab === "current"} className={tab === "current" ? "active" : undefined} onClick={() => setTab("current")}>
-          Current Multi-Domain
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "benchmark"} className={tab === "benchmark" ? "active" : undefined} onClick={() => setTab("benchmark")}>
-          Canonical Historical
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "stress"} className={tab === "stress" ? "active" : undefined} onClick={() => setTab("stress")}>
-          Corpus Construction
-        </button>
-      </div>
-      {tab === "current" ? <CurrentBenchmark /> : tab === "stress" ? <StressPage /> : <HistoricalSafeBenchmark />}
-    </>
-  );
+  return <QualificationPage historical={<HistoricalSafeBenchmark />} />;
 }
 
 function BenchmarkMetric(props: {

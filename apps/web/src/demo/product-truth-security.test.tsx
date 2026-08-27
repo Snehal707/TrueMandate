@@ -2,6 +2,7 @@ import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { exportAttackScenario, CURATED_ATTACKS } from "./attackLabCore";
 import { BenchmarkPage, HistoricalSafeBenchmark } from "./BenchmarkPage";
+import { CurrentBenchmark } from "./CurrentBenchmark";
 import { CANONICAL_PHASE_C_V5 } from "./canonical-phase-c-v5";
 import { DemoPage } from "./DemoApp";
 import { ProductTruthBadge } from "./ProductTruth";
@@ -16,9 +17,20 @@ describe("product truth classifications", () => {
   });
 
   it("labels SAFE as canonical and renders the immutable combined result", () => {
+    // The judge-facing benchmark surface is Production Qualification. It must
+    // present observed evidence without ever claiming acceptance, and must not
+    // surface the superseded procurement-era numbers as current.
     const current = renderToString(<BenchmarkPage />);
-    expect(current).toContain("No accepted current-system run");
+    expect(current).toContain("Production Qualification");
+    expect(current).toContain("Benchmark V2 full acceptance was not achieved");
+    expect(current).not.toMatch(/fully accepted|acceptedDataset/);
     expect(current).not.toContain("472 / 500");
+    expect(current).not.toMatch(/472<!-- --> \/ <!-- -->500/);
+    // C8 is never presented as passing.
+    expect(current).not.toMatch(/C8[^<]*<\/span><strong>PASS/);
+    // The accepted-run gate itself stays intact and still reports unavailable.
+    const acceptedGate = renderToString(<CurrentBenchmark />);
+    expect(acceptedGate).toContain("No accepted current-system run");
     const html = renderToString(<HistoricalSafeBenchmark />);
     expect(html).toContain("data-truth-class=\"CANONICAL_HISTORICAL\"");
     expect(html).toMatch(/472<!-- --> \/ <!-- -->500/);

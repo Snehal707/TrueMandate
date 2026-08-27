@@ -6,6 +6,7 @@ import {
   AttackComparison,
   AttackLabPage,
   AttackTrace,
+  TwoLaneVerdict,
 } from "./AttackLabPage";
 import {
   ATTACK_TARGETS,
@@ -250,6 +251,104 @@ describe("Attack Lab public truth boundary", () => {
     expect(html).toContain("OBSERVED");
     expect(html).toContain("presentation overlays only");
     expect(html).not.toContain("Vector 1 entered at Evidence</span><span class=\"recorded\"");
+  });
+
+  /**
+   * The two-lane verdict must never be a fixed story. These cases run the same
+   * scenario against materially different outcomes and assert the rendered lanes
+   * follow the evidence rather than a hardcoded BLOCK narrative.
+   */
+  function portWith(overrides: Partial<AttackSdkPort>): AttackSdkPort {
+    return { ...sdkPort(), ...overrides } as AttackSdkPort;
+  }
+
+  const noOutcome = {
+    readOutcome: vi.fn(async () => ({
+      ok: false as const,
+      code: "VALIDATION_FAILED" as const,
+      message: "No outcome",
+    })),
+  };
+
+  function compliantBaseline(scenario: SafeScenario): ScenarioRunOutput {
+    const base = baseline(scenario);
+    return {
+      ...base,
+      result: { ...base.result, authorityDecision: "BLOCK", executionResult: "NONE", sideEffects: [] },
+      evaluation: { ...base.evaluation, unauthorizedExecution: false, criticalIncident: false },
+    };
+  }
+
+  it("derives the TrueMandate lane from the actual governed result, not a fixed script", async () => {
+    const blocked = await executeAttackComparison(SCENARIO, {
+      sdk: portWith({
+        ...noOutcome,
+        submitWorkflow: vi.fn(async () => ({ ok: true as const, value: { workflowId: "wf-a", state: "BLOCKED" } })),
+        readWorkflow: vi.fn(async () => ({ ok: true as const, value: { workflowId: "wf-a", state: "BLOCKED" } })),
+        commitWorkflow: vi.fn(async () => ({ ok: false as const, code: "VALIDATION_FAILED" as const, message: "blocked" })),
+      }),
+      runBaseline: async (scenario) => baseline(scenario),
+    });
+    const executed = await executeAttackComparison(SCENARIO, {
+      sdk: portWith({
+        ...noOutcome,
+        submitWorkflow: vi.fn(async () => ({ ok: true as const, value: { workflowId: "wf-b", state: "AUTHORIZED" } })),
+        readWorkflow: vi.fn(async () => ({ ok: true as const, value: { workflowId: "wf-b", state: "AUTHORIZED" } })),
+      }),
+      runBaseline: async (scenario) => baseline(scenario),
+    });
+
+    const blockedHtml = renderToString(<TwoLaneVerdict result={blocked} />);
+    const executedHtml = renderToString(<TwoLaneVerdict result={executed} />);
+
+    // Same scenario, different governed evidence -> different rendered verdict.
+    expect(blockedHtml).not.toEqual(executedHtml);
+    expect(blockedHtml).toContain("BLOCKED");
+    expect(executedHtml).toContain("EXECUTED");
+    expect(executedHtml).not.toContain(">BLOCKED<");
+  });
+
+  it("derives the baseline lane from the actual baseline result", async () => {
+    const deps = {
+      sdk: portWith(noOutcome),
+      runBaseline: async (scenario: SafeScenario) => baseline(scenario),
+    };
+    const compromised = await executeAttackComparison(SCENARIO, deps);
+    const contained = await executeAttackComparison(SCENARIO, {
+      sdk: portWith(noOutcome),
+      runBaseline: async (scenario: SafeScenario) => compliantBaseline(scenario),
+    });
+
+    const compromisedHtml = renderToString(<TwoLaneVerdict result={compromised} />);
+    const containedHtml = renderToString(<TwoLaneVerdict result={contained} />);
+
+    expect(compromisedHtml).toContain("COMPROMISED");
+    expect(compromisedHtml).toContain("Not detected — unauthorized execution occurred");
+    // A baseline that did not execute must not be painted as compromised.
+    expect(containedHtml).not.toContain("COMPROMISED");
+    expect(containedHtml).toContain("No governance layer to detect");
+  });
+
+  it("never implies non-selectable adversarial families are interactive", () => {
+    const html = renderToString(<AttackLabPage />);
+    expect(html).toContain("Covered by SAFE and Benchmark V2 evidence, not selectable here");
+    for (const family of ["taint propagation", "stale state", "replay", "cumulative exposure", "UNKNOWN execution"]) {
+      expect(html, `${family} must be listed as evidence-only`).toContain(family);
+    }
+    expect(html).toContain("not offered as interactive attacks");
+  });
+
+  it("keeps curated as the default judge path with advanced modes secondary", () => {
+    const html = renderToString(<AttackLabPage />);
+    // Curated scenarios are selectable immediately.
+    expect(html).toContain("tm-attack-scenario-grid");
+    expect(html).toContain("500 units becomes 450");
+    // Advanced modes remain reachable but behind a disclosure.
+    expect(html).toContain("Advanced — compose your own adversarial scenario");
+    expect(html).toContain("tm-attack-advanced");
+    // Original intent and injected mutation are both shown before running.
+    expect(html).toContain("Original human intent");
+    expect(html).toContain("Injected mutation");
   });
 
   it("exposes all six domains, seven families, multi-vector mode, and real public attack targets only", () => {

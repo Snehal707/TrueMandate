@@ -155,6 +155,202 @@ function VectorList(props: { readonly vectors: readonly AttackVectorDefinition[]
   );
 }
 
+type LaneTone = "good" | "bad" | "warn" | "neutral";
+
+interface LaneRow {
+  readonly label: string;
+  readonly value: string;
+  readonly tone: LaneTone;
+}
+
+/**
+ * Terminal-state tone. Derived from the state actually returned — never assumed.
+ * A governed run that legitimately ends ALLOWED or EXECUTED is not painted as a
+ * block, and a baseline that legitimately blocks is not painted as a compromise.
+ */
+function stateTone(state: string, side: "baseline" | "governed"): LaneTone {
+  if (state === "COMPROMISED") return "bad";
+  if (state === "BLOCKED") return side === "governed" ? "good" : "neutral";
+  if (state === "REQUIRE_APPROVAL" || state === "ALLOW_WITH_MONITORING") return "warn";
+  if (state === "OUTCOME_BREACHED" || state === "RESOLUTION_OPENED") return "warn";
+  if (state === "EXECUTED" || state === "ALLOWED") return side === "baseline" ? "bad" : "neutral";
+  if (state === "FAILED") return "warn";
+  return "neutral";
+}
+
+function sideEffectTone(count: number, side: "baseline" | "governed"): LaneTone {
+  if (count === 0) return side === "governed" ? "good" : "neutral";
+  return side === "governed" ? "warn" : "bad";
+}
+
+function baselineLane(result: AttackComparisonResult): readonly LaneRow[] {
+  const run = result.baseline.result;
+  const state = baselineResultState(result.baseline);
+  const effects = run.sideEffects.length;
+  return [
+    { label: "Decision", value: display(run.authorityDecision), tone: stateTone(state, "baseline") },
+    { label: "Execution", value: display(run.executionResult), tone: run.executionResult === "SUCCESS" ? "bad" : "neutral" },
+    { label: "Authority", value: display(run.authorityDecision), tone: "neutral" },
+    { label: "Guardian", value: "None — baseline has no Guardian", tone: "neutral" },
+    {
+      label: "Economic effect",
+      value: `${effects} mock side effect${effects === 1 ? "" : "s"}`,
+      tone: sideEffectTone(effects, "baseline"),
+    },
+    {
+      label: "Detection",
+      value: result.baseline.evaluation.unauthorizedExecution
+        ? "Not detected — unauthorized execution occurred"
+        : "No governance layer to detect",
+      tone: result.baseline.evaluation.unauthorizedExecution ? "bad" : "neutral",
+    },
+  ];
+}
+
+function governedLane(result: AttackComparisonResult): readonly LaneRow[] {
+  const governed = result.governed;
+  const state = governedResultState(governed);
+  const guardian = governed.workspace?.guardian?.aggregator?.decision;
+  const authority = governed.workspace?.authority?.decision;
+  const execution = governed.workflow?.execution?.status ?? governed.commit?.status;
+  const enforcement = firstVisibleRejectingStage(governed);
+  const effects = result.summary.economicSideEffectCount;
+  return [
+    { label: "Decision", value: display(authority ?? governed.workflow?.state ?? governed.error?.code), tone: stateTone(state, "governed") },
+    {
+      label: "Execution",
+      value: execution ? display(execution) : display(governed.workflow?.state ?? "Not reached"),
+      tone: execution === "SUCCESS" ? "neutral" : "good",
+    },
+    { label: "Authority", value: display(authority ?? "Not reached"), tone: authority === "BLOCK" ? "good" : "neutral" },
+    {
+      label: "Guardian",
+      value: display(guardian ?? "Not reached"),
+      tone: guardian === "BLOCK" ? "good" : guardian ? "neutral" : "neutral",
+    },
+    {
+      label: "Economic effect",
+      value: `${effects} durable side effect${effects === 1 ? "" : "s"}`,
+      tone: sideEffectTone(effects, "governed"),
+    },
+    {
+      label: "Enforced at",
+      value: enforcement ?? "No rejecting stage — attack did not require enforcement",
+      tone: enforcement ? "good" : "neutral",
+    },
+  ];
+}
+
+/**
+ * Two-lane verdict. Every value is read from the live result of the scenario
+ * that was actually run — nothing is hardcoded per scenario.
+ */
+export function TwoLaneVerdict(props: { readonly result: AttackComparisonResult }) {
+  const result = props.result;
+  const baselineState = baselineResultState(result.baseline);
+  const governedState = governedResultState(result.governed);
+  const detection = result.vectorStatuses.filter((vector) => vector.status !== "OBSERVED" && vector.status !== "NOT_REACHED");
+  const firstDetected = detection[0];
+
+  return (
+    <section className="tm-lane-verdict" aria-label="Baseline versus TrueMandate verdict">
+      <div className="tm-lane" data-side="baseline">
+        <header>
+          <span className="who">Baseline agent</span>
+          <strong className={`state ${stateTone(baselineState, "baseline")}`}>{display(baselineState)}</strong>
+        </header>
+        <dl>
+          {baselineLane(result).map((row) => (
+            <div key={row.label} className={`row ${row.tone}`}>
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      <div className="tm-lane" data-side="governed">
+        <header>
+          <span className="who">TrueMandate</span>
+          <strong className={`state ${stateTone(governedState, "governed")}`}>{display(governedState)}</strong>
+        </header>
+        <dl>
+          {governedLane(result).map((row) => (
+            <div key={row.label} className={`row ${row.tone}`}>
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="tm-lane-detection">
+          {firstDetected
+            ? `Detected at ${ATTACK_STAGE_LABELS[firstDetected.stage]} — vector ${firstDetected.order} ${display(firstDetected.status)}`
+            : "No vector was rejected, neutralized, or escalated in this run."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/** Original human intent versus the mutation each vector actually injected. */
+export function MutationPanel(props: { readonly scenario: AttackScenarioDefinition }) {
+  return (
+    <section className="tm-mutation-panel" aria-label="Original intent and injected mutation">
+      <article className="tm-mutation-original">
+        <p className="tm-live-kicker">Original human intent</p>
+        <blockquote>{props.scenario.humanIntent}</blockquote>
+      </article>
+      <div className="tm-mutation-arrow" aria-hidden="true">→</div>
+      <article className="tm-mutation-injected">
+        <p className="tm-live-kicker">Injected mutation</p>
+        {props.scenario.vectors.map((vector) => (
+          <div className="tm-mutation-vector" key={vector.id}>
+            <span className="tm-mutation-meta">
+              <b>{vector.order}</b>
+              <code>{vector.mutation}</code>
+              <em>enters at {ATTACK_STAGE_LABELS[vector.stage]}</em>
+            </span>
+            <p>{vector.payload}</p>
+          </div>
+        ))}
+      </article>
+    </section>
+  );
+}
+
+/**
+ * Honest coverage statement. Attack Lab exposes seven interactive families; the
+ * remaining adversarial families are evidenced by SAFE and Benchmark V2 runs but
+ * are not selectable here, and must not be implied to be.
+ */
+const SAFE_ONLY_FAMILIES: readonly string[] = [
+  "taint propagation",
+  "stale state",
+  "replay",
+  "cumulative exposure",
+  "UNKNOWN execution",
+];
+
+export function FamilyCoverage() {
+  return (
+    <details className="tm-attack-coverage">
+      <summary>Which adversarial families are interactive here?</summary>
+      <div className="body">
+        <p>
+          <strong>Selectable in Attack Lab</strong> — run live against the deployed public API:{" "}
+          {FAMILIES.map((family) => family.label).join(" · ")}.
+        </p>
+        <p>
+          <strong>Covered by SAFE and Benchmark V2 evidence, not selectable here</strong>:{" "}
+          {SAFE_ONLY_FAMILIES.join(" · ")}. These are exercised by the committed benchmark corpus
+          and the deterministic SAFE scenarios, not by this console. They are reported as evidence,
+          not offered as interactive attacks.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 export function AttackComparison(props: { readonly result: AttackComparisonResult }) {
   const result = props.result;
   const baselineState = baselineResultState(result.baseline);
@@ -429,10 +625,19 @@ export function AttackLabPage(props: {
 
       <div className="tm-attack-modes" role="tablist" aria-label="Attack Lab modes">
         <button type="button" role="tab" aria-selected={mode === "curated"} className={mode === "curated" ? "active" : ""} onClick={() => { setMode("curated"); setResult(undefined); }}>Curated Attacks</button>
-        <button type="button" role="tab" aria-selected={mode === "build"} className={mode === "build" ? "active" : ""} onClick={() => { setMode("build"); setResult(undefined); }}>Build Your Own Attack</button>
-        <button type="button" role="tab" aria-selected={mode === "multi_vector"} className={mode === "multi_vector" ? "active" : ""} onClick={() => { setMode("multi_vector"); setResult(undefined); }}>Multi-vector Attack</button>
-        <button type="button" role="tab" aria-selected={mode === "random"} className={mode === "random" ? "active" : ""} onClick={() => { setMode("random"); setResult(undefined); }}>Random Adversarial</button>
       </div>
+
+      <details className="tm-attack-advanced" open={mode !== "curated"}>
+        <summary>Advanced — compose your own adversarial scenario</summary>
+        <div className="tm-attack-advanced-modes" role="tablist" aria-label="Advanced Attack Lab modes">
+          <button type="button" role="tab" aria-selected={mode === "build"} className={mode === "build" ? "active" : ""} onClick={() => { setMode("build"); setResult(undefined); }}>Build Your Own Attack</button>
+          <button type="button" role="tab" aria-selected={mode === "multi_vector"} className={mode === "multi_vector" ? "active" : ""} onClick={() => { setMode("multi_vector"); setResult(undefined); }}>Multi-vector Attack</button>
+          <button type="button" role="tab" aria-selected={mode === "random"} className={mode === "random" ? "active" : ""} onClick={() => { setMode("random"); setResult(undefined); }}>Random Adversarial</button>
+          <button type="button" role="tab" aria-selected={mode === "curated"} className={mode === "curated" ? "active" : ""} onClick={() => { setMode("curated"); setResult(undefined); }}>Back to curated</button>
+        </div>
+      </details>
+
+      <FamilyCoverage />
 
       <section className="tm-attack-config">
         <div className="tm-attack-config-head">
@@ -450,23 +655,38 @@ export function AttackLabPage(props: {
 
         {mode === "curated" ? (
           <>
-            <div className="tm-attack-family-tabs" role="tablist" aria-label="Attack families">
-              {FAMILIES.map((item) => (
-                <button key={item.id} type="button" role="tab" aria-selected={family === item.id} className={family === item.id ? "active" : ""} onClick={() => { setFamily(item.id); setSelectedScenarioId(""); setResult(undefined); }}>{item.label}</button>
-              ))}
+            <div className="tm-attack-scenario-grid" role="listbox" aria-label="Curated attack scenarios">
+              {CURATED_ATTACKS.map((entry) => {
+                const active = selectedScenario?.id === entry.id;
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    className={`tm-attack-scenario-card${active ? " active" : ""}`}
+                    onClick={() => {
+                      setFamily(entry.family);
+                      setSelectedScenarioId(entry.id);
+                      setResult(undefined);
+                    }}
+                  >
+                    <span className="fam">{FAMILIES.find((item) => item.id === entry.family)?.label ?? entry.family}</span>
+                    <strong>{entry.title}</strong>
+                    <small>{LIVE_DEMO_DOMAINS.find((item) => item.id === entry.domainId)?.label}</small>
+                  </button>
+                );
+              })}
             </div>
             {selectedScenario ? (
-              <div className="tm-attack-curated-card">
-                <label>Scenario
-                  <select value={selectedScenario.id} onChange={(event) => { setSelectedScenarioId(event.target.value); setResult(undefined); }}>
-                    {familyScenarios.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}
-                  </select>
-                </label>
-                <div><span>Domain</span><strong>{LIVE_DEMO_DOMAINS.find((item) => item.id === selectedScenario.domainId)?.label}</strong></div>
-                <div><span>Human intent</span><strong>{selectedScenario.scenario.humanIntent}</strong></div>
-                <div><span>Ordered vectors</span><strong>{selectedScenario.scenario.vectors.map((attack) => `${attack.order}. ${attack.family}`).join(" · ")}</strong></div>
-                <div><span>Attack target</span><strong>{ATTACK_TARGETS.find((item) => item.id === selectedScenario.scenario.vectors[0]?.target)?.label}</strong></div>
-              </div>
+              <>
+                <MutationPanel scenario={selectedScenario.scenario} />
+                <div className="tm-attack-curated-card">
+                  <div><span>Domain</span><strong>{LIVE_DEMO_DOMAINS.find((item) => item.id === selectedScenario.domainId)?.label}</strong></div>
+                  <div><span>Ordered vectors</span><strong>{selectedScenario.scenario.vectors.map((attack) => `${attack.order}. ${attack.family}`).join(" · ")}</strong></div>
+                  <div><span>Attack target</span><strong>{ATTACK_TARGETS.find((item) => item.id === selectedScenario.scenario.vectors[0]?.target)?.label}</strong></div>
+                </div>
+              </>
             ) : null}
           </>
         ) : null}
@@ -640,7 +860,7 @@ export function AttackLabPage(props: {
 
       {error ? <p className="tm-attack-runtime-error" role="alert">{error}</p> : null}
       <ScenarioExportPanel scenario={scenario} />
-      {result ? <><AttackComparison result={result} /><AttackTrace result={result} /><WhyDifferent result={result} /></> : (
+      {result ? <><TwoLaneVerdict result={result} /><AttackComparison result={result} /><AttackTrace result={result} /><WhyDifferent result={result} /></> : (
         <section className="tm-attack-export-panel">
           <div className="tm-attack-result-head">
             <div>

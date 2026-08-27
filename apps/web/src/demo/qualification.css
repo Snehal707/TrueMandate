@@ -1,0 +1,125 @@
+/* ============================================================
+   PRODUCTION QUALIFICATION — judge-facing benchmark surface.
+   Uses the tokens defined in demo-v2.css; introduces no new palette.
+   ============================================================ */
+
+.tm-qual { max-width: 1180px; margin: 0 auto; padding: 0 24px 72px; }
+
+.tm-qual-hero { padding: 40px 0 28px; border-bottom: 1px solid var(--line-soft); margin-bottom: 36px; }
+.tm-qual-hero h2 { font-size: clamp(2rem, 3.4vw, 2.9rem); line-height: 1.08; margin: 10px 0 12px; color: var(--text-strong); letter-spacing: -0.02em; }
+.tm-qual-hero .lede { max-width: 68ch; color: var(--text-dim); font-size: 1.02rem; line-height: 1.6; margin: 0; }
+
+.tm-qual-section { margin-bottom: 56px; }
+.tm-qual-section-head { margin-bottom: 24px; }
+.tm-qual-section-head h3 { font-size: 1.5rem; color: var(--text-strong); margin: 0 0 8px; letter-spacing: -0.01em; }
+.tm-qual-section-head p { color: var(--text-dim); margin: 0; max-width: 74ch; line-height: 1.55; }
+.tm-qual-sub { font-size: 1.05rem; color: var(--text-strong); margin: 40px 0 16px; }
+
+/* Section A — headline scoreboard */
+.tm-qual-headline { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 32px; }
+.tm-qual-headline article { padding: 26px 28px; border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.tm-qual-headline article span { display: block; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-bottom: 10px; }
+.tm-qual-headline article strong { display: block; font-size: clamp(2.2rem, 4vw, 3.1rem); line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+.tm-qual-headline article small { display: block; margin-top: 10px; color: var(--text-dim); font-size: 0.9rem; }
+.tm-qual-headline .win { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emerald) 42%, transparent); background: linear-gradient(180deg, var(--emerald-soft), transparent 70%), var(--surface); }
+.tm-qual-headline .win strong { color: var(--emerald); }
+.tm-qual-headline .lose { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 34%, transparent); }
+.tm-qual-headline .lose strong { color: var(--red); }
+
+/* Section A — comparison bars */
+.tm-qual-bars { display: grid; gap: 18px; }
+.tm-qual-bar { padding: 20px 22px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-soft); }
+.tm-qual-bar header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+.tm-qual-bar h4 { margin: 0 0 4px; font-size: 1rem; color: var(--text-strong); }
+.tm-qual-bar header p { margin: 0; font-size: 0.86rem; color: var(--text-faint); }
+.tm-qual-bar header > span { flex-shrink: 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); padding-top: 2px; }
+.tm-qual-measure { display: grid; grid-template-columns: 132px 1fr 56px; align-items: center; gap: 14px; margin-top: 10px; }
+.tm-qual-measure .who { font-size: 0.9rem; color: var(--text-dim); }
+.tm-qual-measure .track { height: 22px; border-radius: 6px; background: rgba(120, 152, 220, 0.09); overflow: hidden; }
+.tm-qual-measure .track i { display: block; height: 100%; border-radius: 6px; transition: width 600ms var(--ease); }
+.tm-qual-measure .track i.truemandate { background: linear-gradient(90deg, var(--emerald), color-mix(in srgb, var(--emerald) 70%, var(--blue))); }
+.tm-qual-measure .track i.baseline { background: linear-gradient(90deg, var(--red), color-mix(in srgb, var(--red) 70%, var(--amber))); }
+.tm-qual-measure b { font-variant-numeric: tabular-nums; font-size: 1.15rem; text-align: right; color: var(--text-strong); }
+.tm-qual-measure b.good { color: var(--emerald); }
+.tm-qual-measure b.bad { color: var(--red); }
+
+/* Section A — five domains */
+.tm-qual-domains { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.tm-qual-domains article { padding: 18px 16px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-soft); text-align: center; }
+.tm-qual-domains .dom { display: block; font-size: 0.86rem; color: var(--text-strong); font-weight: 600; margin-bottom: 14px; min-height: 2.4em; }
+.tm-qual-domains .pair { margin-top: 8px; }
+.tm-qual-domains .pair span { display: block; font-size: 1.28rem; font-variant-numeric: tabular-nums; font-weight: 650; }
+.tm-qual-domains .pair span.good { color: var(--emerald); }
+.tm-qual-domains .pair span.bad { color: var(--red); }
+.tm-qual-domains .pair small { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin-top: 2px; }
+
+.tm-qual-repro { margin-top: 22px; color: var(--text-dim); font-size: 0.92rem; }
+.tm-qual-repro code { background: var(--surface-2); padding: 3px 9px; border-radius: 5px; color: var(--blue); font-size: 0.9em; }
+
+/* Section B — levels */
+.tm-qual-levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 32px; }
+.tm-qual-levels .lvl { padding: 20px 18px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-soft); }
+.tm-qual-levels .lvl .name { display: block; font-size: 0.8rem; letter-spacing: 0.1em; color: var(--text-faint); margin-bottom: 8px; }
+.tm-qual-levels .lvl strong { display: block; font-size: 1.02rem; line-height: 1.25; margin-bottom: 8px; }
+.tm-qual-levels .lvl small { display: block; color: var(--text-dim); font-size: 0.85rem; }
+.tm-qual-levels .lvl.pass { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emerald) 40%, transparent); }
+.tm-qual-levels .lvl.pass strong { color: var(--emerald); }
+.tm-qual-levels .lvl.boundary { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 46%, transparent); background: linear-gradient(180deg, var(--amber-soft), transparent 72%), var(--surface); }
+.tm-qual-levels .lvl.boundary strong { color: var(--amber); }
+.tm-qual-levels .lvl-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 12px; font-size: 0.78rem; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.tm-qual-levels .lvl-meta .warn { color: var(--amber); }
+.tm-qual-levels .lvl-run { display: block; margin-top: 12px; font-size: 0.66rem; color: var(--text-faint); word-break: break-all; opacity: 0.75; }
+
+/* Section B — chart */
+.tm-qual-chart { margin: 0 0 22px; padding: 22px 20px 16px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-soft); }
+.tm-qual-chart figcaption { font-size: 0.92rem; color: var(--text-dim); margin-bottom: 14px; }
+.tm-qual-chart svg { width: 100%; height: auto; }
+.tm-qual-chart .axis { stroke: var(--line); stroke-width: 1; }
+.tm-qual-chart .series-throughput { fill: none; stroke: var(--emerald); stroke-width: 2.5; }
+.tm-qual-chart .series-cpu { fill: none; stroke: var(--blue); stroke-width: 2; stroke-dasharray: 5 4; }
+.tm-qual-chart .pt-throughput { fill: var(--emerald); }
+.tm-qual-chart .pt-throughput.boundary { fill: var(--amber); stroke: var(--amber); stroke-width: 3; }
+.tm-qual-chart .pt-cpu { fill: var(--blue); }
+.tm-qual-chart .lvl { fill: var(--text-strong); font-size: 14px; font-weight: 650; }
+.tm-qual-chart .lvl-sub { fill: var(--text-faint); font-size: 11px; }
+.tm-qual-chart-legend { display: flex; gap: 20px; margin-top: 10px; font-size: 0.8rem; flex-wrap: wrap; }
+.tm-qual-chart-legend span { display: inline-flex; align-items: center; gap: 7px; color: var(--text-dim); }
+.tm-qual-chart-legend span::before { content: ""; width: 13px; height: 3px; border-radius: 2px; }
+.tm-qual-chart-legend .k-throughput::before { background: var(--emerald); }
+.tm-qual-chart-legend .k-cpu::before { background: var(--blue); }
+.tm-qual-chart-legend .k-boundary::before { background: var(--amber); height: 9px; width: 9px; border-radius: 50%; }
+
+.tm-qual-note { color: var(--text-dim); line-height: 1.6; margin: 0 0 10px; max-width: 82ch; }
+.tm-qual-note.muted { color: var(--text-faint); font-size: 0.88rem; }
+
+/* Section C — safety */
+.tm-qual-safety-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 22px; }
+.tm-qual-safety-cards article { padding: 32px 26px; border-radius: 14px; text-align: center; background: linear-gradient(180deg, var(--emerald-soft), transparent 70%), var(--surface); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emerald) 40%, transparent), var(--glow-emerald); }
+.tm-qual-safety-cards strong { display: block; font-size: clamp(2.8rem, 5vw, 4rem); line-height: 1; color: var(--emerald); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+.tm-qual-safety-cards span { display: block; margin-top: 12px; color: var(--text-dim); font-size: 0.94rem; }
+.tm-qual-failclosed { padding: 20px 24px; border-radius: 12px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-strong); font-size: 1.04rem; line-height: 1.6; margin: 0; max-width: 90ch; }
+
+/* Footer — acceptance, methodology, historical */
+.tm-qual-footer { padding-top: 30px; border-top: 1px solid var(--line-soft); }
+.tm-qual-acceptance { color: var(--text-dim); font-size: 0.94rem; margin: 0 0 10px; }
+.tm-qual-methodology { color: var(--text-faint); font-size: 0.88rem; margin: 0 0 22px; line-height: 1.55; max-width: 88ch; }
+.tm-qual-methodology a { color: var(--blue); }
+.tm-qual-historical { border-radius: 10px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-soft); }
+.tm-qual-historical > summary { padding: 14px 18px; cursor: pointer; color: var(--text-dim); font-size: 0.9rem; list-style: none; }
+.tm-qual-historical > summary::-webkit-details-marker { display: none; }
+.tm-qual-historical > summary::before { content: "\25B8  "; color: var(--text-faint); }
+.tm-qual-historical[open] > summary::before { content: "\25BE  "; }
+.tm-qual-historical > .body { padding: 0 18px 18px; }
+.tm-qual-historical-note { color: var(--amber); font-size: 0.86rem; line-height: 1.55; padding: 12px 14px; border-radius: 8px; background: var(--amber-soft); margin: 0 0 16px; }
+
+/* Responsive — protects the 1920x1080 recording and typical laptop viewports */
+@media (max-width: 1240px) {
+  .tm-qual-domains { grid-template-columns: repeat(3, 1fr); }
+  .tm-qual-levels { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 860px) {
+  .tm-qual-headline,
+  .tm-qual-safety-cards { grid-template-columns: 1fr; }
+  .tm-qual-domains { grid-template-columns: repeat(2, 1fr); }
+  .tm-qual-measure { grid-template-columns: 104px 1fr 46px; gap: 10px; }
+}

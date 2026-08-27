@@ -181,13 +181,14 @@ describe("DemoPage main proof render (V2)", () => {
     expect(attack).toContain("Execution / TOCTOU");
   });
 
-  it("benchmark view fails closed until a current-system artifact is accepted", () => {
+  it("benchmark view presents observed qualification without claiming acceptance", () => {
     const bm = renderToString(<DemoPage projection={CANONICAL_PHASE_C_V5} view="benchmark" />);
-    expect(bm).toContain("SAFE Benchmark");
-    expect(bm).toContain("Current System Benchmark");
-    expect(bm).toContain("No accepted current-system run");
-    expect(bm).toContain("Canonical Historical");
+    expect(bm).toContain("Production Qualification");
+    expect(bm).toContain("Benchmark V2 full acceptance was not achieved");
+    expect(bm).toContain("Historical benchmark");
+    // Superseded procurement-era numbers never reach the default judge path.
     expect(bm).not.toMatch(/472<!-- --> \/ <!-- -->500/);
+    expect(bm).not.toMatch(/fully accepted|acceptedDataset/);
   });
 
   it("architecture is a layered presentation with the trust boundary", () => {
