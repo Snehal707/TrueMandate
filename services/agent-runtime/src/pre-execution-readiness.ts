@@ -506,14 +506,27 @@ export class PreExecutionReadinessService {
       readiness: targetReadiness,
       ambiguityClass: ambiguityResolution.ambiguityClass,
     });
+    // Attaching a proof summary completes the semantic state once; it is not a
+    // repeatable step. SEARCHABLE and PLANNABLE self-disarm because the tier moves
+    // to ACTIONABLE and no longer matches. ACTIONABLE keeps its tier, so the guard
+    // against minting successor after successor has to be explicit.
+    const proofSummaryAlreadyBound = artifactRow.value.payload.proofSummary !== undefined;
     const supersessionEligible =
       !verification.value.criticalFailure &&
       verification.value.lifecycle !== SemanticLifecycle.REJECTED &&
       coverage.allRequiredCovered &&
       allSatisfied &&
       semanticStateConsistent &&
+      !proofSummaryAlreadyBound &&
       (verification.value.readiness === IntentReadiness.SEARCHABLE ||
-        verification.value.readiness === IntentReadiness.PLANNABLE);
+        verification.value.readiness === IntentReadiness.PLANNABLE ||
+        // ACTIONABLE is eligible for evidence-backed proof attachment, never for
+        // promotion: nextReadiness returns ACTIONABLE unchanged for an ACTIONABLE
+        // input, so the tier this path writes is the tier it read. Without this,
+        // a state the lexical heuristic promoted early could never acquire a proof
+        // summary at all — supersession is its only producer — and so could never
+        // satisfy completeProofs however much verified evidence it carried.
+        verification.value.readiness === IntentReadiness.ACTIONABLE);
 
     if (!supersessionEligible) {
       return ok({

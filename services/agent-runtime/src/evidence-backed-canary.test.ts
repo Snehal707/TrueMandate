@@ -147,35 +147,161 @@ describe("canary: a legitimate evidenced request through the real lifecycle", ()
 });
 
 /**
- * The supersession gate only fires from SEARCHABLE or PLANNABLE
- * (`pre-execution-readiness.ts:515`). Supersession is also the only producer of a
- * proof summary. So an intent already promoted to ACTIONABLE by the lexical
- * purchase heuristic can never acquire one, and can never satisfy completeProofs
- * — no matter how much verified evidence it references.
+ * ACTIONABLE is eligible for evidence-backed proof attachment, never for
+ * promotion. Supersession is the only producer of a proof summary, so without
+ * this a state the lexical heuristic promoted early could never acquire one and
+ * could never satisfy completeProofs — however much verified evidence it carried.
+ * Procurement is the one Live Proof preset that heuristic fires for, and the one
+ * preset observed stopping at proofs rather than plan verification.
  *
- * This is not a hypothetical: procurement is the one Live Proof preset whose
- * compiled concepts match that heuristic, and it is the one preset observed
- * stopping at proofs rather than plan verification.
+ * Every fail-closed condition is unchanged: the tier this path writes is the tier
+ * it read, and evidence that is absent, untrusted, incomplete or unsatisfying
+ * still yields no summary.
  */
-describe("readiness already ACTIONABLE cannot acquire a proof summary", () => {
-  it("stays blocked with identical evidence, because supersession never runs", async () => {
-    const rt = await runtime({ omitProofSummary: true, demoEvidence: PROCUREMENT_EVIDENCE });
-    const result = await rt.coordinator.run({
-      ...request(),
-      expectedIntentStateId: rt.state.id,
-      evidenceIds: ["demo-procurement-offer"],
-    });
 
-    expect(result.ok).toBe(true);
-    const value = result.ok ? (result.value as { workflowId: string; state: string }) : undefined;
-    expect(value?.state).toBe("BLOCKED");
+/** Runs a procurement submission at the preset's natural readiness. */
+async function runAtNaturalReadiness(
+  demoEvidence: typeof PROCUREMENT_EVIDENCE | undefined,
+  evidenceIds: readonly string[],
+) {
+  const rt = await runtime({ omitProofSummary: true, ...(demoEvidence ? { demoEvidence } : {}) });
+  let result = await rt.coordinator.run({ ...request(), expectedIntentStateId: rt.state.id, evidenceIds });
+  if (!result.ok && result.code === "INTENT_STATE_NOT_READY") {
+    const successorId = String((result.details as Record<string, unknown>).intentStateId);
+    result = await rt.coordinator.run({ ...request(), expectedIntentStateId: successorId, evidenceIds });
+  }
+  const value = result.ok ? (result.value as { workflowId: string; state: string }) : undefined;
+  const artifacts = value ? await rt.owner.listWorkflowArtifacts(value.workflowId) : undefined;
+  const rows = artifacts?.ok ? (artifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
+  const boundStateId = String(rows.find((row) => row.kind === "WORKFLOW")?.payload.intentStateId ?? "");
+  const readAt = boundStateId ? await rt.owner.getSemanticArtifact(`semantic-verification-${boundStateId}`) : undefined;
+  const verification = readAt?.ok
+    ? ((readAt.value as { payload: Record<string, unknown> }).payload.verification as Record<string, unknown>)
+    : undefined;
+  return { rt, result, value, rows, boundStateId, readiness: verification?.readiness, s0: rt.state.id };
+}
 
-    const artifacts = await rt.owner.listWorkflowArtifacts(value!.workflowId);
-    const rows = artifacts.ok ? (artifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
-    // No supersession: the workflow is still bound to the state the caller named.
-    expect(String(rows.find((row) => row.kind === "WORKFLOW")?.payload.intentStateId)).toBe(rt.state.id);
-    for (const proof of rows.filter((row) => row.kind === "PROOF")) {
-      expect(proof.payload.method).toBe("authoritative-proof-handoff-absent");
+const proofsOf = (rows: { kind: string; payload: Record<string, unknown> }[]) =>
+  rows.filter((row) => row.kind === "PROOF").map((row) => row.payload);
+
+describe("ACTIONABLE gains proof attachment without gaining privilege", () => {
+  it("1. natural ACTIONABLE + valid trusted evidence: real summary, 5/5 satisfied, tier unchanged", async () => {
+    const run = await runAtNaturalReadiness(PROCUREMENT_EVIDENCE, ["demo-procurement-offer"]);
+
+    // The tier this path wrote is the tier it read. No promotion happened.
+    expect(run.readiness).toBe("ACTIONABLE");
+    // The evidence handoff ran: a successor exists and the workflow bound to it.
+    expect(run.boundStateId).toContain("-semantic-");
+    expect(run.boundStateId).not.toBe(run.s0);
+
+    const proofs = proofsOf(run.rows);
+    expect(proofs).toHaveLength(5);
+    for (const proof of proofs) {
+      expect(proof.status).toBe("SATISFIED");
+      expect(proof.method).toBe("authoritative-proof-handoff");
     }
+    // Plan verification can proceed on the evidence-backed state.
+    const planVerification = run.rows.find((row) => row.kind === "PLAN_VERIFICATION")?.payload;
+    expect((planVerification?.verification as Record<string, unknown>)?.status).toBe("VERIFIED");
+  });
+
+  it("2. ACTIONABLE + no evidence: no summary, fail closed", async () => {
+    const run = await runAtNaturalReadiness(PROCUREMENT_EVIDENCE, []);
+    expect(run.value?.state).toBe("BLOCKED");
+    expect(run.boundStateId).toBe(run.s0);
+    for (const proof of proofsOf(run.rows)) {
+      expect(proof.method).toBe("authoritative-proof-handoff-absent");
+      expect(proof.status).toBe("UNKNOWN");
+    }
+  });
+
+  it("3. ACTIONABLE + untrusted evidence: cannot satisfy proofs", async () => {
+    const untrusted = [{
+      ...PROCUREMENT_EVIDENCE[0]!,
+      envelope: { ...PROCUREMENT_EVIDENCE[0]!.envelope, trustClass: TrustClass.UNTRUSTED_EXTERNAL },
+    }];
+    const run = await runAtNaturalReadiness(untrusted, ["demo-procurement-offer"]);
+    expect(run.value?.state).toBe("BLOCKED");
+    expect(run.boundStateId).toBe(run.s0);
+    for (const proof of proofsOf(run.rows)) {
+      expect(proof.status).not.toBe("SATISFIED");
+    }
+  });
+
+  it("4. ACTIONABLE + incomplete trusted evidence: missing obligations stay unsatisfied", async () => {
+    const partial = [{
+      envelope: PROCUREMENT_EVIDENCE[0]!.envelope,
+      claims: PROCUREMENT_EVIDENCE[0]!.claims.slice(0, 3),
+    }];
+    const run = await runAtNaturalReadiness(partial, ["demo-procurement-offer"]);
+    expect(run.value?.state).toBe("BLOCKED");
+    // coverage.allRequiredCovered is false, so nothing is superseded at all.
+    expect(run.boundStateId).toBe(run.s0);
+    for (const proof of proofsOf(run.rows)) {
+      expect(proof.status).not.toBe("SATISFIED");
+    }
+  });
+
+  it("5. ACTIONABLE + evidence that contradicts the constraints: fail closed", async () => {
+    const wrong = [{
+      envelope: PROCUREMENT_EVIDENCE[0]!.envelope,
+      claims: PROCUREMENT_EVIDENCE[0]!.claims.map((claim) =>
+        claim.concept === "quantity" ? { ...claim, value: 450 } : claim,
+      ),
+    }];
+    const run = await runAtNaturalReadiness(wrong, ["demo-procurement-offer"]);
+    expect(run.value?.state).toBe("BLOCKED");
+    expect(run.boundStateId).toBe(run.s0);
+  });
+
+  it("6. re-running the handoff is idempotent and mints no second successor", async () => {
+    const rt = await runtime({ omitProofSummary: true, demoEvidence: PROCUREMENT_EVIDENCE });
+    const ids = ["demo-procurement-offer"];
+    const first = await rt.coordinator.run({ ...request(), expectedIntentStateId: rt.state.id, evidenceIds: ids });
+    expect(first.ok).toBe(false);
+    const successorId = String(((first as { details: Record<string, unknown> }).details).intentStateId);
+
+    const second = await rt.coordinator.run({ ...request(), expectedIntentStateId: successorId, evidenceIds: ids });
+    expect(second.ok).toBe(true);
+    const third = await rt.coordinator.run({ ...request(), expectedIntentStateId: successorId, evidenceIds: ids });
+    expect(third.ok).toBe(true);
+
+    // Same workflow, and the tip never advanced past the one successor.
+    const secondId = second.ok ? (second.value as { workflowId: string }).workflowId : "b";
+    const thirdId = third.ok ? (third.value as { workflowId: string }).workflowId : "c";
+    expect(thirdId).toBe(secondId);
+    const tip = await rt.owner.getTip("intent-e2e");
+    expect(String((tip as { value?: { id?: string } }).value?.id ?? tip)).toBe(successorId);
+  });
+});
+
+describe("existing tier behaviour is untouched", () => {
+  it("8. PLANNABLE still promotes to ACTIONABLE through the same path", async () => {
+    const rt = await runtime({
+      omitProofSummary: true,
+      demoEvidence: PROCUREMENT_EVIDENCE,
+      verificationReadiness: "PLANNABLE",
+    });
+    let result = await rt.coordinator.run({
+      ...request(), expectedIntentStateId: rt.state.id, evidenceIds: ["demo-procurement-offer"],
+    });
+    if (!result.ok && result.code === "INTENT_STATE_NOT_READY") {
+      result = await rt.coordinator.run({
+        ...request(),
+        expectedIntentStateId: String((result.details as Record<string, unknown>).intentStateId),
+        evidenceIds: ["demo-procurement-offer"],
+      });
+    }
+    expect(result.ok).toBe(true);
+    const workflowId = result.ok ? (result.value as { workflowId: string }).workflowId : "";
+    const artifacts = await rt.owner.listWorkflowArtifacts(workflowId);
+    const rows = artifacts.ok ? (artifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
+    const boundStateId = String(rows.find((row) => row.kind === "WORKFLOW")?.payload.intentStateId ?? "");
+    const read = await rt.owner.getSemanticArtifact(`semantic-verification-${boundStateId}`);
+    const verification = read.ok
+      ? ((read.value as { payload: Record<string, unknown> }).payload.verification as Record<string, unknown>)
+      : undefined;
+    // Promotion semantics for PLANNABLE are unchanged.
+    expect(verification?.readiness).toBe("ACTIONABLE");
   });
 });
