@@ -1,0 +1,85 @@
+{
+  "schema": "BENCHMARK_V2_OPERATIONAL_EVIDENCE_V1",
+  "runId": "benchmark-v2-c4-20260827T051023Z",
+  "window": {
+    "start": "2026-08-27T05:12:40.353Z",
+    "end": "2026-08-27T05:29:04.724Z"
+  },
+  "diagnosticsCount": 525,
+  "modelConcurrency": {
+    "maxActive": 10,
+    "maxQueued": 5,
+    "maxQueueDepthField": 18,
+    "queueWaitMs": {
+      "p50": 48,
+      "p95": 116,
+      "p99": 157
+    },
+    "permitReleases": 461,
+    "queueDeadlineFailures": 0,
+    "modelUnavailableAttempts": 2,
+    "concurrencyLimit": 12,
+    "perStageConcurrency": {
+      "compiler.candidate.v1": {
+        "maxStageActive": 2,
+        "maxStageQueued": 2
+      },
+      "verifier.result.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 1
+      },
+      "planner.plan.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 1
+      },
+      "plan-verifier.result.v1": {
+        "maxStageActive": 1,
+        "maxStageQueued": 1
+      },
+      "judge.fidelity.v1": {
+        "maxStageActive": 1,
+        "maxStageQueued": 1
+      },
+      "judge.contradiction.v1": {
+        "maxStageActive": 1,
+        "maxStageQueued": 1
+      },
+      "judge.devils_advocate.v1": {
+        "maxStageActive": 1,
+        "maxStageQueued": 1
+      },
+      "judge.provenance.v1": {
+        "maxStageActive": 2,
+        "maxStageQueued": 1
+      },
+      "judge.evidence.v1": {
+        "maxStageActive": 1,
+        "maxStageQueued": 1
+      }
+    }
+  },
+  "model": {
+    "attempts": 461,
+    "successfulAttempts": 452,
+    "provider429s": 7,
+    "timedOutAttempts": 2,
+    "retries": 0
+  },
+  "guardian": {
+    "aggregateDecisions": 50,
+    "criticalFailures": 0,
+    "judgesObserved": [
+      "judge.contradiction.v1",
+      "judge.devils_advocate.v1",
+      "judge.evidence.v1",
+      "judge.fidelity.v1",
+      "judge.provenance.v1"
+    ],
+    "allFiveJudgesRequired": true
+  },
+  "resources": {
+    "peakCpu": 0.3385,
+    "peakMemory": 0.3795,
+    "peakInstances": 2
+  }
+}
