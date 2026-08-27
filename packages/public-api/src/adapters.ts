@@ -1,5 +1,6 @@
 import { ErrorCode, err, ok, type ApprovalArtifact, type Result } from "@truemandate/protocol";
 import { DemoRuntime } from "@truemandate/observability-service";
+import type { LifecycleArtifactRow } from "@truemandate/read-model";
 import type { DocumentStore } from "@truemandate/cloud-firestore";
 import {
   assembleWorkspace,
@@ -7,6 +8,9 @@ import {
   projectIntentSummary,
   projectProvenanceGraph,
   projectSemanticState,
+  projectLifecycle,
+  projectGuardian,
+  projectAuthority,
 } from "@truemandate/read-model";
 import type { Intent, IntentState } from "@truemandate/protocol";
 import {
@@ -71,6 +75,14 @@ export function createLivePublicBffPorts(input: {
   readonly workspaceSource: {
     getIntent(intentId: string): Promise<Result<Intent>> | Result<Intent>;
     getTip(intentId: string): Promise<Result<IntentState>> | Result<IntentState>;
+    /**
+     * Durable workflow artifacts for this intent. Optional: without it the
+     * workspace assembles exactly as it did before, so historical deployments
+     * and the canonical demo projection are unaffected.
+     */
+    listIntentArtifacts?(
+      intentId: string,
+    ): Promise<Result<readonly unknown[]>> | Result<readonly unknown[]>;
   };
   readonly demoRuntime?: Pick<DemoRuntime, "submitApproval">;
   readonly evidence: {
@@ -196,6 +208,42 @@ export function createLivePublicBffPorts(input: {
     }
     const tip = await Promise.resolve(workspaceSource.getTip(intentId));
     const tipState = tip.ok ? tip.value : undefined;
+
+    // Stage truth comes from durable artifacts when they are reachable. Without
+    // them nothing below contributes and the workspace assembles as before.
+    const artifactRows = workspaceSource.listIntentArtifacts
+      ? await Promise.resolve(workspaceSource.listIntentArtifacts(intentId))
+      : undefined;
+    const rows: LifecycleArtifactRow[] = artifactRows?.ok
+      ? artifactRows.value.flatMap((row) => {
+          const value = row as { kind?: unknown; payload?: unknown } | null;
+          return value && typeof value === "object" && typeof value.kind === "string" &&
+            value.payload && typeof value.payload === "object"
+            ? [{ kind: value.kind, payload: value.payload as Record<string, unknown> }]
+            : [];
+        })
+      : [];
+
+    const payloadOf = (kind: string) => rows.find((row) => row.kind === kind)?.payload;
+    const guardianVerdict = payloadOf("GUARDIAN")?.verdict as Parameters<typeof projectGuardian>[0];
+    const workflowState = payloadOf("WORKFLOW")?.state;
+    // Readiness is not on IntentState; it lives in the semantic verification
+    // artifact, so it is only reported when that artifact is reachable.
+    const verificationPayload = rows.find((row) => row.kind === "SEMANTIC_VERIFICATION")?.payload;
+    const verification = verificationPayload?.verification as { readiness?: unknown } | undefined;
+    const readiness = typeof verification?.readiness === "string" ? verification.readiness : undefined;
+    const lifecycle = rows.length > 0
+      ? projectLifecycle({ artifacts: rows, ...(readiness ? { readiness } : {}) })
+      : undefined;
+
+    // Never synthesize "UNAVAILABLE" from a projection gap. A Guardian record that
+    // exists is projected; one that was never reached says so.
+    const guardian = rows.length === 0
+      ? undefined
+      : guardianVerdict
+        ? projectGuardian(guardianVerdict)
+        : { judges: [], aggregator: { decision: "NOT_REACHED", semanticStatus: "NOT_REACHED", criticalFailure: false } };
+
     return ok(
       toPublicWorkspaceView(
         assembleWorkspace({
@@ -207,6 +255,11 @@ export function createLivePublicBffPorts(input: {
             intent: intent.value,
             constraints: tipState?.constraints ?? [],
           }),
+          ...(guardian ? { guardian } : {}),
+          ...(lifecycle ? { lifecycle } : {}),
+          ...(typeof workflowState === "string"
+            ? { authority: projectAuthority({ authorityDecision: undefined, semanticGate: workflowState }) }
+            : {}),
           graph: projectProvenanceGraph({
             nodes: [],
             edges: [],

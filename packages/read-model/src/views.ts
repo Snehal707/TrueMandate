@@ -244,6 +244,33 @@ export interface TimelineView {
   readonly events: readonly TimelineEventView[];
 }
 
+/**
+ * Whether a lifecycle stage actually happened, from durable artifacts.
+ *
+ * NOT_REACHED is a claim about the run, not about this projection: it means the
+ * pipeline stopped before the stage, not that the projection lacked the data.
+ * A stage the projection cannot see at all is simply absent from `stages`.
+ */
+export type LifecycleStageStatus =
+  | "COMPLETED"
+  | "BLOCKED"
+  | "NOT_REACHED"
+  | "NOT_PRODUCED";
+
+export interface LifecycleStageView {
+  readonly stage: string;
+  readonly status: LifecycleStageStatus;
+  /** Public-safe summary. Never raw tokens, grants, credentials or model internals. */
+  readonly detail?: string;
+}
+
+export interface LifecycleView {
+  readonly stages: readonly LifecycleStageView[];
+  /** The first stage that actually stopped the run, in execution order. */
+  readonly blockingStage?: string;
+  readonly blockingReason?: string;
+}
+
 export interface IntentWorkspaceView {
   readonly summary: IntentSummaryView;
   readonly semantic: SemanticStateView;
@@ -255,4 +282,9 @@ export interface IntentWorkspaceView {
   readonly resolution?: ResolutionView;
   readonly graph: ProvenanceGraphView;
   readonly timeline: TimelineView;
+  /**
+   * Optional so historical workflows and the canonical demo projection, which
+   * predate it, assemble unchanged.
+   */
+  readonly lifecycle?: LifecycleView;
 }

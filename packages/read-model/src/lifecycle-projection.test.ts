@@ -1,0 +1,188 @@
+import { describe, expect, it } from "vitest";
+import { assembleWorkspace, projectLifecycle, type LifecycleArtifactRow } from "./projectors.js";
+
+/**
+ * Stage truth derived from durable artifacts.
+ *
+ * The blocking stage is the first gate that failed in EXECUTION order, not the
+ * first stage a reader finds incomplete. Those differ, and the difference is the
+ * whole point: a run can complete Guardian and still have been stopped by
+ * something evaluated before it.
+ */
+
+const workflow = (state: string): LifecycleArtifactRow => ({ kind: "WORKFLOW", payload: { state } });
+const plan = (): LifecycleArtifactRow => ({ kind: "PLAN", payload: { plan: { steps: [] } } });
+const planVerification = (status: string): LifecycleArtifactRow => ({
+  kind: "PLAN_VERIFICATION",
+  payload: { verification: { status } },
+});
+const proof = (status: string, method: string, constraintId: string): LifecycleArtifactRow => ({
+  kind: "PROOF",
+  payload: { status, method, constraintId },
+});
+const action = (preservesIntent: boolean): LifecycleArtifactRow => ({
+  kind: "ACTION",
+  payload: { deterministicActionFidelity: { preservesIntent } },
+});
+const guardian = (decision: string, criticalFailure = false): LifecycleArtifactRow => ({
+  kind: "GUARDIAN",
+  payload: { verdict: { decision, semanticStatus: "CLEAR", criticalFailure } },
+});
+const outcome = (): LifecycleArtifactRow => ({ kind: "OUTCOME_CONTRACT", payload: { id: "outcome-1" } });
+
+const satisfiedProofs = (n: number) =>
+  Array.from({ length: n }, (_, i) => proof("SATISFIED", "authoritative-proof-handoff", `c-${i}`));
+
+const stageOf = (view: ReturnType<typeof projectLifecycle>, stage: string) =>
+  view.stages.find((row) => row.stage === stage);
+
+describe("successful evidenced workflow", () => {
+  const view = projectLifecycle({
+    artifacts: [
+      ...satisfiedProofs(5),
+      plan(),
+      planVerification("VERIFIED"),
+      action(true),
+      guardian("ALLOW"),
+      workflow("AUTHORIZED"),
+      outcome(),
+    ],
+    readiness: "ACTIONABLE",
+    sideEffectCount: 1,
+    provenanceNodeCount: 13,
+  });
+
+  it("reports no blocking stage", () => {
+    expect(view.blockingStage).toBeUndefined();
+    expect(view.blockingReason).toBeUndefined();
+  });
+
+  it("projects Guardian completed, Authority reached, execution and outcome produced", () => {
+    expect(stageOf(view, "guardian")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "guardian")?.detail).toBe("ALLOW");
+    expect(stageOf(view, "authority")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "preparedAction")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "execution")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "outcome")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "provenance")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "verification")?.detail).toBe("ACTIONABLE");
+    expect(stageOf(view, "evidence")?.detail).toBe("5 of 5 required proofs satisfied");
+  });
+});
+
+describe("action-fidelity blocked workflow", () => {
+  // Proofs all pass and the plan verifies: the evidence attests the intent
+  // truthfully. What fails is that the proposed action no longer matches it.
+  const view = projectLifecycle({
+    artifacts: [
+      ...satisfiedProofs(5),
+      plan(),
+      planVerification("VERIFIED"),
+      action(false),
+      guardian("ALLOW"),
+      workflow("BLOCKED"),
+    ],
+    readiness: "ACTIONABLE",
+  });
+
+  it("blames action fidelity, not Guardian", () => {
+    expect(view.blockingStage).toBe("actionFidelity");
+    expect(view.blockingReason).toContain("did not preserve the recorded human intent");
+  });
+
+  it("still reports Guardian as completed, and Authority as not reached", () => {
+    expect(stageOf(view, "guardian")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "evidence")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "planVerification")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "authority")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "execution")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "outcome")?.status).toBe("NOT_PRODUCED");
+  });
+});
+
+describe("proof-missing workflow", () => {
+  const view = projectLifecycle({
+    artifacts: [
+      proof("UNKNOWN", "authoritative-proof-handoff-absent", "c-0"),
+      proof("UNKNOWN", "authoritative-proof-handoff-absent", "c-1"),
+      plan(),
+      planVerification("VERIFIED"),
+      action(true),
+      guardian("ALLOW"),
+      workflow("BLOCKED"),
+    ],
+    readiness: "ACTIONABLE",
+  });
+
+  it("names evidence as the blocker and says why", () => {
+    expect(view.blockingStage).toBe("evidence");
+    expect(view.blockingReason).toContain("no verified evidence was bound");
+    expect(stageOf(view, "evidence")?.status).toBe("BLOCKED");
+  });
+
+  it("does not blame Guardian for a missing proof summary", () => {
+    expect(stageOf(view, "guardian")?.status).toBe("COMPLETED");
+    expect(view.blockingStage).not.toBe("guardian");
+  });
+});
+
+describe("Guardian-not-reached workflow", () => {
+  // Plan verification rejected, so the run never got to Guardian.
+  const view = projectLifecycle({
+    artifacts: [plan(), planVerification("REJECTED"), workflow("BLOCKED")],
+    readiness: "PLANNABLE",
+  });
+
+  it("represents Guardian as NOT_REACHED, never as unavailable", () => {
+    expect(stageOf(view, "guardian")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "guardian")?.detail).toBeUndefined();
+  });
+
+  it("names plan verification as the blocker", () => {
+    expect(view.blockingStage).toBe("planVerification");
+    expect(stageOf(view, "planVerification")?.status).toBe("BLOCKED");
+    expect(stageOf(view, "authority")?.status).toBe("NOT_REACHED");
+  });
+});
+
+describe("historical workflow with an incomplete artifact set", () => {
+  // Older runs predate several artifact kinds. Assembly must not crash, and must
+  // not invent stages it has no evidence for.
+  const view = projectLifecycle({ artifacts: [workflow("AUTHORIZED")] });
+
+  it("assembles without throwing and reports what it cannot see", () => {
+    expect(stageOf(view, "intent")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "evidence")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "plan")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "planVerification")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "guardian")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "outcome")?.status).toBe("NOT_PRODUCED");
+    expect(stageOf(view, "provenance")?.status).toBe("NOT_PRODUCED");
+  });
+
+  it("claims no blocker it cannot evidence", () => {
+    expect(view.blockingStage).toBeUndefined();
+  });
+});
+
+describe("workspace assembly stays backward compatible", () => {
+  const base = {
+    summary: { intentId: "i-1" } as never,
+    semantic: { intentId: "i-1", constraints: [] } as never,
+    graph: { nodes: [], edges: [] } as never,
+    timeline: { events: [] } as never,
+  };
+
+  it("omits lifecycle entirely when none is supplied", () => {
+    const workspace = assembleWorkspace(base);
+    expect(workspace.lifecycle).toBeUndefined();
+    // The legacy Guardian default is untouched for callers that pass no Guardian.
+    expect(workspace.guardian.aggregator.decision).toBe("UNAVAILABLE");
+  });
+
+  it("carries lifecycle through when supplied", () => {
+    const lifecycle = projectLifecycle({ artifacts: [workflow("BLOCKED"), plan(), planVerification("REJECTED")] });
+    const workspace = assembleWorkspace({ ...base, lifecycle });
+    expect(workspace.lifecycle?.blockingStage).toBe("planVerification");
+  });
+});

@@ -138,6 +138,8 @@ export const VIEW_KEY_ALLOWLISTS = {
     "dedupeKey",
   ],
   TimelineView: ["events"],
+  LifecycleStageView: ["stage", "status", "detail"],
+  LifecycleView: ["stages", "blockingStage", "blockingReason"],
   IntentWorkspaceView: [
     "summary",
     "semantic",
@@ -149,6 +151,7 @@ export const VIEW_KEY_ALLOWLISTS = {
     "resolution",
     "graph",
     "timeline",
+    "lifecycle",
   ],
 } as const;
 

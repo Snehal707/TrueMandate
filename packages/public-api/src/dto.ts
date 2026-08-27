@@ -55,6 +55,8 @@ export function toPublicWorkspaceView(raw: IntentWorkspaceView): IntentWorkspace
     ...VIEW_KEY_ALLOWLISTS.ProvenanceEdgeView,
     ...VIEW_KEY_ALLOWLISTS.TimelineView,
     ...VIEW_KEY_ALLOWLISTS.TimelineEventView,
+    ...VIEW_KEY_ALLOWLISTS.LifecycleView,
+    ...VIEW_KEY_ALLOWLISTS.LifecycleStageView,
     "decision",
     "semanticStatus",
     "criticalFailure",

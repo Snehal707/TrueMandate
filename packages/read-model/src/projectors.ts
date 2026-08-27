@@ -20,6 +20,9 @@ import type {
   GraphFilter,
   GuardianView,
   IntentSummaryView,
+  LifecycleStageStatus,
+  LifecycleStageView,
+  LifecycleView,
   IntentWorkspaceView,
   OutcomeView,
   PlanView,
@@ -380,6 +383,154 @@ export function mergeTimeline(
   return redactForUi({ events: out });
 }
 
+/** One durable workflow artifact, as the owner stores it. */
+export interface LifecycleArtifactRow {
+  readonly kind: string;
+  readonly payload: Record<string, unknown>;
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Derive what actually happened from durable artifacts.
+ *
+ * The blocking stage is the first gate that failed **in execution order** — the
+ * order the engine evaluates them — not the first stage a UI happens to find
+ * incomplete. Those differ: a run can complete Guardian and still be stopped by
+ * something evaluated before it, and reporting Guardian in that case names the
+ * wrong component.
+ *
+ * Only public-safe values are read: statuses, decisions, counts and identifiers
+ * the workflow already exposes. No token, grant, credential, evidence body or
+ * model internal is touched.
+ */
+export function projectLifecycle(input: {
+  readonly artifacts: readonly LifecycleArtifactRow[];
+  readonly readiness?: string;
+  readonly sideEffectCount?: number;
+  readonly provenanceNodeCount?: number;
+}): LifecycleView {
+  const of = (kind: string) => input.artifacts.find((row) => row.kind === kind)?.payload;
+  const all = (kind: string) => input.artifacts.filter((row) => row.kind === kind).map((row) => row.payload);
+
+  const workflow = of("WORKFLOW");
+  const plan = of("PLAN");
+  const planVerification = record(of("PLAN_VERIFICATION")?.verification);
+  const action = of("ACTION");
+  const guardianVerdict = record(of("GUARDIAN")?.verdict);
+  const proofs = all("PROOF");
+  const outcome = of("OUTCOME_CONTRACT") ?? of("OUTCOME");
+
+  const workflowState = typeof workflow?.state === "string" ? workflow.state : undefined;
+  const authorityReached = workflowState === "AUTHORITY_EVALUATION" ||
+    workflowState === "AUTHORIZED" ||
+    workflowState === "AWAITING_APPROVAL" ||
+    workflowState === "EXECUTED";
+  const fidelity = record(action?.deterministicActionFidelity);
+  const fidelityFailed = fidelity?.preservesIntent === false;
+
+  const unsatisfied = proofs.filter((proof) => proof.status !== "SATISFIED");
+  const proofsAbsent = proofs.some(
+    (proof) => typeof proof.method === "string" && proof.method.endsWith("-absent"),
+  );
+  const planVerified = planVerification?.status === "VERIFIED";
+  const guardianDecision = typeof guardianVerdict?.decision === "string" ? guardianVerdict.decision : undefined;
+  const guardianBlocked = guardianDecision === "BLOCK" || guardianVerdict?.criticalFailure === true;
+
+  // Execution order: plan verification, then proofs, then action fidelity, then
+  // Guardian, then the eligibility conjunction itself.
+  let blockingStage: string | undefined;
+  let blockingReason: string | undefined;
+  if (plan && !planVerified) {
+    blockingStage = "planVerification";
+    blockingReason = "Plan verification did not verify the plan against the recorded intent.";
+  } else if (proofsAbsent) {
+    blockingStage = "evidence";
+    blockingReason = "Required proofs were not established: no verified evidence was bound to this workflow.";
+  } else if (unsatisfied.length > 0) {
+    blockingStage = "evidence";
+    blockingReason = `${unsatisfied.length} of ${proofs.length} required proof obligations were not satisfied.`;
+  } else if (fidelityFailed) {
+    blockingStage = "actionFidelity";
+    blockingReason = "The proposed action did not preserve the recorded human intent.";
+  } else if (guardianBlocked) {
+    blockingStage = "guardian";
+    blockingReason = "Guardian review blocked the action.";
+  } else if (workflowState === "BLOCKED") {
+    blockingStage = "authorityEligibility";
+    blockingReason = "The workflow did not become eligible for authority evaluation.";
+  }
+
+  const blockedAt = (stage: string): LifecycleStageStatus =>
+    blockingStage === stage ? "BLOCKED" : "COMPLETED";
+
+  const stages: LifecycleStageView[] = [
+    { stage: "intent", status: "COMPLETED" },
+    { stage: "verification", status: "COMPLETED", ...(input.readiness ? { detail: input.readiness } : {}) },
+  ];
+
+  if (proofs.length > 0) {
+    stages.push({
+      stage: "evidence",
+      status: blockingStage === "evidence" ? "BLOCKED" : "COMPLETED",
+      detail: `${proofs.length - unsatisfied.length} of ${proofs.length} required proofs satisfied`,
+    });
+  } else {
+    stages.push({ stage: "evidence", status: "NOT_REACHED" });
+  }
+
+  stages.push({ stage: "plan", status: plan ? "COMPLETED" : "NOT_REACHED" });
+  stages.push({
+    stage: "planVerification",
+    status: planVerification ? blockedAt("planVerification") : "NOT_REACHED",
+    ...(planVerification?.status ? { detail: String(planVerification.status) } : {}),
+  });
+
+  // Guardian completing and Guardian permitting are different facts. A completed
+  // review whose verdict is not publicly exposable is still COMPLETED, never
+  // "unavailable" — absence of an exposed verdict is not absence of a review.
+  stages.push({
+    stage: "guardian",
+    status: guardianVerdict
+      ? (guardianBlocked ? "BLOCKED" : "COMPLETED")
+      : "NOT_REACHED",
+    ...(guardianDecision ? { detail: guardianDecision } : guardianVerdict ? { detail: "REVIEW_COMPLETED" } : {}),
+  });
+
+  stages.push({
+    stage: "authority",
+    status: authorityReached ? "COMPLETED" : "NOT_REACHED",
+    ...(workflowState ? { detail: workflowState } : {}),
+  });
+  stages.push({ stage: "preparedAction", status: workflowState === "AUTHORIZED" || workflowState === "EXECUTED" ? "COMPLETED" : "NOT_REACHED" });
+
+  // Execution is claimed only from a recorded side effect. An authorized workflow
+  // that has not committed has not executed, and absence of a side effect is not
+  // itself proof that nothing happened elsewhere — it is only what this record shows.
+  const sideEffects = input.sideEffectCount ?? 0;
+  stages.push({
+    stage: "execution",
+    status: sideEffects > 0 ? "COMPLETED" : "NOT_REACHED",
+    detail: `${sideEffects} recorded side effect(s)`,
+  });
+  stages.push({ stage: "outcome", status: outcome ? "COMPLETED" : "NOT_PRODUCED" });
+  stages.push({
+    stage: "provenance",
+    status: (input.provenanceNodeCount ?? 0) > 0 ? "COMPLETED" : "NOT_PRODUCED",
+    ...(input.provenanceNodeCount ? { detail: `${input.provenanceNodeCount} recorded node(s)` } : {}),
+  });
+
+  return redactForUi({
+    stages,
+    ...(blockingStage ? { blockingStage } : {}),
+    ...(blockingReason ? { blockingReason } : {}),
+  });
+}
+
 export function assembleWorkspace(parts: {
   readonly summary: IntentSummaryView;
   readonly semantic: SemanticStateView;
@@ -391,8 +542,10 @@ export function assembleWorkspace(parts: {
   readonly resolution?: ResolutionView;
   readonly graph: ProvenanceGraphView;
   readonly timeline: TimelineView;
+  readonly lifecycle?: LifecycleView;
 }): IntentWorkspaceView {
   return redactForUi({
+    ...(parts.lifecycle ? { lifecycle: parts.lifecycle } : {}),
     summary: parts.summary,
     semantic: parts.semantic,
     plan: parts.plan ?? { steps: [] },
