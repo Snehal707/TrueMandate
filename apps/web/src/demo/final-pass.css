@@ -266,6 +266,142 @@
 .tm-failclosed-detail code { font-size: 0.74rem; color: var(--text-dim); background: var(--surface-2); padding: 3px 8px; border-radius: 5px; }
 .tm-failclosed-detail span { color: var(--text-faint); font-size: 0.82rem; }
 
+/* ---------- Original request (Live Proof) ----------
+   The human request is the headline of the report; the workflow ID is a lookup
+   key. Accent is the intent blue from the stage ramp, because this *is* stage 1. */
+.tm-request-card {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  padding: 20px 24px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  overflow: hidden;
+}
+.tm-request-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--blue), color-mix(in srgb, var(--blue) 18%, transparent));
+}
+.tm-request-card > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tm-request-text {
+  margin: 0;
+  max-width: 92ch;
+  color: var(--text-strong);
+  font-size: 1.12rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.tm-request-text.alt { font-size: 0.94rem; font-weight: 400; color: var(--text-dim); }
+.tm-request-missing {
+  margin: 0;
+  max-width: 86ch;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.tm-request-diverged {
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 40%, transparent);
+}
+.tm-request-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 18px;
+}
+.tm-request-domain {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-strong);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.tm-request-domain b {
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.tm-request-workflow {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+.tm-request-interpretation { margin: 0; }
+.tm-request-interpretation > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  list-style: none;
+}
+.tm-request-interpretation > summary::-webkit-details-marker { display: none; }
+.tm-request-interpretation > summary::before { content: "\25B8"; color: var(--text-faint); }
+.tm-request-interpretation[open] > summary::before { content: "\25BE"; }
+.tm-request-interpretation > summary > span { color: var(--text-faint); font-size: 0.76rem; }
+.tm-request-interpretation > .body { display: grid; gap: 10px; padding-top: 10px; }
+.tm-request-interpretation-note,
+.tm-request-interpretation-empty {
+  margin: 0;
+  max-width: 80ch;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.tm-request-interpretation ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.tm-request-interpretation li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 0.8rem;
+}
+.tm-request-interpretation li b { color: var(--text-strong); }
+.tm-request-interpretation li span {
+  color: var(--text-faint);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.tm-request-interpretation li code { color: var(--blue); font-size: 0.76rem; }
+.tm-request-interpretation li em {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 0.68rem;
+  font-style: normal;
+  letter-spacing: 0.08em;
+}
+
+/* The request now leads the report, so the grid's ID cell steps back. */
+.tm-live-summary-grid .tm-live-summary-card:nth-child(2) strong {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
 /* ---------- Responsive: protects 1920x1080 capture and laptops ---------- */
 @media (max-width: 1400px) {
   .tm-rail-track { grid-template-columns: repeat(4, 1fr); }
@@ -278,4 +414,7 @@
   .tm-pipeline { grid-template-columns: 1fr 1fr; }
   .tm-rail-track { grid-template-columns: repeat(2, 1fr); }
   .tm-cta.focused { flex-direction: column; align-items: stretch; }
+  .tm-request-card { padding: 16px 18px; }
+  .tm-request-text { font-size: 1rem; }
+  .tm-request-workflow { margin-left: 0; }
 }

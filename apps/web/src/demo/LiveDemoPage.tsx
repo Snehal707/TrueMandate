@@ -302,6 +302,109 @@ export function StageRail(props: { readonly stages: readonly RailStage[] }) {
   );
 }
 
+/**
+ * What the human actually asked for.
+ *
+ * The request is rendered verbatim from the submitted SdkWorkflowRequest — never
+ * summarised, rewritten, or reconstructed from downstream artifacts. Where that
+ * text came from is stated explicitly, because "submitted in this session" and
+ * "confirmed against the backend's recorded intent" are different claims.
+ *
+ * The verified interpretation (the constraints the system extracted) is a
+ * separate, separately-labelled field. It is never presented as the request.
+ */
+export function OriginalRequestCard(props: { readonly run: LiveRunState }) {
+  const { run } = props;
+  const submitted = run.request.intent.kind === "RAW" ? run.request.intent.rawText : undefined;
+  const recorded = run.workspace?.summary.rawIntent;
+  const constraints = run.workspace?.semantic?.constraints ?? [];
+
+  const diverged = submitted !== undefined && recorded !== undefined && submitted !== recorded;
+
+  let sourceBadge: { readonly tone: string; readonly text: string };
+  if (submitted === undefined) {
+    sourceBadge = recorded !== undefined
+      ? { tone: "neutral", text: "Recorded intent · not submitted from this session" }
+      : { tone: "warn", text: "Original request unavailable" };
+  } else if (diverged) {
+    sourceBadge = { tone: "warn", text: "Submitted text differs from the recorded intent" };
+  } else if (recorded !== undefined) {
+    sourceBadge = { tone: "good", text: "Confirmed by the recorded intent" };
+  } else {
+    sourceBadge = { tone: "info", text: "Submitted in this session · not yet read back" };
+  }
+
+  // Show the submitted text when we have it; fall back to the recorded intent
+  // only when nothing was submitted from this client.
+  const primary = submitted ?? recorded;
+
+  return (
+    <section className="tm-request-card" aria-label="Original request">
+      <header>
+        <p className="tm-live-kicker">Original request</p>
+        <span className={`tm-badge ${sourceBadge.tone}`}>{sourceBadge.text}</span>
+      </header>
+
+      {primary === undefined ? (
+        <p className="tm-request-missing">
+          No human request text is available for this workflow. Nothing is inferred from
+          downstream artifacts.
+        </p>
+      ) : (
+        <blockquote className="tm-request-text">{primary}</blockquote>
+      )}
+
+      {diverged ? (
+        <div className="tm-request-diverged">
+          <p className="tm-live-kicker">Recorded intent returned by the backend</p>
+          <blockquote className="tm-request-text alt">{recorded}</blockquote>
+        </div>
+      ) : null}
+
+      <div className="tm-request-meta">
+        <span className="tm-request-domain">
+          <b>Domain</b>
+          {liveDomainLabel(run.domainId, run.customPackId)}
+        </span>
+        <code className="tm-request-workflow">{run.workflow.workflowId}</code>
+      </div>
+
+      <details className="tm-request-interpretation">
+        <summary>
+          Verified interpretation
+          <span>
+            {constraints.length > 0
+              ? `${constraints.length} constraint${constraints.length === 1 ? "" : "s"} extracted`
+              : "Not returned yet"}
+          </span>
+        </summary>
+        <div className="body">
+          <p className="tm-request-interpretation-note">
+            What the runtime proved this request means. This is the system&rsquo;s interpretation,
+            not the human&rsquo;s wording.
+          </p>
+          {constraints.length > 0 ? (
+            <ul>
+              {constraints.map((constraint) => (
+                <li key={constraint.id}>
+                  <b>{constraint.concept}</b>
+                  <span>{constraint.operator}</span>
+                  <code>{String(constraint.expectedValue)}</code>
+                  <em>{constraint.criticality}</em>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="tm-request-interpretation-empty">
+              No public constraint set has been returned for this workflow yet.
+            </p>
+          )}
+        </div>
+      </details>
+    </section>
+  );
+}
+
 function StageCard(props: {
   readonly title: string;
   readonly state: "present" | "waiting";
@@ -686,6 +789,8 @@ export function LiveDemoPage() {
             </div>
             <span className="tm-live-route-chip">GET /v1/workflows/:workflowId</span>
           </div>
+
+          <OriginalRequestCard run={run} />
 
           <div className="tm-live-summary-grid">
             <div className="tm-live-summary-card">
