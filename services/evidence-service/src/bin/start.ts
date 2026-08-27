@@ -60,6 +60,19 @@ async function main(): Promise<void> {
       const result = await service.getClaim(id);
       return result.ok ? result.value : undefined;
     },
+    // Read-through by envelope. Confers no trust: the caller must already hold
+    // the envelope id, and could read each claim individually anyway.
+    listClaimsForEnvelope: async (envelopeId: string): Promise<readonly EvidenceClaim[]> => {
+      const rows = await persist.bundle.evidenceClaims.list();
+      const claims: EvidenceClaim[] = [];
+      for (const row of rows) {
+        const claim = row as EvidenceClaim | undefined;
+        if (!claim || claim.evidenceId !== envelopeId || claim.invalidatedAt) continue;
+        const validated = await service.getClaim(String(claim.id));
+        if (validated.ok) claims.push(validated.value);
+      }
+      return claims;
+    },
     // The route layer has already validated the fixture against the
     // caller-bound namespace schema; this owner only persists.
     persistFixture: async (fixture: unknown): Promise<Result<unknown>> => {

@@ -1,5 +1,5 @@
 import type { InternalRoute } from "@truemandate/cloud-runtime";
-import { ErrorCode, err, type EvidenceClaim, type EvidenceEnvelope, type Result } from "@truemandate/protocol";
+import { ErrorCode, err, ok, type EvidenceClaim, type EvidenceEnvelope, type Result } from "@truemandate/protocol";
 import {
   EvidenceClaimSchema,
   EvidenceEnvelopeSchema,
@@ -81,6 +81,12 @@ export function composeEvidenceSubmitCallerEmails(
 export function createEvidenceInternalRoutes(owner: {
   getEnvelope(id: string): Promise<EvidenceEnvelope | undefined>;
   getClaim(id: string): Promise<EvidenceClaim | undefined>;
+  /**
+   * What an envelope asserts. A consumer holding an envelope id can already read
+   * every claim on it one at a time; this only spares it from having to guess the
+   * ids. Read-only, and it confers no trust of its own.
+   */
+  listClaimsForEnvelope?(envelopeId: string): Promise<readonly EvidenceClaim[]>;
   /** Deliberately narrow, owner-backed acceptance fixture seam. Receives the route-validated fixture. */
   persistFixture?(fixture: unknown): Promise<Result<unknown>>;
   /** Governed production evidence submission seam. Never a verifier fixture writer. */
@@ -115,6 +121,26 @@ export function createEvidenceInternalRoutes(owner: {
       const raw = await owner.getClaim(params.id ?? "");
       return response(raw ? parseWithSchema(EvidenceClaimSchema, raw, "OwnerEvidenceClaim") : err(ErrorCode.VALIDATION_FAILED, "Unknown evidence claim"));
     } },
+    ...(owner.listClaimsForEnvelope ? [{
+      method: "GET" as const,
+      pattern: "/internal/evidence/envelopes/:id/claims",
+      allowedCallers: readCallers.length > 0 ? readCallers : undefined,
+      handler: async ({ params }: { params: Record<string, string | undefined> }) => {
+        const envelopeId = params.id ?? "";
+        const envelope = await owner.getEnvelope(envelopeId);
+        if (!envelope) {
+          return response(err(ErrorCode.VALIDATION_FAILED, "Unknown evidence envelope"));
+        }
+        const rows = await owner.listClaimsForEnvelope!(envelopeId);
+        const claims: unknown[] = [];
+        for (const row of rows) {
+          const parsedClaim = parseWithSchema(EvidenceClaimSchema, row, "OwnerEvidenceClaim");
+          if (!parsedClaim.ok) return response(parsedClaim);
+          claims.push(parsedClaim.value);
+        }
+        return response(ok({ envelopeId, claims }));
+      },
+    }] : []),
     ...(owner.persistFixture && fixtureWriters.length > 0 ? [{
       method: "POST" as const,
       pattern: "/internal/evidence/acceptance-fixtures",

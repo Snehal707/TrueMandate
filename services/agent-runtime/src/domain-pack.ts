@@ -26,6 +26,12 @@ export interface WorkflowRequestBase {
   readonly adaptiveSubjectId?: string;
   readonly idempotencyKey: string;
   readonly approvalId?: string;
+  /**
+   * Evidence the caller references, never evidence the caller vouches for. Every
+   * pack schema already declares this; the engine reads it to resolve which
+   * envelopes are ALREADY trusted before the evidence-backed readiness handoff.
+   */
+  readonly evidenceIds?: readonly string[];
 }
 
 /** Engine-owned context for building ActionProposal business fields. */

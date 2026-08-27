@@ -225,6 +225,19 @@ export async function runtime(options: {
       concept: string,
     ): Promise<Result<unknown>>;
   };
+  /**
+   * Suppresses the harness's synthesized proofSummary so a test can exercise the
+   * production path, where the summary only exists if evidence-backed readiness
+   * actually produced one.
+   */
+  omitProofSummary?: boolean;
+  /** The evidence-backed readiness handoff the lifecycle now calls in-process. */
+  preExecutionReadiness?: { evaluate(raw: unknown): Promise<Result<unknown>> };
+  evidence?: {
+    getEnvelope(id: string): Promise<Result<unknown>>;
+    getClaim(id: string): Promise<Result<unknown>>;
+    listClaimsForEnvelope?(id: string): Promise<Result<unknown>>;
+  };
   proofSummaryMutator?: (input: {
     readonly packId: string;
     readonly state: IntentState;
@@ -365,7 +378,8 @@ export async function runtime(options: {
   };
   const sharedDeps = {
     intents: authoritative, owner: owner as never,
-    evidence: { getEnvelope: async (id) => ok({ id, contentHash: H("e") } as never), getClaim: async () => err(ErrorCode.VALIDATION_FAILED, "not used") },
+    evidence: options.evidence ?? { getEnvelope: async (id) => ok({ id, contentHash: H("e") } as never), getClaim: async () => err(ErrorCode.VALIDATION_FAILED, "not used") },
+    ...(options.preExecutionReadiness ? { preExecutionReadiness: options.preExecutionReadiness } : {}),
     authority: {
       evaluateWorkflow: async (body) => { calls.evaluation += 1; calls.evaluationBody = body as never; return resultFromRoute(await evaluationRoute.handler({ body, headers: {}, params: {} })); },
       bindAndMint: async (body) => { calls.mint += 1; return resultFromRoute(await mintRoute.handler({ body, headers: {}, params: {} })); },
@@ -594,6 +608,9 @@ export async function runtime(options: {
       },
       verifiedEvidenceRefs: evidenceRefs,
     };
+    // The production path has no synthesized summary: it exists only if the
+    // evidence-backed readiness handoff produced one.
+    if (options.omitProofSummary) return;
     const summary = options.proofSummaryMutator
       ? options.proofSummaryMutator({ packId, state, summary: summaryBase })
       : summaryBase;

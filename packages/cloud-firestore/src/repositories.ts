@@ -273,6 +273,8 @@ export interface KeyValueRepository<T> {
   get(id: string): Promise<T | undefined>;
   /** Returns false if key already existed (dedupe). */
   putIfAbsent(id: string, value: T): Promise<boolean>;
+  /** Whole-collection read. Callers filter; there is no index behind this. */
+  list(): Promise<readonly T[]>;
 }
 
 export class FirestoreKeyValueRepository<T> implements KeyValueRepository<T> {
@@ -296,6 +298,11 @@ export class FirestoreKeyValueRepository<T> implements KeyValueRepository<T> {
       await tx.set(path, value);
       return true;
     });
+  }
+
+  /** Whole-collection read. Callers filter; there is no index behind this. */
+  async list(): Promise<readonly T[]> {
+    return this.store.listCollection<T>(this.collection);
   }
 }
 

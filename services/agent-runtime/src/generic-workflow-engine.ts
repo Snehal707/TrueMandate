@@ -88,11 +88,26 @@ interface SemanticReferences {
  * deliberately absent from DomainPack — packs cannot mint grants, issue
  * CommitTokens, or call Gateway commit.
  */
+/**
+ * The existing evidence-backed readiness operation (PreExecutionReadinessService).
+ * Structural, so the engine does not import the service module — that module
+ * resolves the domain pack registry, which would close an import cycle.
+ */
+export interface PreExecutionReadinessPort {
+  evaluate(raw: unknown): Promise<Result<unknown>>;
+}
+
 export interface GenericWorkflowEngineDeps<TInput extends WorkflowRequestBase> {
   readonly pack: DomainPack<TInput>;
   readonly intents: AuthoritativeIntentService;
+  /**
+   * Optional. When absent the lifecycle behaves exactly as it did before the
+   * evidence-backed readiness handoff was wired in: no supersession is attempted.
+   */
+  readonly preExecutionReadiness?: PreExecutionReadinessPort;
   readonly owner: IntentProvenanceS2SClient;
-  readonly evidence: Pick<EvidenceS2SClient, "getEnvelope" | "getClaim">;
+  readonly evidence: Pick<EvidenceS2SClient, "getEnvelope" | "getClaim"> &
+    Partial<Pick<EvidenceS2SClient, "listClaimsForEnvelope">>;
   readonly authority: Pick<AuthorityS2SClient, "evaluateWorkflow" | "bindAndMint" | "createApproval" | "getApproval">;
   readonly outcomes?: Pick<OutcomeS2SClient, "createContract">;
   readonly gateway?: Pick<GatewayS2SClient, "prepareFromReferences" | "authorize" | "commit">;
@@ -157,6 +172,95 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
     return ok(parsed);
   }
 
+  /**
+   * Run the existing evidence-backed readiness handoff before workflow identity is
+   * bound to a state hash. That operation owns every decision here: it derives the
+   * proof obligations, evaluates them against verified evidence, and only then
+   * supersedes the IntentState with an attached proof summary and a promoted
+   * readiness tier. This engine contributes no judgement of its own.
+   *
+   * The engine consumes trust; it never confers it. Envelopes the submitter could
+   * still influence (UNTRUSTED_EXTERNAL) are dropped before the handoff, so no
+   * caller can promote its own readiness by attaching content it authored.
+   */
+  private async supersedeWithVerifiedEvidence(input: {
+    readonly intentId: string;
+    readonly packId: string;
+    readonly state: IntentState;
+    readonly evidenceIds: readonly string[];
+  }): Promise<boolean> {
+    if (!this.deps.preExecutionReadiness || input.evidenceIds.length === 0) return false;
+
+    const verifiedEvidenceIds: string[] = [];
+    const verifiedClaimIds: string[] = [];
+    for (const evidenceId of input.evidenceIds) {
+      const envelope = await this.deps.evidence.getEnvelope(evidenceId);
+      if (!envelope.ok) continue;
+      if (envelope.value.trustClass === TrustClass.UNTRUSTED_EXTERNAL) continue;
+      verifiedEvidenceIds.push(evidenceId);
+      const claims = await this.deps.evidence.listClaimsForEnvelope?.(evidenceId);
+      if (claims?.ok) {
+        for (const claim of claims.value.claims) verifiedClaimIds.push(String(claim.id));
+      }
+    }
+    if (verifiedEvidenceIds.length === 0) return false;
+
+    const evaluated = await this.deps.preExecutionReadiness.evaluate({
+      packId: input.packId,
+      intentId: input.intentId,
+      intentStateId: input.state.id,
+      expectedIntentStateHash: input.state.stateHash,
+      verifiedEvidenceIds,
+      verifiedClaimIds,
+    });
+    // Fail closed without failing the workflow: an unsatisfied obligation must still
+    // reach the ordinary BLOCKED path with its artifacts, not surface as an error.
+    if (!evaluated.ok) return false;
+    const value = evaluated.value as { readonly superseded?: unknown } | null;
+    return Boolean(value && typeof value === "object" && value.superseded === true);
+  }
+
+  /**
+   * The IntentState the whole workflow will be bound to, decided BEFORE workflow
+   * identity is derived from its hash. Binding the workflow to S0 while planning
+   * and Authority consume S1 is the split identity this exists to prevent.
+   *
+   * When the caller named an explicit state and evidence-backed readiness advanced
+   * the tip past it, the caller's binding expectation is no longer satisfiable.
+   * Rather than silently substituting a state the caller never named, this re-drives
+   * them through the retry the two-leg submission protocol already implements.
+   */
+  private async resolveEvidenceBackedState(
+    input: TInput,
+    current: IntentState,
+  ): Promise<Result<IntentState>> {
+    const superseded = await this.supersedeWithVerifiedEvidence({
+      intentId: input.intentId,
+      packId: this.deps.pack.id,
+      state: current,
+      evidenceIds: input.evidenceIds ?? [],
+    });
+    if (!superseded) return ok(current);
+
+    const advanced = await this.deps.intents.getCurrentStateForIntent(input.intentId);
+    if (!advanced.ok) return advanced;
+    if (advanced.value.id === current.id) return ok(current);
+
+    if (input.expectedIntentStateId || input.expectedIntentStateHash) {
+      return err(
+        ErrorCode.INTENT_STATE_NOT_READY,
+        "Evidence-backed readiness superseded the IntentState; resubmit bound to the successor",
+        {
+          retryable: true,
+          supersededIntentStateId: current.id,
+          intentStateId: advanced.value.id,
+          intentStateHash: advanced.value.stateHash,
+        },
+      );
+    }
+    return ok(advanced.value);
+  }
+
   private async resolveAuthoritativeProofRows(input: {
     readonly workflowId: string;
     readonly state: IntentState;
@@ -189,6 +293,25 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
           evidenceRefs,
           status,
           method: "authoritative-proof-handoff-missing",
+        })),
+      });
+    }
+
+    // An absent proof summary and a malformed one fail identically, but they mean
+    // different things: absent means the evidence-backed readiness handoff never
+    // ran for this IntentState, malformed means it ran and produced something this
+    // engine cannot read. Collapsing both into "invalid" hides the former.
+    if (artifact.value.payload.proofSummary === undefined) {
+      return ok({
+        completeProofs: false,
+        proofRows: invalidRows.map(({ obligation, status, evidenceRefs }) => ({
+          obligationId: proofObligationId(
+            input.planObligations.find((row) => row.constraintId === obligation.constraintId) ?? obligation,
+          ),
+          constraintId: obligation.constraintId,
+          evidenceRefs,
+          status,
+          method: "authoritative-proof-handoff-absent",
         })),
       });
     }
@@ -333,9 +456,13 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       return err(ErrorCode.SCHEMA_PARSE_FAILED, `Invalid ${this.deps.pack.id} workflow request`, { issues: parsed.error.issues });
     }
     const input = parsed.data;
-    const state = await this.deps.intents.getCurrentStateForIntent(input.intentId, input.expectedIntentStateId);
+    const currentState = await this.deps.intents.getCurrentStateForIntent(input.intentId, input.expectedIntentStateId);
+    if (!currentState.ok) return currentState;
+    if (input.expectedIntentStateHash && input.expectedIntentStateHash !== currentState.value.stateHash) return err(ErrorCode.GRANT_INTENT_STATE_MISMATCH, "Expected IntentState hash is stale");
+    // Evidence-backed readiness runs here and nowhere else: after the caller's state
+    // binding is validated, before workflow identity is derived from the state hash.
+    const state = await this.resolveEvidenceBackedState(input, currentState.value);
     if (!state.ok) return state;
-    if (input.expectedIntentStateHash && input.expectedIntentStateHash !== state.value.stateHash) return err(ErrorCode.GRANT_INTENT_STATE_MISMATCH, "Expected IntentState hash is stale");
     const workflowId = this.deps.pack.assertWorkflowId(input, state.value.stateHash);
     if (!workflowId.ok) return workflowId;
     const existing = await this.existing(workflowId.value);

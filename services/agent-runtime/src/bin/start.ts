@@ -120,10 +120,19 @@ async function main(): Promise<void> {
   // Wave 2: durable workflow-stage timing (COMPILATION/VERIFICATION/GUARDIAN).
   // Fail-open — a Firestore write failure inside the store never throws into
   // the compile/verify/guardian pipeline it observes.
+  // Constructed before the engines: the same operation the internal route exposes
+  // is now also the lifecycle's own evidence-backed readiness handoff, called
+  // in-process so no service has to hold the verifier caller identity to reach it.
+  const preExecutionReadiness = new PreExecutionReadinessService({
+    intents,
+    owner: owner as ConstructorParameters<typeof PreExecutionReadinessService>[0]["owner"],
+    evidence,
+  });
   const sharedDeps = {
     intents,
     owner,
     evidence,
+    preExecutionReadiness,
     authority,
     outcomes,
     gateway,
@@ -160,11 +169,6 @@ async function main(): Promise<void> {
       invoiceCoordinator as GenericWorkflowEngine<WorkflowRequestBase>,
     logistics_fulfillment:
       logisticsCoordinator as GenericWorkflowEngine<WorkflowRequestBase>,
-  });
-  const preExecutionReadiness = new PreExecutionReadinessService({
-    intents,
-    owner: owner as ConstructorParameters<typeof PreExecutionReadinessService>[0]["owner"],
-    evidence,
   });
   const internalCoordinator = {
     run: (raw: unknown) => dispatcher.run(raw),

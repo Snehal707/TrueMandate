@@ -720,6 +720,14 @@ export class EvidenceS2SClient {
   async getClaim(id: string): Promise<Result<EvidenceClaim>> {
     return s2sResultFromHttp(await this.call("GET", `/internal/evidence/claims/${encodeURIComponent(id)}`));
   }
+  /** What an envelope asserts. Read-only; it confers no trust of its own. */
+  async listClaimsForEnvelope(
+    envelopeId: string,
+  ): Promise<Result<{ readonly envelopeId: string; readonly claims: readonly EvidenceClaim[] }>> {
+    return s2sResultFromHttp(
+      await this.call("GET", `/internal/evidence/envelopes/${encodeURIComponent(envelopeId)}/claims`),
+    ) as Result<{ readonly envelopeId: string; readonly claims: readonly EvidenceClaim[] }>;
+  }
   async submitEvidence(body: unknown): Promise<Result<unknown>> {
     return s2sResultFromHttp(await this.call("POST", "/internal/evidence/submissions", body));
   }
