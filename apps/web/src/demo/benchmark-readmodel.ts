@@ -130,6 +130,6 @@ export const BENCHMARK_READ_MODEL = {
     summary:
       "All 10 failures are generated execution-family rows (k = 02 or 05). The deterministic SUT's generic *_constraint HARD block fires before the adapterResult UNKNOWN branch, so the expected ALLOW/UNKNOWN/AWAITING_OUTCOME becomes BLOCK/BLOCKED/NONE.",
     source:
-      "services/benchmark-runner/src/adapters.ts deterministicShouldBlock(); docs/architecture/final-safe-demo-acceptance-report.md blocker #6",
+      "services/benchmark-runner/src/adapters.ts deterministicShouldBlock(); docs/archive/final-safe-demo-acceptance-report.md blocker #6",
   },
 } as const;

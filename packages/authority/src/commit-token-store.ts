@@ -11,7 +11,7 @@ import { parseCommitToken } from "./durable-read.js";
 /**
  * Single-use CommitToken store. consume() must be atomic (compare-and-set).
  * In-memory: single-process only — persistent TX required for multi-instance.
- * See docs/architecture/phase-7-stop-report.md.
+ * See docs/archive/phase-7-stop-report.md.
  */
 export interface CommitTokenStore {
   put(token: CommitToken): Promise<Result<CommitToken>>;

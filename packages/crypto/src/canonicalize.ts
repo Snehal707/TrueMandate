@@ -6,7 +6,7 @@
  * - Strings: JSON string escaping; Unicode code units preserved (no NFC rewrite)
  * - null / boolean: literal forms
  *
- * See docs/architecture/phase-1-2-assumptions.md.
+ * See docs/archive/phase-1-2-assumptions.md.
  */
 
 export type CanonicalValue =
