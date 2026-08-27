@@ -1,0 +1,450 @@
+[
+  {
+    "service": "tm-dev-web",
+    "observedAt": "2026-08-27T10:33:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.1485
+  },
+  {
+    "service": "tm-dev-web",
+    "observedAt": "2026-08-27T10:32:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.1485
+  },
+  {
+    "service": "tm-dev-web",
+    "observedAt": "2026-08-27T10:31:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.018500000000000003,
+    "memoryUtilization": 0.1485
+  },
+  {
+    "service": "tm-dev-web",
+    "observedAt": "2026-08-27T10:30:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.1385
+  },
+  {
+    "service": "tm-dev-web",
+    "observedAt": "2026-08-27T10:29:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.018500000000000003,
+    "memoryUtilization": 0.1385
+  },
+  {
+    "service": "tm-dev-web",
+    "observedAt": "2026-08-27T10:28:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.1385
+  },
+  {
+    "service": "tm-dev-web",
+    "observedAt": "2026-08-27T10:27:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.018500000000000003,
+    "memoryUtilization": 0.1385
+  },
+  {
+    "service": "tm-dev-web",
+    "observedAt": "2026-08-27T10:26:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.03925,
+    "memoryUtilization": 0.12925
+  },
+  {
+    "service": "tm-dev-public-bff",
+    "observedAt": "2026-08-27T10:33:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2695
+  },
+  {
+    "service": "tm-dev-public-bff",
+    "observedAt": "2026-08-27T10:32:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2695
+  },
+  {
+    "service": "tm-dev-public-bff",
+    "observedAt": "2026-08-27T10:31:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0195,
+    "memoryUtilization": 0.2695
+  },
+  {
+    "service": "tm-dev-public-bff",
+    "observedAt": "2026-08-27T10:30:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0195,
+    "memoryUtilization": 0.2695
+  },
+  {
+    "service": "tm-dev-public-bff",
+    "observedAt": "2026-08-27T10:28:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0195,
+    "memoryUtilization": 0.2595
+  },
+  {
+    "service": "tm-dev-public-bff",
+    "observedAt": "2026-08-27T10:27:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0195,
+    "memoryUtilization": 0.2495
+  },
+  {
+    "service": "tm-dev-public-bff",
+    "observedAt": "2026-08-27T10:26:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.209,
+    "memoryUtilization": 0.239
+  },
+  {
+    "service": "tm-dev-public-bff",
+    "observedAt": "2026-08-27T10:29:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0
+  },
+  {
+    "service": "tm-dev-intent-provenance",
+    "observedAt": "2026-08-27T10:33:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0295,
+    "memoryUtilization": 0.2395
+  },
+  {
+    "service": "tm-dev-intent-provenance",
+    "observedAt": "2026-08-27T10:32:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0195,
+    "memoryUtilization": 0.2495
+  },
+  {
+    "service": "tm-dev-intent-provenance",
+    "observedAt": "2026-08-27T10:31:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0595,
+    "memoryUtilization": 0.2495
+  },
+  {
+    "service": "tm-dev-intent-provenance",
+    "observedAt": "2026-08-27T10:30:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0395,
+    "memoryUtilization": 0.2395
+  },
+  {
+    "service": "tm-dev-intent-provenance",
+    "observedAt": "2026-08-27T10:29:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0495,
+    "memoryUtilization": 0.2395
+  },
+  {
+    "service": "tm-dev-intent-provenance",
+    "observedAt": "2026-08-27T10:28:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0795,
+    "memoryUtilization": 0.2395
+  },
+  {
+    "service": "tm-dev-intent-provenance",
+    "observedAt": "2026-08-27T10:27:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0695,
+    "memoryUtilization": 0.2395
+  },
+  {
+    "service": "tm-dev-intent-provenance",
+    "observedAt": "2026-08-27T10:26:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.1495,
+    "memoryUtilization": 0.2295
+  },
+  {
+    "service": "tm-dev-agent-runtime",
+    "observedAt": "2026-08-27T10:33:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0395,
+    "memoryUtilization": 0.3995
+  },
+  {
+    "service": "tm-dev-agent-runtime",
+    "observedAt": "2026-08-27T10:32:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.1195,
+    "memoryUtilization": 0.3995
+  },
+  {
+    "service": "tm-dev-agent-runtime",
+    "observedAt": "2026-08-27T10:31:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.1195,
+    "memoryUtilization": 0.40950000000000003
+  },
+  {
+    "service": "tm-dev-agent-runtime",
+    "observedAt": "2026-08-27T10:30:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0995,
+    "memoryUtilization": 0.4195
+  },
+  {
+    "service": "tm-dev-agent-runtime",
+    "observedAt": "2026-08-27T10:29:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0895,
+    "memoryUtilization": 0.3895
+  },
+  {
+    "service": "tm-dev-agent-runtime",
+    "observedAt": "2026-08-27T10:28:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0895,
+    "memoryUtilization": 0.3695
+  },
+  {
+    "service": "tm-dev-agent-runtime",
+    "observedAt": "2026-08-27T10:27:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0695,
+    "memoryUtilization": 0.3695
+  },
+  {
+    "service": "tm-dev-agent-runtime",
+    "observedAt": "2026-08-27T10:26:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.0195,
+    "memoryUtilization": 0.3595
+  },
+  {
+    "service": "tm-dev-agent-runtime",
+    "observedAt": "2026-08-27T10:25:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.3895
+  },
+  {
+    "service": "tm-dev-authority",
+    "observedAt": "2026-08-27T10:33:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.24925
+  },
+  {
+    "service": "tm-dev-authority",
+    "observedAt": "2026-08-27T10:32:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.24925
+  },
+  {
+    "service": "tm-dev-authority",
+    "observedAt": "2026-08-27T10:31:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.249
+  },
+  {
+    "service": "tm-dev-authority",
+    "observedAt": "2026-08-27T10:30:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.2485
+  },
+  {
+    "service": "tm-dev-authority",
+    "observedAt": "2026-08-27T10:29:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.2295
+  },
+  {
+    "service": "tm-dev-authority",
+    "observedAt": "2026-08-27T10:28:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 2,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.2295
+  },
+  {
+    "service": "tm-dev-authority",
+    "observedAt": "2026-08-27T10:27:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.009500000000000001,
+    "memoryUtilization": 0.2195
+  },
+  {
+    "service": "tm-dev-authority",
+    "observedAt": "2026-08-27T10:26:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 0,
+    "cpuUtilization": 0.1485,
+    "memoryUtilization": 0.2385
+  },
+  {
+    "service": "tm-dev-gateway",
+    "observedAt": "2026-08-27T10:33:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2995
+  },
+  {
+    "service": "tm-dev-gateway",
+    "observedAt": "2026-08-27T10:32:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2995
+  },
+  {
+    "service": "tm-dev-gateway",
+    "observedAt": "2026-08-27T10:31:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2995
+  },
+  {
+    "service": "tm-dev-gateway",
+    "observedAt": "2026-08-27T10:30:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2995
+  },
+  {
+    "service": "tm-dev-gateway",
+    "observedAt": "2026-08-27T10:29:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2995
+  },
+  {
+    "service": "tm-dev-gateway",
+    "observedAt": "2026-08-27T10:28:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2995
+  },
+  {
+    "service": "tm-dev-gateway",
+    "observedAt": "2026-08-27T10:27:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2995
+  },
+  {
+    "service": "tm-dev-gateway",
+    "observedAt": "2026-08-27T10:26:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2995
+  },
+  {
+    "service": "tm-dev-gateway",
+    "observedAt": "2026-08-27T10:25:14.595Z",
+    "requestCount": 0,
+    "errorCount": 0,
+    "instanceCount": 1,
+    "cpuUtilization": 0.0095,
+    "memoryUtilization": 0.2995
+  }
+]

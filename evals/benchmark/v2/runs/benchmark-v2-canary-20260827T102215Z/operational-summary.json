@@ -1,0 +1,85 @@
+{
+  "schema": "BENCHMARK_V2_OPERATIONAL_EVIDENCE_V1",
+  "runId": "benchmark-v2-canary-20260827T102215Z",
+  "window": {
+    "start": "2026-08-27T10:24:31.053Z",
+    "end": "2026-08-27T10:33:14.595Z"
+  },
+  "diagnosticsCount": 349,
+  "modelConcurrency": {
+    "maxActive": 12,
+    "maxQueued": 7,
+    "maxQueueDepthField": 18,
+    "queueWaitMs": {
+      "p50": 122,
+      "p95": 4018,
+      "p99": 5401
+    },
+    "permitReleases": 222,
+    "queueDeadlineFailures": 0,
+    "modelUnavailableAttempts": 30,
+    "concurrencyLimit": 12,
+    "perStageConcurrency": {
+      "compiler.candidate.v1": {
+        "maxStageActive": 2,
+        "maxStageQueued": 6
+      },
+      "verifier.result.v1": {
+        "maxStageActive": 6,
+        "maxStageQueued": 1
+      },
+      "planner.plan.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 1
+      },
+      "plan-verifier.result.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 2
+      },
+      "judge.fidelity.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 2
+      },
+      "judge.devils_advocate.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 1
+      },
+      "judge.contradiction.v1": {
+        "maxStageActive": 2,
+        "maxStageQueued": 1
+      },
+      "judge.evidence.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 2
+      },
+      "judge.provenance.v1": {
+        "maxStageActive": 4,
+        "maxStageQueued": 2
+      }
+    }
+  },
+  "model": {
+    "attempts": 222,
+    "successfulAttempts": 180,
+    "provider429s": 12,
+    "timedOutAttempts": 30,
+    "retries": 0
+  },
+  "guardian": {
+    "aggregateDecisions": 18,
+    "criticalFailures": 0,
+    "judgesObserved": [
+      "judge.contradiction.v1",
+      "judge.devils_advocate.v1",
+      "judge.evidence.v1",
+      "judge.fidelity.v1",
+      "judge.provenance.v1"
+    ],
+    "allFiveJudgesRequired": true
+  },
+  "resources": {
+    "peakCpu": 0.209,
+    "peakMemory": 0.4195,
+    "peakInstances": 2
+  }
+}
