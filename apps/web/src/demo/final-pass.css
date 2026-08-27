@@ -1,0 +1,278 @@
+/* ============================================================
+   FINAL PASS — landing pipeline, CTA hierarchy, live stage rail.
+   Tokens from demo-v2.css. No new palette.
+   ============================================================ */
+
+/* ---------- Governed pipeline strip (first screen) ---------- */
+.tm-pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  list-style: none;
+  margin: 26px 0 24px;
+  padding: 0;
+  counter-reset: none;
+}
+.tm-pipeline li {
+  position: relative;
+  padding: 16px 14px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+/* Connector chevrons between stages */
+.tm-pipeline li + li::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-top: 2px solid var(--line-strong);
+  border-right: 2px solid var(--line-strong);
+  transform: rotate(45deg);
+  opacity: 0.7;
+}
+.tm-pipeline-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 0.74rem;
+  font-weight: 650;
+  margin-bottom: 9px;
+}
+.tm-pipeline-title {
+  display: block;
+  color: var(--text-strong);
+  font-size: 0.94rem;
+  font-weight: 620;
+  line-height: 1.25;
+  margin-bottom: 5px;
+}
+.tm-pipeline-body {
+  display: block;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+/* ---------- CTA hierarchy: exactly one primary ---------- */
+.tm-cta.focused {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.tm-cta.focused .tm-button.primary {
+  font-size: 1.02rem;
+  padding: 14px 30px;
+  box-shadow: 0 0 34px rgba(78, 161, 255, 0.22);
+}
+.tm-button.secondary {
+  padding: 13px 22px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font-size: 0.94rem;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.tm-button.secondary:hover { box-shadow: inset 0 0 0 1px var(--blue); }
+
+.tm-hero-links {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 22px;
+  color: var(--text-faint);
+  font-size: 0.85rem;
+}
+.tm-textlink {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.tm-textlink:hover { color: var(--blue); }
+
+/* ---------- Five-domain strip ---------- */
+.tm-hero-domains {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--line-soft);
+}
+.tm-hero-domains-label {
+  color: var(--text-faint);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.tm-hero-domains ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tm-hero-domains li {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.82rem;
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+/* ---------- Live Proof stage rail ---------- */
+.tm-rail {
+  margin: 0 0 22px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.tm-rail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.tm-rail-head h4 { margin: 0; font-size: 1rem; color: var(--text-strong); }
+.tm-rail-head span { color: var(--text-dim); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+.tm-rail-track {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tm-rail-stage {
+  position: relative;
+  padding: 14px 12px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.tm-rail-stage .dot {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  margin-bottom: 9px;
+  opacity: 0.5;
+}
+.tm-rail-stage .label {
+  display: block;
+  color: var(--text-strong);
+  font-size: 0.86rem;
+  font-weight: 620;
+  margin-bottom: 3px;
+}
+.tm-rail-stage .status {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  margin-bottom: 7px;
+}
+.tm-rail-stage .plain {
+  display: block;
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.tm-rail-stage .detail {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.66rem;
+  color: var(--text-dim);
+  word-break: break-all;
+  opacity: 0.85;
+}
+
+.tm-rail-stage.done { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emerald) 38%, transparent); }
+.tm-rail-stage.done .dot { background: var(--emerald); opacity: 1; }
+.tm-rail-stage.done .status { color: var(--emerald); }
+
+.tm-rail-stage.active {
+  box-shadow: inset 0 0 0 1px var(--blue), 0 0 24px rgba(78, 161, 255, 0.14);
+  background: linear-gradient(180deg, var(--blue-soft), transparent 78%), var(--surface-2);
+}
+.tm-rail-stage.active .dot { background: var(--blue); opacity: 1; animation: tm-rail-pulse 1.35s var(--ease) infinite; }
+.tm-rail-stage.active .status { color: var(--blue); }
+
+.tm-rail-stage.blocked { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 46%, transparent); }
+.tm-rail-stage.blocked .dot { background: var(--amber); opacity: 1; }
+.tm-rail-stage.blocked .status { color: var(--amber); }
+
+@keyframes tm-rail-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(78, 161, 255, 0.5); }
+  60% { box-shadow: 0 0 0 7px rgba(78, 161, 255, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tm-rail-stage.active .dot { animation: none; }
+}
+
+/* ---------- Fail-closed panel ---------- */
+.tm-failclosed {
+  margin: 0 0 20px;
+  padding: 20px 22px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.tm-failclosed.governance-refusal { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 46%, transparent); }
+.tm-failclosed.verification-unavailable { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 48%, transparent); }
+.tm-failclosed.request-failure { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.tm-failclosed-body strong {
+  display: block;
+  font-size: 1.04rem;
+  line-height: 1.35;
+  margin-bottom: 8px;
+  color: var(--text-strong);
+}
+.tm-failclosed.governance-refusal .tm-failclosed-body strong { color: var(--blue); }
+.tm-failclosed.verification-unavailable .tm-failclosed-body strong { color: var(--amber); }
+.tm-failclosed-body p { margin: 0 0 8px; color: var(--text-dim); font-size: 0.9rem; line-height: 1.55; max-width: 86ch; }
+.tm-failclosed-effect { color: var(--emerald) !important; font-weight: 600; }
+.tm-failclosed-detail { margin-top: 12px; }
+.tm-failclosed-detail > summary { cursor: pointer; color: var(--text-faint); font-size: 0.8rem; list-style: none; }
+.tm-failclosed-detail > summary::-webkit-details-marker { display: none; }
+.tm-failclosed-detail > summary::before { content: "\25B8  "; }
+.tm-failclosed-detail[open] > summary::before { content: "\25BE  "; }
+.tm-failclosed-detail > .body { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding-top: 10px; }
+.tm-failclosed-detail code { font-size: 0.74rem; color: var(--text-dim); background: var(--surface-2); padding: 3px 8px; border-radius: 5px; }
+.tm-failclosed-detail span { color: var(--text-faint); font-size: 0.82rem; }
+
+/* ---------- Responsive: protects 1920x1080 capture and laptops ---------- */
+@media (max-width: 1400px) {
+  .tm-rail-track { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 1100px) {
+  .tm-pipeline { grid-template-columns: repeat(3, 1fr); }
+  .tm-pipeline li + li::before { display: none; }
+}
+@media (max-width: 780px) {
+  .tm-pipeline { grid-template-columns: 1fr 1fr; }
+  .tm-rail-track { grid-template-columns: repeat(2, 1fr); }
+  .tm-cta.focused { flex-direction: column; align-items: stretch; }
+}

@@ -93,9 +93,13 @@ describe("four-item judge navigation with nested surfaces", () => {
     const html = renderToString(<DemoPage projection={CANONICAL_PHASE_C_V5} view="architecture" />);
     const navLabels = [...html.matchAll(/class="tm-nav"[^>]*>([\s\S]*?)<\/span>/g)];
     const labels = (navLabels[0]?.[1] ?? "").replace(/<[^>]+>/g, " ");
-    for (const label of ["Live Proof", "SAFE Benchmark", "Attack Lab", "Architecture"]) {
+    // Ordered to match the intended judge walkthrough.
+    for (const label of ["Live Proof", "Attack Lab", "Production Qualification", "Architecture"]) {
       expect(labels, `primary nav label ${label}`).toContain(label);
     }
+    expect(labels.indexOf("Live Proof")).toBeLessThan(labels.indexOf("Attack Lab"));
+    expect(labels.indexOf("Attack Lab")).toBeLessThan(labels.indexOf("Production Qualification"));
+    expect(labels.indexOf("Production Qualification")).toBeLessThan(labels.indexOf("Architecture"));
     for (const removed of ["Provenance", "500 Stress", "Developer SDK"]) {
       expect(labels, `no top-level ${removed}`).not.toContain(removed);
     }

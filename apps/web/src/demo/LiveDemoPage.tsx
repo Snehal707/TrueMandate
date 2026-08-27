@@ -20,8 +20,24 @@ import {
   intentIdFromRequest,
   type LiveEvidenceRecord,
 } from "./liveWorkflowTruth";
+import {
+  classifyFailure,
+  deriveStageRail,
+  railProgressLabel,
+  railStatusLabel,
+  type RailStage,
+} from "./live-stage-rail";
 
 const sdk = createSdkCore({ baseUrl: "", timeoutMs: 120_000 });
+
+/** The governed path, in the order this page runs it. */
+const LIVE_PIPELINE_STAGES: readonly { title: string; body: string }[] = [
+  { title: "Human intent", body: "Recorded immutably, before any agent touches it." },
+  { title: "Semantic verification", body: "What it means is proven, not assumed." },
+  { title: "Authority", body: "Permission is bounded, scoped, and revocable." },
+  { title: "Execution", body: "The governed action runs exactly once, or not at all." },
+  { title: "Provenance", body: "Evidence shows what actually happened." },
+];
 
 type AsyncState = "idle" | "working";
 
@@ -227,6 +243,57 @@ function JsonBlock(props: { readonly label: string; readonly value: unknown }) {
       <summary>{props.label}</summary>
       <pre>{JSON.stringify(sanitizeLiveDisplayValue(props.value), null, 2)}</pre>
     </details>
+  );
+}
+
+/**
+ * Fail-closed presentation. A refusal, an unavailable verifier, and a transport
+ * failure are three different things and must not look alike — and none of them
+ * may read as a successful or unsafe execution.
+ */
+export function FailClosedPanel(props: { readonly error: LiveDemoError }) {
+  const failure = classifyFailure(props.error.code ?? "LIVE_DEMO_ERROR")!;
+  return (
+    <section className={`tm-failclosed ${failure.kind}`} role="alert">
+      <div className="tm-failclosed-body">
+        <strong>{failure.headline}</strong>
+        <p>{failure.explanation}</p>
+        <p className="tm-failclosed-effect">{failure.economicEffect}</p>
+      </div>
+      <details className="tm-failclosed-detail">
+        <summary>Technical detail</summary>
+        <div className="body">
+          <code>{props.error.code ?? "LIVE_DEMO_ERROR"}</code>
+          <span>{props.error.message}</span>
+        </div>
+      </details>
+    </section>
+  );
+}
+
+/**
+ * Judge-readable rail over the real lifecycle. Status comes entirely from
+ * deriveStageRail — this component renders, it never decides.
+ */
+export function StageRail(props: { readonly stages: readonly RailStage[] }) {
+  return (
+    <section className="tm-rail" aria-label="Workflow progress">
+      <header className="tm-rail-head">
+        <h4>Workflow progress</h4>
+        <span>{railProgressLabel(props.stages)}</span>
+      </header>
+      <ol className="tm-rail-track">
+        {props.stages.map((stage) => (
+          <li key={stage.id} className={`tm-rail-stage ${stage.status}`} aria-current={stage.status === "active" ? "step" : undefined}>
+            <span className="dot" aria-hidden="true" />
+            <span className="label">{stage.label}</span>
+            <span className="status">{railStatusLabel(stage.status)}</span>
+            <span className="plain">{stage.plain}</span>
+            {stage.detail ? <code className="detail">{stage.detail}</code> : null}
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -480,6 +547,28 @@ export function LiveDemoPage() {
   const materializationEligible = extractMaterializationEligible(run?.workflow);
   const monitoringId = extractMonitoringId(run?.workflow);
   const linkedIds = run ? linkedIntentIds(run) : {};
+
+  // Rail status is derived from returned artifacts only. `requestInFlight` is a
+  // fact about this client, not a claim that the backend reported a stage.
+  const stageRail = deriveStageRail({
+    hasRun: Boolean(run),
+    ...(linkedIds.intentId ? { intentId: linkedIds.intentId } : {}),
+    ...(linkedIds.intentStateId ? { intentStateId: linkedIds.intentStateId } : {}),
+    workspacePresent: Boolean(run?.workspace),
+    artifactsPresent: Boolean(run?.workflow.artifacts),
+    evaluationPresent: Boolean(run?.workflow.evaluation),
+    ...(evaluationDecision ? { authorityDecision: evaluationDecision } : {}),
+    ...(run?.workflow.state ? { workflowState: run.workflow.state } : {}),
+    ...(run?.workflow.execution?.status ?? run?.commit?.status
+      ? { executionStatus: (run?.workflow.execution?.status ?? run?.commit?.status) as string }
+      : {}),
+    outcomePresent: Boolean(run?.outcome),
+    ...(run?.outcome?.state ? { outcomeState: run.outcome.state } : {}),
+    resolutionPresent: Boolean(run?.resolution),
+    evidenceCount: run?.evidenceSubmissions.length ?? 0,
+    requestInFlight: pending === "working" || refreshing === "working",
+    ...(error?.code ? { errorCode: error.code } : {}),
+  });
   const truthInput = run
     ? {
         createdAt: run.createdAt,
@@ -511,19 +600,22 @@ export function LiveDemoPage() {
           This mode creates a genuinely fresh workflow against the deployed TrueMandate backend.
           No playback. No frontend stage simulation. Every visible transition comes from the real public lifecycle.
         </p>
-        <div className="tm-live-pillars" aria-label="Core trust ideas">
-          <div>
-            <strong>Understand Intent</strong>
-            <span>Keep the human request traceable and semantically bounded.</span>
-          </div>
-          <div>
-            <strong>Bound Authority</strong>
-            <span>Allow only the action proven to preserve that intent.</span>
-          </div>
-          <div>
-            <strong>Verify Outcomes</strong>
-            <span>Separate execution success from the economic result that actually mattered.</span>
-          </div>
+        <ol className="tm-pipeline" aria-label="How TrueMandate governs an agent action">
+          {LIVE_PIPELINE_STAGES.map((stage, index) => (
+            <li key={stage.title}>
+              <span className="tm-pipeline-num">{index + 1}</span>
+              <span className="tm-pipeline-title">{stage.title}</span>
+              <span className="tm-pipeline-body">{stage.body}</span>
+            </li>
+          ))}
+        </ol>
+        <div className="tm-hero-domains" aria-label="Supported domains">
+          <span className="tm-hero-domains-label">Governs economic actions across</span>
+          <ul>
+            {LIVE_DEMO_DOMAINS.filter((domain) => domain.id !== "custom_intent").map((domain) => (
+              <li key={domain.id}>{domain.label}</li>
+            ))}
+          </ul>
         </div>
       </header>
 
@@ -578,12 +670,7 @@ export function LiveDemoPage() {
         </div>
       </section>
 
-      {error ? (
-        <div className="tm-live-error" role="alert">
-          <strong>{error.code ?? "LIVE_DEMO_ERROR"}</strong>
-          <span>{error.message}</span>
-        </div>
-      ) : null}
+      {error ? <FailClosedPanel error={error} /> : null}
 
       {run ? (
         <section className="tm-live-panel">
@@ -676,6 +763,7 @@ export function LiveDemoPage() {
 
           {workflowView === "lifecycle" ? (
             <>
+              <StageRail stages={stageRail} />
               <div className="tm-live-stage-grid">
             <StageCard
               title="Intent"

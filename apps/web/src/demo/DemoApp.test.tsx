@@ -48,9 +48,12 @@ describe("DemoPage main proof render (V2)", () => {
       <DemoPage projection={CANONICAL_PHASE_C_V5} proofSurface="live-demo" />,
     );
     expect(html).toContain("SEMANTIC TRUST FOR AUTONOMOUS AGENTS");
-    expect(html).toContain("Understand Intent");
-    expect(html).toContain("Bound Authority");
-    expect(html).toContain("Verify Outcomes");
+    // The first screen names the governed pipeline, not a generic 3-step story.
+    for (const stage of ["Human intent", "Semantic verification", "Authority", "Execution", "Provenance"]) {
+      expect(html, `pipeline stage ${stage}`).toContain(stage);
+    }
+    expect(html).not.toContain("Bound Authority");
+    expect(html).not.toContain("Verify Outcomes");
     for (const domain of ["Procurement", "Travel", "SaaS / IT Spend", "Invoice / Vendor Payment", "Logistics / Fulfillment", "Custom Intent"]) {
       expect(html).toContain(domain);
     }
@@ -221,13 +224,75 @@ describe("DemoPage main proof render (V2)", () => {
     expect(arch).toContain("VPC · PSC");
   });
 
+  /**
+   * The landing hero is the first screen a judge sees (DemoApp starts in
+   * mode="landing"). It previously had no coverage at all.
+   */
+  describe("landing hero", () => {
+    // The Hero landing branch renders under the Canonical Proof surface.
+    const landing = () =>
+      renderToString(
+        <DemoPage projection={CANONICAL_PHASE_C_V5} mode="landing" proofSurface="canonical-proof" />,
+      );
+
+    it("names the governed pipeline in order", () => {
+      const html = landing();
+      const stages = ["Human intent", "Semantic verification", "Authority", "Execution", "Provenance"];
+      let cursor = -1;
+      for (const stage of stages) {
+        const at = html.indexOf(stage);
+        expect(at, `pipeline stage ${stage}`).toBeGreaterThan(cursor);
+        cursor = at;
+      }
+      // The old generic framing is gone from the first screen.
+      expect(html).not.toContain("Bound authority");
+      expect(html).not.toContain("Verify outcomes");
+    });
+
+    it("offers exactly one primary call to action", () => {
+      const html = landing();
+      expect(html.match(/tm-button primary/g) ?? []).toHaveLength(1);
+      expect(html).toContain("See Live Proof");
+      // Attack Lab is a clear but secondary action.
+      expect(html).toContain("Try to break it — Attack Lab");
+      expect(html).toContain("tm-button secondary");
+      // The former competing CTAs are demoted to text links.
+      expect(html).not.toContain("▶ Start Demo");
+      expect(html).not.toContain("tm-button ghost");
+    });
+
+    it("shows all five supported domains", () => {
+      const html = landing();
+      for (const domain of [
+        "Procurement",
+        "Travel",
+        "SaaS / IT Spend",
+        "Invoice / Vendor Payment",
+        "Logistics / Fulfillment",
+      ]) {
+        expect(html, `domain ${domain}`).toContain(domain);
+      }
+    });
+
+    it("keeps the thesis without becoming an architecture document", () => {
+      const html = landing();
+      expect(html).toContain("violate human intent");
+      expect(html).toContain("verifies both");
+      // Landing must not pull in the canonical proof detail.
+      expect(html).not.toContain("50 CONTAINERS MISSING");
+      expect(html).not.toContain("Cloud Run");
+    });
+  });
+
   it("top navigation offers the four proof surfaces", () => {
     const html = render();
     expect(html).toContain("Live Proof");
-    expect(html).toContain("SAFE Benchmark");
     expect(html).toContain("Attack Lab");
+    expect(html).toContain("Production Qualification");
     expect(html).toContain("Architecture");
     expect(html).not.toContain("Main Proof");
+    // Stale label: the tab now opens the Production Qualification page.
+    expect(html).not.toContain("SAFE Benchmark");
   });
 
   it("footer carries read-only + preservation facts", () => {

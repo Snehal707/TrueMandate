@@ -27,11 +27,29 @@ export type ProofSurface = "live-demo" | "canonical-proof";
 
 export type ProofMode = "landing" | "full" | "demo";
 
+/** Ordered to match the intended judge walkthrough. */
 const VIEWS: readonly { id: DemoView; label: string }[] = [
   { id: "proof", label: "Live Proof" },
-  { id: "benchmark", label: "SAFE Benchmark" },
   { id: "attack", label: "Attack Lab" },
+  { id: "benchmark", label: "Production Qualification" },
   { id: "architecture", label: "Architecture" },
+];
+
+/** The governed path, in the order a judge sees it run. */
+const PIPELINE_STAGES: readonly { title: string; body: string }[] = [
+  { title: "Human intent", body: "Recorded immutably, before any agent touches it." },
+  { title: "Semantic verification", body: "What it means is proven, not assumed." },
+  { title: "Authority", body: "Permission is bounded, scoped, and revocable." },
+  { title: "Execution", body: "The governed action runs exactly once, or not at all." },
+  { title: "Provenance", body: "Evidence shows what actually happened." },
+];
+
+const HERO_DOMAINS: readonly string[] = [
+  "Procurement",
+  "Travel",
+  "SaaS / IT Spend",
+  "Invoice / Vendor Payment",
+  "Logistics / Fulfillment",
 ];
 
 function SubTabs(props: {
@@ -133,6 +151,7 @@ function Hero(props: {
   readonly onStartDemo?: () => void;
   readonly onViewFullProof?: () => void;
   readonly onExploreArchitecture?: () => void;
+  readonly onOpenAttackLab?: () => void;
   readonly demoLoading?: boolean;
 }) {
   const { projection: p, d, source, mode } = props;
@@ -177,39 +196,49 @@ function Hero(props: {
         </>
       ) : (
         <>
-          <div className="tm-trust-steps" aria-label="What TrueMandate does">
-            <div className="tm-step">
-              <div className="tm-step-num">1</div>
-              <div className="tm-step-title">Understand intent</div>
-              <div className="tm-step-body">Preserve what the human actually meant.</div>
-            </div>
-            <div className="tm-step">
-              <div className="tm-step-num">2</div>
-              <div className="tm-step-title">Bound authority</div>
-              <div className="tm-step-body">Agents act only within proven constraints.</div>
-            </div>
-            <div className="tm-step">
-              <div className="tm-step-num">3</div>
-              <div className="tm-step-title">Verify outcomes</div>
-              <div className="tm-step-body">Payment success is not the same as goal success.</div>
-            </div>
-          </div>
-          <div className="tm-cta">
+          <ol className="tm-pipeline" aria-label="How TrueMandate governs an agent action">
+            {PIPELINE_STAGES.map((stage, index) => (
+              <li key={stage.title}>
+                <span className="tm-pipeline-num">{index + 1}</span>
+                <span className="tm-pipeline-title">{stage.title}</span>
+                <span className="tm-pipeline-body">{stage.body}</span>
+              </li>
+            ))}
+          </ol>
+
+          <div className="tm-cta focused">
             <button
               type="button"
               className="tm-button primary start"
               onClick={props.onStartDemo}
               disabled={props.demoLoading}
             >
-              {props.demoLoading ? "Loading live proof…" : "▶ Start Demo"}
+              {props.demoLoading ? "Loading live proof…" : "See Live Proof"}
             </button>
-            <button type="button" className="tm-button ghost" onClick={props.onExploreArchitecture}>
-              Explore Architecture
+            <button type="button" className="tm-button secondary" onClick={props.onOpenAttackLab}>
+              Try to break it — Attack Lab
             </button>
           </div>
-          <button type="button" className="tm-tertiary" onClick={props.onViewFullProof}>
-            View full proof
-          </button>
+
+          <p className="tm-hero-links">
+            <button type="button" className="tm-textlink" onClick={props.onExploreArchitecture}>
+              Architecture
+            </button>
+            <span aria-hidden="true">·</span>
+            <button type="button" className="tm-textlink" onClick={props.onViewFullProof}>
+              Full canonical proof
+            </button>
+          </p>
+
+          <div className="tm-hero-domains" aria-label="Supported domains">
+            <span className="tm-hero-domains-label">Governs economic actions across</span>
+            <ul>
+              {HERO_DOMAINS.map((domain) => (
+                <li key={domain}>{domain}</li>
+              ))}
+            </ul>
+          </div>
+
           <p className="tm-proof-line">
             Verified deployed proof · Read-only canonical evidence
           </p>
@@ -799,6 +828,7 @@ export function DemoPage(props: {
                     onStartDemo={onStartDemo}
                     onViewFullProof={onViewFullProof}
                     onExploreArchitecture={() => onNavigate?.("architecture")}
+                    onOpenAttackLab={() => onNavigate?.("attack")}
                     demoLoading={demoLoading}
                   />
                   {effectiveHeroMode === "landing" ? null : (
