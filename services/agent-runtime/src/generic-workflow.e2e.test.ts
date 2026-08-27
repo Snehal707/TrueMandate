@@ -814,7 +814,7 @@ function genericRequest(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function explicitConstraint(
+export function explicitConstraint(
   id: string,
   concept: string,
   operator: ConstraintOperator,
@@ -840,7 +840,7 @@ function explicitConstraint(
   };
 }
 
-function temporalConstraint(
+export function temporalConstraint(
   id: string,
   concept: string,
   resolvedValue: string,
@@ -976,7 +976,7 @@ function partialTravelOutcomeClaims(contract: {
   ];
 }
 
-function replaceConstraints(rawText: string, constraints: Array<Record<string, unknown>>) {
+export function replaceConstraints(rawText: string, constraints: Array<Record<string, unknown>>) {
   return (output: unknown) => {
     const value = output as Record<string, unknown>;
     return {
