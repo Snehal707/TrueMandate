@@ -13,7 +13,10 @@ import { GovernanceReport } from "./GovernanceReport";
 import { LiveProvenanceGraph } from "./LiveProvenanceGraph";
 import { ProductTruthBadge } from "./ProductTruth";
 import { sanitizePublicPresentationValue } from "./presentationSecurity";
-import { submitFreshWorkflowWhenReady } from "./freshWorkflowSubmission";
+import {
+  submitFreshWorkflowWhenReady,
+  type FreshWorkflowProgress,
+} from "./freshWorkflowSubmission";
 import {
   buildGovernanceReport,
   buildLiveProvenanceModel,
@@ -272,6 +275,93 @@ export function FailClosedPanel(props: { readonly error: LiveDemoError }) {
 }
 
 /**
+ * Creating a fresh workflow is a genuinely long operation: the intent is
+ * recorded, its verified state finalizes asynchronously, and only then is the
+ * governed workflow submitted against that exact state. Both legs are real
+ * model-backed work, so the wait can run to minutes.
+ *
+ * A single frozen "Creating…" label makes that look like a hang. This panel
+ * shows where the client actually is. Every line is a fact about this browser —
+ * a request it has outstanding, or a poll it has performed — never a claim that
+ * the backend has reported a stage.
+ */
+const SUBMISSION_STEPS = [
+  {
+    id: "recording-intent",
+    stage: "intent",
+    label: "Recording the intent",
+    plain: "Sending the request to the deployed public workflow route.",
+  },
+  {
+    id: "awaiting-intent-state",
+    stage: "verification",
+    label: "Waiting for the verified intent state",
+    plain: "The intent is recorded. Its verified state is still being finalized.",
+  },
+  {
+    id: "submitting-workflow",
+    stage: "planning",
+    label: "Submitting the governed workflow",
+    plain: "Bound to the finalized intent state. Waiting for the governed result.",
+  },
+] as const;
+
+function formatElapsed(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+export function SubmissionProgressPanel(props: {
+  readonly progress: FreshWorkflowProgress;
+  readonly elapsedSeconds: number;
+}) {
+  const activeIndex = SUBMISSION_STEPS.findIndex((step) => step.id === props.progress.phase);
+  return (
+    <section
+      className="tm-submitting"
+      aria-live="polite"
+      aria-label="Live workflow submission progress"
+    >
+      <header>
+        <p className="tm-live-kicker">Creating live workflow</p>
+        <span className="tm-submitting-elapsed">{formatElapsed(props.elapsedSeconds)} elapsed</span>
+      </header>
+      <ol className="tm-submitting-steps">
+        {SUBMISSION_STEPS.map((step, index) => {
+          const status = index < activeIndex ? "done" : index === activeIndex ? "active" : "waiting";
+          return (
+            <li
+              key={step.id}
+              className={`tm-submitting-step ${status}`}
+              data-stage={step.stage}
+              aria-current={status === "active" ? "step" : undefined}
+            >
+              <span className="dot" aria-hidden="true" />
+              <span className="label">{step.label}</span>
+              <span className="plain">{step.plain}</span>
+              {status === "active" && props.progress.phase === "awaiting-intent-state" ? (
+                <span className="detail">
+                  Checked {props.progress.polls}{" "}
+                  {props.progress.polls === 1 ? "time" : "times"}
+                </span>
+              ) : null}
+              {status === "active" && props.progress.phase === "submitting-workflow" ? (
+                <code className="detail">{props.progress.intentStateId}</code>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="tm-submitting-note">
+        Every stage is real verification against the deployed backend, so this takes as long as
+        the live pipeline takes. Nothing here is simulated or replayed.
+      </p>
+    </section>
+  );
+}
+
+/**
  * Judge-readable rail over the real lifecycle. Status comes entirely from
  * deriveStageRail — this component renders, it never decides.
  */
@@ -454,6 +544,23 @@ export function LiveDemoPage() {
   const [run, setRun] = useState<LiveRunState | undefined>();
   const [error, setError] = useState<LiveDemoError | undefined>();
   const [workflowView, setWorkflowView] = useState<LiveWorkflowView>("lifecycle");
+  const [progress, setProgress] = useState<FreshWorkflowProgress | undefined>();
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // Keyed on presence, not identity, so a phase change does not restart the clock.
+  const submitting = Boolean(progress);
+  useEffect(() => {
+    if (!submitting) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setElapsedSeconds(0);
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [submitting]);
 
   const selectedLabel = liveDomainLabel(domainId, customPackId);
   const activeOutcomeActions = outcomeActionsForDomain(domainId, customPackId);
@@ -481,7 +588,9 @@ export function LiveDemoPage() {
         rawText: domainId === "custom_intent" ? customRawText : undefined,
         customPackId,
       });
-      const result = await submitFreshWorkflowWhenReady(sdk, request);
+      const result = await submitFreshWorkflowWhenReady(sdk, request, {
+        onProgress: setProgress,
+      });
       if (!result.ok) throw result;
       const initialRun: LiveRunState = {
         createdAt: new Date().toISOString(),
@@ -498,6 +607,7 @@ export function LiveDemoPage() {
       setError(toError(nextError));
     } finally {
       setPending("idle");
+      setProgress(undefined);
     }
   };
 
@@ -776,6 +886,10 @@ export function LiveDemoPage() {
             All predefined domains use the same generic workflow lifecycle. Procurement is a pack, not a special runtime path.
           </p>
         </div>
+
+        {progress ? (
+          <SubmissionProgressPanel progress={progress} elapsedSeconds={elapsedSeconds} />
+        ) : null}
       </section>
 
       {error ? <FailClosedPanel error={error} /> : null}

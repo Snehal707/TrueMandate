@@ -10,9 +10,23 @@ type FreshWorkflowSdk = {
   readWorkspace(intentId: string): Promise<Result<IntentWorkspaceView>>;
 };
 
+/**
+ * Where this client currently is in the two-leg submission.
+ *
+ * Each variant is a fact about this browser — a request it has outstanding, or
+ * a poll it has performed. None of them is a claim that the backend reported a
+ * stage. Presentation must keep that distinction.
+ */
+export type FreshWorkflowProgress =
+  | { readonly phase: "recording-intent" }
+  | { readonly phase: "awaiting-intent-state"; readonly polls: number }
+  | { readonly phase: "submitting-workflow"; readonly intentStateId: string };
+
 type FreshWorkflowSubmissionOptions = {
   readonly delaysMs?: readonly number[];
   readonly wait?: (delayMs: number) => Promise<void>;
+  /** Observational only. Never affects submission control flow. */
+  readonly onProgress?: (progress: FreshWorkflowProgress) => void;
 };
 
 const DEFAULT_READINESS_DELAYS_MS = Array.from(
@@ -33,6 +47,16 @@ export async function submitFreshWorkflowWhenReady(
   request: SdkWorkflowRequest,
   options: FreshWorkflowSubmissionOptions = {},
 ): Promise<Result<SdkWorkflowView>> {
+  // Presentation must never be able to break a live submission.
+  const report = (progress: FreshWorkflowProgress): void => {
+    try {
+      options.onProgress?.(progress);
+    } catch {
+      // A failing observer is a presentation problem, not a submission problem.
+    }
+  };
+
+  report({ phase: "recording-intent" });
   let submitted = await sdk.submitWorkflow(request);
   if (
     submitted.ok ||
@@ -50,7 +74,10 @@ export async function submitFreshWorkflowWhenReady(
   ]);
   const wait = options.wait ?? defaultWait;
   let attemptedStateId: string | undefined;
+  let polls = 0;
   for (const delayMs of options.delaysMs ?? DEFAULT_READINESS_DELAYS_MS) {
+    polls += 1;
+    report({ phase: "awaiting-intent-state", polls });
     await wait(delayMs);
     const workspace = await sdk.readWorkspace(request.intent.id);
     if (!workspace.ok) continue;
@@ -60,6 +87,7 @@ export async function submitFreshWorkflowWhenReady(
     attemptedStateId = stateId;
     const { workflowId: _rawWorkflowId, ...stateBoundRequest } = request;
 
+    report({ phase: "submitting-workflow", intentStateId: stateId });
     submitted = await sdk.submitWorkflow({
       ...stateBoundRequest,
       intent: {

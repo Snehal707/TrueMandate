@@ -266,6 +266,83 @@
 .tm-failclosed-detail code { font-size: 0.74rem; color: var(--text-dim); background: var(--surface-2); padding: 3px 8px; border-radius: 5px; }
 .tm-failclosed-detail span { color: var(--text-faint); font-size: 0.82rem; }
 
+/* ---------- Submission progress (Live Proof) ----------
+   A real two-leg submission takes minutes. Show where the client is so the
+   wait reads as work, not as a hang. Steps follow the stage ramp. */
+.tm-submitting {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.tm-submitting > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tm-submitting-elapsed {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.tm-submitting-steps { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.tm-submitting-step {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 3px 12px;
+  align-items: baseline;
+}
+.tm-submitting-step .dot {
+  grid-row: 1 / span 2;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.tm-submitting-step.done .dot { background: var(--emerald); }
+.tm-submitting-step.active .dot {
+  background: var(--stage-accent, var(--blue));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--stage-accent, var(--blue)) 22%, transparent);
+  animation: tm-submitting-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tm-submitting-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tm-submitting-step.active .dot { animation: none; }
+}
+.tm-submitting-step .label { color: var(--text-dim); font-size: 0.9rem; font-weight: 600; }
+.tm-submitting-step.active .label { color: var(--text-strong); }
+.tm-submitting-step.waiting .label { color: var(--text-faint); }
+.tm-submitting-step .plain {
+  grid-column: 2;
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.tm-submitting-step.waiting .plain { opacity: 0.65; }
+.tm-submitting-step .detail {
+  grid-column: 2;
+  margin-top: 3px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+.tm-submitting-note {
+  margin: 0;
+  max-width: 84ch;
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
 /* ---------- Original request (Live Proof) ----------
    The human request is the headline of the report; the workflow ID is a lookup
    key. Accent is the intent blue from the stage ramp, because this *is* stage 1. */
