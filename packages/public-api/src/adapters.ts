@@ -76,12 +76,18 @@ export function createLivePublicBffPorts(input: {
     getIntent(intentId: string): Promise<Result<Intent>> | Result<Intent>;
     getTip(intentId: string): Promise<Result<IntentState>> | Result<IntentState>;
     /**
-     * Durable workflow artifacts for this intent. Optional: without it the
-     * workspace assembles exactly as it did before, so historical deployments
-     * and the canonical demo projection are unaffected.
+     * Durable artifacts for ONE workflow, keyed by workflowId — the same lookup
+     * the internal `/internal/workflows/:workflowId/artifacts` route already
+     * serves. No collection scan, no intent→artifacts index. Optional: without it
+     * (or without a caller-supplied workflowId) the workspace assembles exactly
+     * as it did before this projection existed.
+     *
+     * The caller-supplied workflowId is a hint, never a credential: getWorkspace
+     * verifies every returned row is actually bound to the requested intentId
+     * before projecting anything from it.
      */
-    listIntentArtifacts?(
-      intentId: string,
+    listWorkflowArtifacts?(
+      workflowId: string,
     ): Promise<Result<readonly unknown[]>> | Result<readonly unknown[]>;
   };
   readonly demoRuntime?: Pick<DemoRuntime, "submitApproval">;
@@ -199,7 +205,7 @@ export function createLivePublicBffPorts(input: {
       }
     : undefined;
 
-  const getWorkspace = async (intentId: string) => {
+  const getWorkspace = async (intentId: string, workflowId?: string) => {
     const intent = await Promise.resolve(workspaceSource.getIntent(intentId));
     if (!intent.ok) {
       return err(ErrorCode.VALIDATION_FAILED, "Unknown intent workspace", {
@@ -209,20 +215,46 @@ export function createLivePublicBffPorts(input: {
     const tip = await Promise.resolve(workspaceSource.getTip(intentId));
     const tipState = tip.ok ? tip.value : undefined;
 
-    // Stage truth comes from durable artifacts when they are reachable. Without
-    // them nothing below contributes and the workspace assembles as before.
-    const artifactRows = workspaceSource.listIntentArtifacts
-      ? await Promise.resolve(workspaceSource.listIntentArtifacts(intentId))
-      : undefined;
-    const rows: LifecycleArtifactRow[] = artifactRows?.ok
-      ? artifactRows.value.flatMap((row) => {
-          const value = row as { kind?: unknown; payload?: unknown } | null;
-          return value && typeof value === "object" && typeof value.kind === "string" &&
+    // Stage truth comes from durable artifacts when the caller names a workflow
+    // and that lookup is wired. Without either, nothing below contributes and the
+    // workspace assembles exactly as it did before this projection existed.
+    let rows: LifecycleArtifactRow[] = [];
+    if (workflowId && workspaceSource.listWorkflowArtifacts) {
+      const artifactsResult = await Promise.resolve(
+        workspaceSource.listWorkflowArtifacts(workflowId),
+      );
+      if (!artifactsResult.ok) {
+        return err(ErrorCode.VALIDATION_FAILED, "Unknown workflow", { workflowId });
+      }
+      const owned: { kind: string; intentId: string; payload: Record<string, unknown> }[] =
+        artifactsResult.value.flatMap((row) => {
+          const value = row as { kind?: unknown; intentId?: unknown; payload?: unknown } | null;
+          return value && typeof value === "object" &&
+            typeof value.kind === "string" &&
+            typeof value.intentId === "string" &&
             value.payload && typeof value.payload === "object"
-            ? [{ kind: value.kind, payload: value.payload as Record<string, unknown> }]
+            ? [{ kind: value.kind, intentId: value.intentId, payload: value.payload as Record<string, unknown> }]
             : [];
-        })
-      : [];
+        });
+      if (owned.length === 0) {
+        return err(ErrorCode.VALIDATION_FAILED, "Unknown workflow", { workflowId });
+      }
+      // CRITICAL: a caller-supplied workflowId is a hint, never a credential.
+      // Every artifact this workflow produced was written with the SAME
+      // intentId at creation time (generic-workflow-engine.ts binds `intentId:
+      // input.intentId` on every append) — so a workflow bound to a different
+      // intent must never contribute a single row to this response, and must
+      // fail closed rather than silently returning the caller's own intentId
+      // paired with someone else's lifecycle/Guardian/Authority/outcome state.
+      if (owned.some((row) => row.intentId !== intentId)) {
+        return err(
+          ErrorCode.VALIDATION_FAILED,
+          "Workflow does not belong to the requested intent",
+          { intentId, workflowId },
+        );
+      }
+      rows = owned.map(({ kind, payload }) => ({ kind, payload }));
+    }
 
     const payloadOf = (kind: string) => rows.find((row) => row.kind === kind)?.payload;
     const guardianVerdict = payloadOf("GUARDIAN")?.verdict as Parameters<typeof projectGuardian>[0];

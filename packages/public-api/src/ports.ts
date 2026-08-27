@@ -19,7 +19,17 @@ export interface IntentCreatePort {
 
 /** Injected port — returns allowlisted workspace DTO only. */
 export interface WorkspaceReadPort {
-  getWorkspace(intentId: string): Promise<Result<IntentWorkspaceView>> | Result<IntentWorkspaceView>;
+  /**
+   * `workflowId` is additive and optional: a caller-supplied hint at which
+   * workflow's durable artifacts to project into the response. It is never
+   * trusted by itself — the implementation must verify the resolved workflow is
+   * actually bound to `intentId` before using anything it contains. Omitting it
+   * preserves the exact legacy response.
+   */
+  getWorkspace(
+    intentId: string,
+    workflowId?: string,
+  ): Promise<Result<IntentWorkspaceView>> | Result<IntentWorkspaceView>;
 }
 
 /** Injected port — submit ApprovalArtifact only (no grant mint / commit). */

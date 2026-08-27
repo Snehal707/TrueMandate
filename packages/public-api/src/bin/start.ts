@@ -71,6 +71,7 @@ async function main(): Promise<void> {
     workspaceSource: {
       getIntent: (intentId) => owner.getIntent(intentId),
       getTip: (intentId) => owner.getTip(intentId),
+      listWorkflowArtifacts: (workflowId) => owner.listWorkflowArtifacts(workflowId),
     },
     demoRuntime: demo,
     evidence: {
