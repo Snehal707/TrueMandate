@@ -656,6 +656,39 @@
   max-width: 88ch;
 }
 
+/* ---------- Governance Report: not executed, and raw artifacts ----------
+   "Not executed" means a record came back but it does not show the stage
+   happening. It must read distinctly from the emerald "Recorded". */
+.tm-governance-section header span[data-availability="NOT_EXECUTED"] {
+  color: var(--amber);
+  font-weight: 700;
+}
+.tm-governance-section header span[data-availability="NOT_REACHED"],
+.tm-governance-section header span[data-availability="NOT_CREATED"] {
+  color: var(--text-faint);
+  font-style: italic;
+}
+.tm-governance-detail { margin-top: 12px; }
+.tm-governance-detail > summary {
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 0.74rem;
+  list-style: none;
+}
+.tm-governance-detail > summary::-webkit-details-marker { display: none; }
+.tm-governance-detail > summary::before { content: "\25B8  "; }
+.tm-governance-detail[open] > summary::before { content: "\25BE  "; }
+.tm-governance-detail pre {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
 /* ---------- Provenance: what this graph proves ---------- */
 .tm-provenance-claim {
   margin: 0 0 16px;

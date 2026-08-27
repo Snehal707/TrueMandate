@@ -63,6 +63,16 @@ describe("no judge-facing surface derives Authority from overall workflow state"
     expect(card).not.toContain("run.workflow.state");
   });
 
+  it("the Governance Report's execution result never falls back to a pipeline phase", () => {
+    const source = code(read("liveWorkflowTruth.ts"));
+    const block = /const executionResult =([\s\S]*?);/.exec(source)?.[1] ?? "";
+    expect(block, "executionResult must exist").not.toBe("");
+    expect(block).toContain("input.workflow.execution?.status");
+    expect(block).toContain("input.commit?.status");
+    // PROPOSE is a stage the run reached, not evidence the action ran.
+    expect(block).not.toContain("phase");
+  });
+
   it("the summary only accepts through-Authority states as evidence Authority ran", () => {
     const source = code(read("live-run-summary.ts"));
     const block = /const authorityRanPerState =([\s\S]*?);/.exec(source)?.[1] ?? "";

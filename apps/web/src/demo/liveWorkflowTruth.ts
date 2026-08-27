@@ -95,8 +95,16 @@ export interface GovernanceReportRow {
 export interface GovernanceReportSection {
   readonly id: string;
   readonly title: string;
-  readonly availability: "PRESENT" | "NOT_CREATED" | "NOT_REACHED" | "NOT_PUBLIC";
+  /**
+   * `NOT_EXECUTED` is distinct from `NOT_REACHED`: a record for this stage was
+   * returned, but it does not show the stage actually happening. An execution
+   * record sitting at the PROPOSE phase is exactly that — the pipeline reached
+   * the proposal stage, and the action never ran.
+   */
+  readonly availability: "PRESENT" | "NOT_CREATED" | "NOT_REACHED" | "NOT_PUBLIC" | "NOT_EXECUTED";
   readonly rows: readonly GovernanceReportRow[];
+  /** Raw returned artifact for this section, for technical inspection. */
+  readonly details?: unknown;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -482,8 +490,15 @@ function section(
   title: string,
   availability: GovernanceReportSection["availability"],
   rows: readonly (GovernanceReportRow | undefined)[],
+  details?: unknown,
 ): GovernanceReportSection {
-  return { id, title, availability, rows: rows.filter((item): item is GovernanceReportRow => Boolean(item)) };
+  return {
+    id,
+    title,
+    availability,
+    rows: rows.filter((item): item is GovernanceReportRow => Boolean(item)),
+    ...(details === undefined ? {} : { details }),
+  };
 }
 
 export function buildGovernanceReport(input: LiveWorkflowTruthInput, graph: LiveProvenanceModel): readonly GovernanceReportSection[] {
@@ -492,7 +507,16 @@ export function buildGovernanceReport(input: LiveWorkflowTruthInput, graph: Live
   const constraintSummary = workspace
     ? `${workspace.semantic.constraints.filter((constraint) => !constraint.criticalFailure).length}/${workspace.semantic.constraints.length} without critical failure`
     : undefined;
-  const executionStatus = input.workflow.execution?.status ?? input.commit?.status ?? workspace?.execution.phase;
+  // An execution *result* only. `workspace.execution.phase` is deliberately
+  // excluded: PROPOSE is the pipeline stage that was reached, not evidence that
+  // the action ran. Collapsing the two made this section report "Recorded /
+  // PROPOSE" for runs the rail correctly showed as never executed.
+  const executionResult = input.workflow.execution?.status ?? input.commit?.status;
+  const executionPhase = workspace?.execution.phase;
+  const executionRecordPresent = Boolean(workspace?.execution);
+  const proposalRecorded = Boolean(workspace?.execution.preparedAction);
+  const sideEffectCount = workspace?.execution.sideEffects.length;
+
   const outcomeState = input.outcome?.state ?? workspace?.outcome?.contractState;
   const paymentStatus = input.outcome?.paymentStatus ?? workspace?.outcome?.paymentStatus;
 
@@ -524,12 +548,38 @@ export function buildGovernanceReport(input: LiveWorkflowTruthInput, graph: Live
       row("Monitoring", text(monitoring?.id)),
       row("Monitoring state", text(monitoring?.state)),
     ]),
-    section("execution", "Execution", executionStatus ? "PRESENT" : "NOT_REACHED", [
-      row("Status", executionStatus),
-      row("Execution", input.workflow.execution?.executionId ?? input.commit?.executionId),
-      row("Result", input.workflow.execution?.resultRef ?? input.commit?.resultRef),
-      row("Recorded side effects", workspace ? String(workspace.execution.sideEffects.length) : undefined),
-    ]),
+    section(
+      "execution",
+      "Execution",
+      executionResult ? "PRESENT" : executionRecordPresent ? "NOT_EXECUTED" : "NOT_REACHED",
+      [
+        row("Execution result", executionResult ?? (executionRecordPresent ? "None returned" : undefined)),
+        row("Pipeline phase", executionPhase),
+        row(
+          "Proposal artifact",
+          executionRecordPresent
+            ? proposalRecorded
+              ? "Recorded (identifiers are private)"
+              : "Not returned"
+            : undefined,
+        ),
+        row("Execution", input.workflow.execution?.executionId ?? input.commit?.executionId),
+        row("Result", input.workflow.execution?.resultRef ?? input.commit?.resultRef),
+        row("Economic side effects", sideEffectCount === undefined ? undefined : String(sideEffectCount)),
+        row(
+          "What this means",
+          executionResult
+            ? undefined
+            : proposalRecorded
+              ? "A proposed action was recorded, but governed execution was never reached."
+              : executionRecordPresent
+                ? `The pipeline reached the ${executionPhase} phase. Governed execution was never reached and no execution result was returned.`
+                : undefined,
+          "DERIVED_PRESENTATION",
+        ),
+      ],
+      workspace?.execution,
+    ),
     section("outcome", "Outcome", outcomeState || input.outcome ? "PRESENT" : "NOT_CREATED", [
       row("Contract", input.outcome?.id ?? workspace?.outcome?.contractId),
       row("Payment / execution", paymentStatus),

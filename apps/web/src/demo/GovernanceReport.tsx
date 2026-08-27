@@ -1,5 +1,6 @@
 import type { GovernanceReportSection } from "./liveWorkflowTruth";
 import type { RunSummary } from "./live-run-summary";
+import { sanitizePublicPresentationValue } from "./presentationSecurity";
 
 function availabilityLabel(value: GovernanceReportSection["availability"]): string {
   switch (value) {
@@ -7,6 +8,8 @@ function availabilityLabel(value: GovernanceReportSection["availability"]): stri
     case "NOT_CREATED": return "Not created";
     case "NOT_REACHED": return "Not reached";
     case "NOT_PUBLIC": return "Private (internal)";
+    // A record came back, but it does not show this stage happening.
+    case "NOT_EXECUTED": return "Not executed";
   }
 }
 
@@ -109,6 +112,12 @@ export function GovernanceReport(props: {
               </div>
             ) : (
               <p className="tm-governance-empty">{availabilityLabel(section.availability)}</p>
+            )}
+            {section.details === undefined ? null : (
+              <details className="tm-governance-detail">
+                <summary>Returned {section.title.toLowerCase()} artifact</summary>
+                <pre>{JSON.stringify(sanitizePublicPresentationValue(section.details), null, 2)}</pre>
+              </details>
             )}
           </section>
         ))}
