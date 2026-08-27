@@ -5,6 +5,8 @@ import { hashCanonical, proofObligationId } from "@truemandate/crypto";
 import { createGatewayInternalRoutes, TwoPhaseGateway } from "@truemandate/gateway-service";
 import { compileAndVerify } from "@truemandate/intent-compiler";
 import { IntentService } from "@truemandate/intent-service";
+import { supersedeSemanticVerification } from "../../intent-service/src/semantic-supersession.js";
+import { PreExecutionReadinessService } from "./pre-execution-readiness.js";
 import { FakeModel } from "@truemandate/model";
 import { OutcomeService } from "@truemandate/outcome-service";
 import { deriveObservations, type AcceptedEvidenceClaim } from "@truemandate/outcome-core";
@@ -231,6 +233,15 @@ export async function runtime(options: {
    * actually produced one.
    */
   omitProofSummary?: boolean;
+  /**
+   * Deterministic trusted demo evidence. Supplying it wires the REAL
+   * PreExecutionReadinessService, so the proof summary is produced by the genuine
+   * evidence-backed readiness path rather than seeded by the harness.
+   */
+  demoEvidence?: readonly {
+    readonly envelope: Record<string, unknown>;
+    readonly claims: readonly Record<string, unknown>[];
+  }[];
   /** The evidence-backed readiness handoff the lifecycle now calls in-process. */
   preExecutionReadiness?: { evaluate(raw: unknown): Promise<Result<unknown>> };
   evidence?: {
@@ -303,6 +314,62 @@ export async function runtime(options: {
   intentPublisher.clear();
 
   const authoritative = new AuthoritativeIntentService(owner as never);
+
+  /**
+   * Deterministic demo evidence, seeded the way a trusted acceptance-fixture
+   * writer would: the rows are already ELEVATED_EXTERNAL because a trusted
+   * identity attested them out of band. The workflow requester never verifies
+   * its own evidence — it only references ids it did not create.
+   *
+   * With this present the harness wires the REAL PreExecutionReadinessService,
+   * so the proof summary can only exist if the genuine readiness operation
+   * produced it. No `semanticPayload.proofSummary = summary` shortcut.
+   */
+  const demoEnvelopes = new Map<string, Record<string, unknown>>();
+  const demoClaims = new Map<string, Record<string, unknown>>();
+  for (const row of options.demoEvidence ?? []) {
+    demoEnvelopes.set(String(row.envelope.id), row.envelope);
+    for (const claim of row.claims) demoClaims.set(String(claim.id), claim);
+  }
+  const demoEvidencePort = {
+    getEnvelope: async (id: string) =>
+      demoEnvelopes.has(id)
+        ? ok(demoEnvelopes.get(id) as never)
+        : err(ErrorCode.VALIDATION_FAILED, "Unknown evidence envelope"),
+    getClaim: async (id: string) =>
+      demoClaims.has(id)
+        ? ok(demoClaims.get(id) as never)
+        : err(ErrorCode.VALIDATION_FAILED, "Unknown evidence claim"),
+    listClaimsForEnvelope: async (id: string) =>
+      ok({
+        envelopeId: id,
+        claims: [...demoClaims.values()].filter((claim) => claim.evidenceId === id),
+      } as never),
+  };
+  const realPreExecutionReadiness = options.demoEvidence
+    ? new PreExecutionReadinessService({
+        intents: authoritative,
+        owner: {
+          getSemanticArtifact: (id: string) => owner.getSemanticArtifact(id),
+          supersedeSemanticVerification: (stateId: string, raw: unknown) =>
+            supersedeSemanticVerification(
+              intentOwner,
+              {
+                putIfAbsent: async (record) => {
+                  if (artifactRows.has(record.id)) return false;
+                  artifactRows.set(record.id, record as Artifact);
+                  return true;
+                },
+                get: async (id) => artifactRows.get(id),
+              },
+              stateId,
+              raw,
+            ),
+        } as never,
+        evidence: demoEvidencePort as never,
+        now: () => NOW,
+      })
+    : undefined;
   const authority = new AuthorityService(authoritative);
   const evaluations = new MemoryEvaluations();
   const outcomes = new OutcomeService();
@@ -378,8 +445,14 @@ export async function runtime(options: {
   };
   const sharedDeps = {
     intents: authoritative, owner: owner as never,
-    evidence: options.evidence ?? { getEnvelope: async (id) => ok({ id, contentHash: H("e") } as never), getClaim: async () => err(ErrorCode.VALIDATION_FAILED, "not used") },
-    ...(options.preExecutionReadiness ? { preExecutionReadiness: options.preExecutionReadiness } : {}),
+    evidence: options.demoEvidence
+      ? (demoEvidencePort as never)
+      : options.evidence ?? { getEnvelope: async (id) => ok({ id, contentHash: H("e") } as never), getClaim: async () => err(ErrorCode.VALIDATION_FAILED, "not used") },
+    ...(options.preExecutionReadiness
+      ? { preExecutionReadiness: options.preExecutionReadiness }
+      : realPreExecutionReadiness
+        ? { preExecutionReadiness: realPreExecutionReadiness }
+        : {}),
     authority: {
       evaluateWorkflow: async (body) => { calls.evaluation += 1; calls.evaluationBody = body as never; return resultFromRoute(await evaluationRoute.handler({ body, headers: {}, params: {} })); },
       bindAndMint: async (body) => { calls.mint += 1; return resultFromRoute(await mintRoute.handler({ body, headers: {}, params: {} })); },
