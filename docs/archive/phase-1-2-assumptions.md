@@ -25,7 +25,7 @@ These assumptions fill specification gaps for the deterministic trusted core. Th
 
 - `NonceStore`, `IdempotencyStorePort`, `GrantStore`, and `ExposureLedger` are persistence **ports**.
 - In-memory adapters exist for local tests only and are **not multi-instance safe**.
-- See [`persistence.md`](./persistence.md).
+- See [`persistence.md`](../architecture/persistence.md).
 
 ## Invariant enforcement surface
 
@@ -34,4 +34,4 @@ These assumptions fill specification gaps for the deterministic trusted core. Th
 
 ## Protocol extras
 
-See [`protocol-deltas.md`](./protocol-deltas.md).
+See [`protocol-deltas.md`](../architecture/protocol-deltas.md).

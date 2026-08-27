@@ -1,5 +1,16 @@
 # Build Semantic Trust Runtime V0
 
+> **What this document is.** This is the original design specification for
+> TrueMandate, written as a build brief. It records **design intent** — the
+> problem, the trust model, and the invariants the system was required to
+> satisfy — and `AGENTS.md` still treats it as the authoritative spec.
+>
+> It is **not** current-state documentation, and it is not the place to start.
+> For what exists today see the [README](../README.md); for architecture see
+> [`docs/architecture/`](architecture/); for measured results see
+> [`docs/BENCHMARK.md`](BENCHMARK.md). Where this document and the code
+> disagree, the code and the benchmark evidence are authoritative.
+
 You are helping me build a production-grade semantic trust and governance runtime for autonomous economic AI agents.
 
 This is not a chatbot, payment app, or simple hackathon demo.
