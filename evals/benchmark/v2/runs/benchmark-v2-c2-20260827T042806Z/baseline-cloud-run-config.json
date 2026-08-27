@@ -1,0 +1,11 @@
+{
+  "note": "Cloud Run configuration recorded before this instrumented C2 rerun, per explicit request. Unchanged throughout investigation and this run.",
+  "recordedAt": "2026-08-27T04:26:00Z",
+  "services": {
+    "tm-dev-web": { "minScale": 0, "maxScale": 3, "containerConcurrency": 80, "timeoutSeconds": 300, "cpu": "1000m", "memory": "512Mi", "revision": "tm-dev-web-00009-ldx" },
+    "tm-dev-public-bff": { "minScale": 0, "maxScale": 3, "containerConcurrency": 80, "timeoutSeconds": 300, "cpu": "1000m", "memory": "512Mi", "revision": "tm-dev-public-bff-00010-s2m" },
+    "tm-dev-agent-runtime": { "minScale": 0, "maxScale": 3, "containerConcurrency": 80, "timeoutSeconds": 300, "cpu": "1000m", "memory": "512Mi", "revision": "tm-dev-agent-runtime-00070-pm7" },
+    "tm-dev-authority": { "minScale": 0, "maxScale": 3, "containerConcurrency": 80, "timeoutSeconds": 300, "cpu": "1000m", "memory": "512Mi", "revision": "tm-dev-authority-00016-hr4" },
+    "tm-dev-intent-provenance": { "minScale": 0, "maxScale": 3, "containerConcurrency": 80, "timeoutSeconds": 300, "cpu": "1000m", "memory": "512Mi", "revision": "tm-dev-intent-provenance-00034-tvj" }
+  }
+}
