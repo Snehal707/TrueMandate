@@ -1,0 +1,85 @@
+{
+  "schema": "BENCHMARK_V2_OPERATIONAL_EVIDENCE_V1",
+  "runId": "benchmark-v2-c8-20260827T053118Z",
+  "window": {
+    "start": "2026-08-27T05:32:45.494Z",
+    "end": "2026-08-27T05:42:12.776Z"
+  },
+  "diagnosticsCount": 523,
+  "modelConcurrency": {
+    "maxActive": 12,
+    "maxQueued": 11,
+    "maxQueueDepthField": 18,
+    "queueWaitMs": {
+      "p50": 63,
+      "p95": 1189,
+      "p99": 1903
+    },
+    "permitReleases": 449,
+    "queueDeadlineFailures": 0,
+    "modelUnavailableAttempts": 4,
+    "concurrencyLimit": 12,
+    "perStageConcurrency": {
+      "compiler.candidate.v1": {
+        "maxStageActive": 5,
+        "maxStageQueued": 2
+      },
+      "verifier.result.v1": {
+        "maxStageActive": 5,
+        "maxStageQueued": 1
+      },
+      "planner.plan.v1": {
+        "maxStageActive": 6,
+        "maxStageQueued": 2
+      },
+      "plan-verifier.result.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 1
+      },
+      "judge.fidelity.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 2
+      },
+      "judge.contradiction.v1": {
+        "maxStageActive": 2,
+        "maxStageQueued": 2
+      },
+      "judge.evidence.v1": {
+        "maxStageActive": 2,
+        "maxStageQueued": 3
+      },
+      "judge.provenance.v1": {
+        "maxStageActive": 5,
+        "maxStageQueued": 2
+      },
+      "judge.devils_advocate.v1": {
+        "maxStageActive": 3,
+        "maxStageQueued": 2
+      }
+    }
+  },
+  "model": {
+    "attempts": 449,
+    "successfulAttempts": 431,
+    "provider429s": 14,
+    "timedOutAttempts": 4,
+    "retries": 0
+  },
+  "guardian": {
+    "aggregateDecisions": 47,
+    "criticalFailures": 0,
+    "judgesObserved": [
+      "judge.contradiction.v1",
+      "judge.devils_advocate.v1",
+      "judge.evidence.v1",
+      "judge.fidelity.v1",
+      "judge.provenance.v1"
+    ],
+    "allFiveJudgesRequired": true
+  },
+  "resources": {
+    "peakCpu": 0.1095,
+    "peakMemory": 0.4195,
+    "peakInstances": 1
+  }
+}
