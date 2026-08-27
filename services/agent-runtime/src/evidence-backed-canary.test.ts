@@ -113,6 +113,12 @@ describe("canary: a legitimate evidenced request through the real lifecycle", ()
     expect((guardian?.verdict as Record<string, unknown>)?.decision).toBe("ALLOW");
     expect(rt.calls).toMatchObject({ evaluation: 1, prepare: 1, mint: 1, authorize: 1 });
 
+    // Reported, not inferred from execution success.
+    const outcomeContract = (final.ok ? final.value : {}) as { outcomeContract?: { id?: string } };
+    const provenanceNodes = rt.provenance.getGraph().listNodes().length;
+    // eslint-disable-next-line no-console
+    console.log(`DOMAIN Procurement | outcome=${outcomeContract.outcomeContract?.id ?? "NOT PRODUCED"} | provenanceNodes=${provenanceNodes}`);
+
     // ── cryptographic binding, read from the durable token store ──
     const authorization = (final.ok ? final.value : {}) as {
       authorization?: { commitToken?: { id: string }; grant?: { id: string; preparedActionId: string } };

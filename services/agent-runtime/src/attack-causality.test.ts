@@ -119,4 +119,85 @@ describe("attack causality: an evidenced control versus the same request mutated
     // the mutation cannot land on the control's workflow and inherit its grant.
     expect(attack.value?.workflowId).not.toBe(control.value?.workflowId);
   });
+
+  /**
+   * Which layer the mutation actually lives at. If the human's recorded mandate
+   * had changed to 450 this would be a different scenario entirely — the action
+   * would faithfully represent a (different) intent, and action fidelity would
+   * have nothing to catch.
+   */
+  it("the human mandate stays 500; only the proposed action is mutated", async () => {
+    const control = await submit({});
+    const attack = await submit({ quantity: 450 });
+
+    const quantityConstraint = (rows: Row[], rt: { state: { constraints: readonly { id: string; concept: string; value: unknown }[] } }) => {
+      void rows;
+      return rt.state.constraints.find((constraint) => constraint.concept === "quantity")?.value;
+    };
+    const actionQuantity = (rows: Row[]) =>
+      ((rows.find((row) => row.kind === "ACTION")?.payload.action) as { quantity?: unknown } | undefined)?.quantity;
+
+    const humanControl = quantityConstraint(control.rows, control.rt as never);
+    const humanAttack = quantityConstraint(attack.rows, attack.rt as never);
+    const evidenceQuantity = CONTROL_EVIDENCE[0]!.claims.find((claim) => claim.concept === "quantity")!.value;
+
+    // eslint-disable-next-line no-console
+    console.log(`LAYERS human(control)=${humanControl} human(attack)=${humanAttack} evidence=${evidenceQuantity} action(control)=${actionQuantity(control.rows)} action(attack)=${actionQuantity(attack.rows)}`);
+
+    // The recorded human mandate is 500 on BOTH runs — the attack did not rewrite it.
+    expect(humanControl).toBe(500);
+    expect(humanAttack).toBe(500);
+    // Evidence attests the mandate, not the action.
+    expect(evidenceQuantity).toBe(500);
+    // The divergence is entirely at the proposed-action layer.
+    expect(actionQuantity(control.rows)).toBe(500);
+    expect(actionQuantity(attack.rows)).toBe(450);
+  });
+});
+
+/**
+ * Token isolation. The control's CommitToken authorizes one exact PreparedAction.
+ * Presenting it alongside a mutated action must be rejected by the existing
+ * binding/integrity machinery — no new policy is introduced here.
+ */
+describe("a control's CommitToken cannot authorize a mutated action", () => {
+  it("rejects the tampered pairing, executes nothing, and leaves the ledger untouched", async () => {
+    const control = await submit({});
+    expect(control.value?.state).toBe("AUTHORIZED");
+
+    const authorization = (control.result.ok ? control.result.value : {}) as {
+      authorization?: { commitToken?: { id: string }; grant?: { id: string; preparedActionId: string } };
+    };
+    const tokenId = authorization.authorization!.commitToken!.id;
+    const grantId = authorization.authorization!.grant!.id;
+    const preparedActionId = authorization.authorization!.grant!.preparedActionId;
+
+    const storedToken = await control.rt.gateway.getCommitTokenStore().get(tokenId);
+    const storedPrepared = await control.rt.gateway.getPreparedActionStore().get(preparedActionId);
+    expect(storedToken.ok && storedPrepared.ok).toBe(true);
+    const commitToken = (storedToken as { value: Record<string, unknown> }).value;
+    const prepared = (storedPrepared as { value: Record<string, unknown> }).value;
+
+    const ledgerBefore = (await control.rt.gateway.getSideEffectLedger().listAll()).length;
+
+    // Same token, action mutated after authorization.
+    const tampered = {
+      ...prepared,
+      action: { ...(prepared.action as Record<string, unknown>), quantity: 450 },
+    };
+    const attempted = await control.rt.gateway.commit({
+      preparedAction: tampered as never,
+      grantId,
+      commitToken: commitToken as never,
+      agentId: "attacker",
+      actionNodeId: `action-${preparedActionId}`,
+      authorityNodeId: `authority-${grantId}`,
+    });
+
+    // eslint-disable-next-line no-console
+    console.log(`TOKEN-ISOLATION rejected=${!attempted.ok} code=${attempted.ok ? "(accepted)" : attempted.code}`);
+
+    expect(attempted.ok).toBe(false);
+    expect(await control.rt.gateway.getSideEffectLedger().listAll()).toHaveLength(ledgerBefore);
+  });
 });

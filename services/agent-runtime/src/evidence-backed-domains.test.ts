@@ -11,6 +11,8 @@ import { explicitConstraint, replaceConstraints, runtime, temporalConstraint } f
  */
 
 const DEADLINE = "2026-12-31T00:00:00.000Z";
+const CHECK_IN = "2026-12-20T00:00:00.000Z";
+const CHECK_OUT = "2026-12-22T00:00:00.000Z";
 
 function envelope(id: string) {
   return {
@@ -51,7 +53,7 @@ const CASES: readonly DomainCase[] = [
   {
     packId: "travel",
     label: "Travel",
-    rawText: "Book 2 refundable hotel stays with an approved provider for under USD 5000 before December 31, 2026.",
+    rawText: "Book 2 refundable hotel stays at Seaside Lodge with an approved provider for under USD 5000, checking in December 20 and out December 22, before December 31, 2026.",
     capability: "book_travel",
     constraints: [
       explicitConstraint("t-provider", "approved_provider", ConstraintOperator.EQ, true, ConstraintKind.HARD, "approved provider"),
@@ -59,6 +61,8 @@ const CASES: readonly DomainCase[] = [
       explicitConstraint("t-refund", "refundable", ConstraintOperator.EQ, true, ConstraintKind.HARD, "refundable"),
       explicitConstraint("t-count", "traveler_count", ConstraintOperator.EQ, 2, ConstraintKind.HARD, "2"),
       explicitConstraint("t-budget", "travel_budget", ConstraintOperator.LTE, 5000, ConstraintKind.FINANCIAL, "under USD 5000"),
+      temporalConstraint("t-checkin", "check_in_date", CHECK_IN, "December 20"),
+      temporalConstraint("t-checkout", "check_out_date", CHECK_OUT, "December 22"),
       temporalConstraint("t-deadline", "booking_deadline", DEADLINE, "before December 31, 2026"),
     ],
     facts: [
@@ -67,6 +71,8 @@ const CASES: readonly DomainCase[] = [
       ["refundable", true],
       ["traveler_count", 2],
       ["travel_budget", 3200],
+      ["check_in_date", CHECK_IN],
+      ["check_out_date", CHECK_OUT],
       ["booking_deadline", DEADLINE],
     ],
     action: {
@@ -76,7 +82,7 @@ const CASES: readonly DomainCase[] = [
     },
     payload: {
       provider: { id: "travel-provider", name: "Travel Provider", approved: true, approvalEvidenceId: EVIDENCE_ID },
-      booking: { itineraryId: "it-1", lodgingName: "Seaside Lodge", travelDate: "2026-12-20T00:00:00.000Z", travelerCount: 2 },
+      booking: { itineraryId: "it-1", lodgingName: "Seaside Lodge", travelDate: CHECK_IN, checkInDate: CHECK_IN, checkOutDate: CHECK_OUT, travelerCount: 2 },
       policy: { refundableRequired: true },
       evidenceIds: [EVIDENCE_ID],
     },
@@ -224,8 +230,14 @@ describe("all five domains through the real evidence-backed lifecycle", () => {
       const guardian = rows.find((row) => row.kind === "GUARDIAN")?.payload;
       const boundStateId = String(rows.find((row) => row.kind === "WORKFLOW")?.payload.intentStateId ?? "");
 
+      // Which constraint each obligation actually covers, so the count is auditable
+      // rather than asserted. Obligations derive from the constraints present in
+      // THIS IntentState, not from the pack's full concept catalogue.
+      const covered = proofs.map((proof) => String(proof.constraintId)).sort();
+      const outcomeContract = (result.value as { outcomeContract?: { id?: string } }).outcomeContract;
+      const provenanceNodes = rt.provenance.getGraph().listNodes().length;
       // eslint-disable-next-line no-console
-      console.log(`DOMAIN ${domainCase.label} | state=${value.state} | proofs=${proofs.length}/${proofs.filter((p) => p.status === "SATISFIED").length} satisfied | planVerification=${String((planVerification?.verification as Record<string, unknown>)?.status)} | guardian=${String((guardian?.verdict as Record<string, unknown>)?.decision)} | bound=${boundStateId.includes("-semantic-") ? "successor" : "original"} | calls=${JSON.stringify({ evaluation: rt.calls.evaluation, prepare: rt.calls.prepare, mint: rt.calls.mint, authorize: rt.calls.authorize })}`);
+      console.log(`DOMAIN ${domainCase.label} | state=${value.state} | proofs=${proofs.filter((p) => p.status === "SATISFIED").length}/${proofs.length} satisfied [${covered.join(",")}] | planVerification=${String((planVerification?.verification as Record<string, unknown>)?.status)} | guardian=${String((guardian?.verdict as Record<string, unknown>)?.decision)} | bound=${boundStateId.includes("-semantic-") ? "successor" : "original"} | outcome=${outcomeContract?.id ?? "NOT PRODUCED"} | provenanceNodes=${provenanceNodes}`);
 
       expect(proofs.length).toBeGreaterThan(0);
       for (const proof of proofs) {
