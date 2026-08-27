@@ -60,7 +60,7 @@ export function HistoricalSafeBenchmark() {
           <p className="overline">Fixed reproducible evaluation</p>
           <h2>SAFE Benchmark</h2>
           <p>
-            This procurement-era deterministic security corpus compares its historical TrueMandate adapter with
+            This procurement-era deterministic security corpus compares an earlier TrueMandate implementation with
             <code>BASELINE_SINGLE_AGENT</code>. It is canonical evidence, not a current-system load result.
           </p>
         </div>
@@ -120,12 +120,12 @@ export function HistoricalSafeBenchmark() {
         <div className="body">
           <p>{rm.failureAnalysis.summary}</p>
           <p>Failed ids: {rm.catalog.failedIds.join(", ")}</p>
-          <p>Source: {rm.failureAnalysis.source}. Fixtures and scoring remain immutable.</p>
+          <p>Source: {rm.failureAnalysis.source}. Scenarios and scoring remain immutable.</p>
         </div>
       </details>
 
       <div className="tm-chips tm-safe-provenance">
-        <span className="tm-chip"><b>Evaluation</b> deterministic memory adapters</span>
+        <span className="tm-chip"><b>Evaluation</b> deterministic, run in memory with no model calls</span>
         <span className="tm-chip"><b>Gemini calls during SAFE evaluation</b> {rm.geminiCallsDuringEvaluation}</span>
         <span className="tm-chip"><b>Accepted</b> {rm.generatedAt} · SAFE_V1</span>
       </div>

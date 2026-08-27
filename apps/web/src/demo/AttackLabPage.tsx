@@ -368,7 +368,7 @@ export function AttackComparison(props: { readonly result: AttackComparisonResul
           <h3>Baseline vs TrueMandate</h3>
         </div>
         <div className="tm-truth-cluster">
-          <ProductTruthBadge truthClass="PRESENTATION_DERIVED" detail="BASELINE ADAPTER" />
+          <ProductTruthBadge truthClass="PRESENTATION_DERIVED" detail="DETERMINISTIC BASELINE" />
           <ProductTruthBadge truthClass="LIVE" detail="TRUEMANDATE PUBLIC API" />
           <code>{result.governed.workflow?.workflowId ?? result.governed.error?.code ?? "No workflow id returned"}</code>
         </div>
@@ -398,7 +398,7 @@ export function AttackComparison(props: { readonly result: AttackComparisonResul
         </p>
       ) : null}
       <p className="tm-attack-baseline-truth">
-        <strong>Baseline source:</strong> existing deterministic SAFE `BASELINE_SINGLE_AGENT` adapter. It has no Guardian, Authority, proof obligations, provenance governance, or OutcomeContract. This is the closest existing ordinary-agent comparison, not a deployed baseline model endpoint.
+        <strong>Baseline source:</strong> the deterministic SAFE <code>BASELINE_SINGLE_AGENT</code> comparator. It has no Guardian, no Authority, no proof obligations, no provenance governance, and no OutcomeContract. It is the closest available ordinary-agent comparison, not a deployed baseline model endpoint.
       </p>
     </section>
   );

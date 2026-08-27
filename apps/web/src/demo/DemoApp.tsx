@@ -792,9 +792,9 @@ function FooterPanel(props: {
     return (
       <footer className="tm-footer">
         <p>
-          <strong>Live Demo foundation.</strong> Fresh workflows are created through the real public
-          workflow route, and the page renders only public-safe workflow, approval, evidence, outcome,
-          and resolution state returned by the deployed backend.
+          <strong>Powered by the live backend.</strong> Every workflow shown here is created through
+          TrueMandate&rsquo;s deployed public workflow route and reflects real returned workflow,
+          approval, evidence, outcome, and resolution state.
         </p>
       </footer>
     );
