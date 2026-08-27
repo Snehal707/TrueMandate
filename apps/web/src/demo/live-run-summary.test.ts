@@ -227,11 +227,49 @@ describe("authorityGranted only accepts real granting decisions", () => {
 });
 
 describe("provenance claim describes only what the records show", () => {
-  it("asserts the absence of authority and execution when both are genuinely absent", () => {
+  it("reports missing records as missing records, never as proven non-occurrence", () => {
     const claim = provenanceClaim(deriveRunSummary(GUARDIAN_UNAVAILABLE), 9);
-    expect(claim).toContain("9 recorded artifacts");
-    expect(claim).toContain("no authority grant and no execution record");
-    expect(claim).toContain("never authorized");
+    expect(claim).toContain("9 returned artifacts");
+    expect(claim).toContain("no returned authority grant");
+    expect(claim).toContain("no returned execution result");
+
+    // ABSENCE IS NOT EVIDENCE. The absence of a public artifact must never be
+    // presented as proof that the thing did not happen.
+    const lower = claim.toLowerCase();
+    for (const forbidden of ["proves", "which is what proves", "never authorized", "never performed"]) {
+      expect(lower, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it("makes the economic claim only from terminal semantics plus a returned empty side-effect list", () => {
+    const backed = provenanceClaim(deriveRunSummary(GUARDIAN_UNAVAILABLE), 9);
+    expect(backed).toContain("terminal state");
+    expect(backed).toContain("returned side-effect list is empty");
+    expect(backed).toContain("no economic action was taken");
+
+    // No returned side-effect list -> economic effect is UNKNOWN -> no claim.
+    const unbacked = provenanceClaim(
+      deriveRunSummary({ ...GUARDIAN_UNAVAILABLE, workspacePresent: false, sideEffectCount: undefined }),
+      9,
+    );
+    expect(unbacked).not.toContain("no economic action was taken");
+    expect(unbacked).not.toContain("side-effect list is empty");
+    // The record description itself still stands.
+    expect(unbacked).toContain("9 returned artifacts");
+  });
+
+  it("makes no economic claim for a non-terminal run even with zero side effects", () => {
+    const claim = provenanceClaim(
+      deriveRunSummary({
+        ...GUARDIAN_UNAVAILABLE,
+        workflowState: "AWAITING_APPROVAL",
+        executionPhase: "AUTHORIZE",
+        approvalStatus: "PENDING",
+        sideEffectCount: 0,
+      }),
+      9,
+    );
+    expect(claim).not.toContain("no economic action was taken");
   });
 
   it("makes no absence claim once execution actually occurred", () => {

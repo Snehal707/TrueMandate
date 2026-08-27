@@ -281,28 +281,51 @@ export function deriveRunSummary(input: RunSummaryInput): RunSummary {
 }
 
 /**
- * One sentence describing what this run's audit trail actually proves.
- * Every clause is gated on artifacts that are genuinely present or genuinely absent.
+ * What the returned artifacts establish about this run — and nothing more.
+ *
+ * ABSENCE IS NOT EVIDENCE. A missing authority grant or execution result is
+ * reported as a missing record, never as proof that authorization or execution
+ * did not occur. The stronger claim about economic effect is licensed only by
+ * explicit returned evidence: terminal workflow semantics plus a returned
+ * side-effect list that is actually empty.
  */
 export function provenanceClaim(
   summary: RunSummary,
   recordedNodeCount: number,
 ): string {
   if (recordedNodeCount === 0) {
-    return "No public provenance records have been returned for this workflow yet.";
+    return "No public provenance records have been returned for this workflow.";
   }
   const recorded = summary.succeeded.map((fact) => fact.label.toLowerCase());
   const recordedList = recorded.length
     ? recorded.join(", ")
     : "the artifacts returned so far";
 
-  const noAuthority = summary.didNotHappen.some((fact) =>
-    fact.label === "Authority was not reached" || fact.label === "Authority did not grant",
-  );
-  const noExecution = summary.didNotHappen.some((fact) => fact.label === "The action was not executed");
+  const sentences = [
+    `The public record for this workflow contains ${recordedNodeCount} returned artifacts covering ${recordedList}.`,
+  ];
 
-  if (noAuthority && noExecution) {
-    return `These ${recordedNodeCount} recorded artifacts show ${recordedList} — and contain no authority grant and no execution record, which is what proves the action was never authorized or performed.`;
+  const missing: string[] = [];
+  if (
+    summary.didNotHappen.some(
+      (fact) => fact.label === "Authority was not reached" || fact.label === "Authority did not grant",
+    )
+  ) {
+    missing.push("no returned authority grant");
   }
-  return `These ${recordedNodeCount} recorded artifacts show ${recordedList}, each one a durable record rather than a generated explanation.`;
+  if (summary.didNotHappen.some((fact) => fact.label === "The action was not executed")) {
+    missing.push("no returned execution result");
+  }
+  if (missing.length > 0) {
+    // Stated as an absence of records, not as a proven non-occurrence.
+    sentences.push(`It contains ${missing.join(" and ")}.`);
+  }
+
+  if (summary.terminal && summary.economicEffect.value === "ZERO") {
+    sentences.push(
+      "The workflow is in a terminal state and the returned side-effect list is empty, so no economic action was taken.",
+    );
+  }
+
+  return sentences.join(" ");
 }

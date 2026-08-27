@@ -349,7 +349,9 @@ export function ResultSummaryCard(props: {
               ))}
             </ul>
           ) : (
-            <p className="tm-result-empty">Nothing has been returned yet.</p>
+            <p className="tm-result-empty">
+              {summary.terminal ? "Nothing was returned." : "Nothing has been returned yet."}
+            </p>
           )}
         </div>
         <div className="tm-result-column blocked">
@@ -606,23 +608,44 @@ export function OriginalRequestCard(props: { readonly run: LiveRunState }) {
   );
 }
 
-const STAGE_CARD_LABELS = {
+export const STAGE_CARD_LABELS = {
   present: "LIVE",
   waiting: "Not returned yet",
   "not-reached": "Not reached",
+  "not-executed": "Not executed",
+  "not-created": "Not created",
+  // Same vocabulary the rail uses for the stage a terminal run stopped at.
+  stopped: "Stopped here",
 } as const;
+
+type StageCardState = keyof typeof STAGE_CARD_LABELS;
+
+/** True for states that can never change for this workflow. */
+function isTerminalCardState(state: StageCardState): boolean {
+  return state !== "present" && state !== "waiting";
+}
+
+/**
+ * Wording for an absent value, tensed by whether the run can still progress.
+ *
+ * "yet" promises a future arrival. On a workflow that has terminally stopped,
+ * that promise is false — the artifact is never coming.
+ */
+function absentValue(terminal: boolean, terminalText: string, pendingText: string): string {
+  return terminal ? terminalText : pendingText;
+}
 
 function StageCard(props: {
   readonly title: string;
-  /** `not-reached` is terminal: this stage will never run for this workflow. */
-  readonly state: "present" | "waiting" | "not-reached";
+  /** `not-reached` / `not-executed` are terminal: this stage will never run. */
+  readonly state: StageCardState;
   readonly rows: readonly { readonly label: string; readonly value: string }[];
   readonly details?: unknown;
 }) {
   return (
     <section
       className={`tm-live-stage${props.state === "present" ? " present" : ""}${
-        props.state === "not-reached" ? " not-reached" : ""
+        isTerminalCardState(props.state) ? " not-reached" : ""
       }`}
     >
       <header>
@@ -958,6 +981,26 @@ export function LiveDemoPage() {
     requestInFlight: pending === "working" || refreshing === "working",
     ...(error?.code ? { errorCode: error.code } : {}),
   });
+  // Terminal means the run has stopped for good, so downstream detail cards must
+  // stop saying "yet". Sourced from the shared truth model, not re-derived.
+  const terminalRun = runSummary.terminal;
+  const authorityReached = Boolean(authorityDecision);
+  const executionRecordPresent = Boolean(executionView);
+  // Mirrors buildGovernanceReport: a record with no result is "not executed";
+  // no record at all is "not reached".
+  const executionCardState: StageCardState = run?.workflow.execution || run?.commit
+    ? "present"
+    : terminalRun
+      ? (executionRecordPresent ? "not-executed" : "not-reached")
+      : "waiting";
+  const terminalStageState: StageCardState = terminalRun ? "not-reached" : "waiting";
+  // The stage the run stopped at, taken from the rail so the card and the rail
+  // can never disagree about where a terminal workflow ended.
+  const stoppingStageId = stageRail.find((stage) => stage.status === "blocked")?.id;
+  // Outcome and Resolution are contracts that are created, not stages that are
+  // reached — matching the Governance Report's NOT_CREATED for the same two.
+  const notCreatedStageState: StageCardState = terminalRun ? "not-created" : "waiting";
+
   const truthInput = run
     ? {
         createdAt: run.createdAt,
@@ -1159,14 +1202,22 @@ export function LiveDemoPage() {
                       ? run.request.intent.rawText
                       : `Reference ${run.request.intent.intentId}`,
                 },
-                { label: "Intent id", value: linkedIds.intentId ?? "Not surfaced publicly yet" },
-                { label: "IntentState id", value: linkedIds.intentStateId ?? "Not surfaced publicly yet" },
+                {
+                  label: "Intent id",
+                  value: linkedIds.intentId ??
+                    absentValue(terminalRun, "Not returned", "Not surfaced publicly yet"),
+                },
+                {
+                  label: "IntentState id",
+                  value: linkedIds.intentStateId ??
+                    absentValue(terminalRun, "Not returned", "Not surfaced publicly yet"),
+                },
               ]}
               details={run.request.intent}
             />
             <StageCard
               title="Evidence / Readiness"
-              state={run.evidenceSubmissions.length > 0 ? "present" : "waiting"}
+              state={run.evidenceSubmissions.length > 0 ? "present" : terminalStageState}
               rows={
                 run.evidenceSubmissions.length > 0
                   ? run.evidenceSubmissions.flatMap((submission) => [
@@ -1184,51 +1235,72 @@ export function LiveDemoPage() {
                   : [
                       {
                         label: "Status",
-                        value: "No public evidence submitted from Live Demo yet",
+                        value: absentValue(
+                          terminalRun,
+                          "No public evidence was submitted for this workflow",
+                          "No public evidence submitted from Live Demo yet",
+                        ),
                       },
                     ]
               }
               details={run.evidenceSubmissions}
             />
+            {/*
+              The overall workflow state is a run-level fact, not a Plan outcome.
+              Labelled explicitly so "BLOCKED" here cannot be read as "Plan blocked" —
+              this run's plan artifacts were returned successfully.
+            */}
             <StageCard
               title="Plan"
-              state={run.workflow.artifacts ? "present" : "waiting"}
+              state={run.workflow.artifacts ? "present" : terminalStageState}
               rows={[
-                { label: "Workflow state", value: run.workflow.state },
                 {
                   label: "Artifacts",
-                  value: run.workflow.artifacts ? "Plan / stage artifacts returned" : "No public artifact bundle yet",
+                  value: run.workflow.artifacts
+                    ? "Plan / stage artifacts returned"
+                    : absentValue(
+                        terminalRun,
+                        "No public artifact bundle was returned",
+                        "No public artifact bundle yet",
+                      ),
                 },
+                { label: "Overall workflow state (not a Plan outcome)", value: run.workflow.state },
               ]}
               details={run.workflow.artifacts}
             />
             <StageCard
               title="Guardian"
+              // LIVE means Guardian activity is genuinely current. A terminal run
+              // that stopped here is not live, however much state came back.
               state={
-                guardianAggregator || run.workflow.evaluation
-                  ? "present"
-                  : runSummary.terminal
-                    ? "not-reached"
-                    : "waiting"
+                stoppingStageId === "guardian"
+                  ? "stopped"
+                  : guardianAggregator || run.workflow.evaluation
+                    ? "present"
+                    : terminalStageState
               }
               rows={[
                 {
                   label: "Decision",
-                  value: guardianAggregator?.decision ?? evaluationDecision ?? "Not surfaced publicly yet",
+                  value: guardianAggregator?.decision ?? evaluationDecision ??
+                    absentValue(terminalRun, "Not returned", "Not surfaced publicly yet"),
                 },
                 {
                   label: "Semantic status",
-                  value: guardianAggregator?.semanticStatus ?? "Not surfaced publicly yet",
+                  value: guardianAggregator?.semanticStatus ??
+                    absentValue(terminalRun, "Not returned", "Not surfaced publicly yet"),
                 },
                 {
                   label: "Critical failure",
-                  value: guardianAggregator ? String(guardianAggregator.criticalFailure) : "Not surfaced publicly yet",
+                  value: guardianAggregator
+                    ? String(guardianAggregator.criticalFailure)
+                    : absentValue(terminalRun, "Not returned", "Not surfaced publicly yet"),
                 },
                 {
                   label: "Materialization eligible",
                   value:
                     materializationEligible === undefined
-                      ? "Not surfaced publicly yet"
+                      ? absentValue(terminalRun, "Not returned", "Not surfaced publicly yet")
                       : String(materializationEligible),
                 },
               ]}
@@ -1242,38 +1314,55 @@ export function LiveDemoPage() {
             */}
             <StageCard
               title="Authority"
-              state={authorityDecision ? "present" : runSummary.terminal ? "not-reached" : "waiting"}
+              state={authorityDecision ? "present" : terminalStageState}
               rows={[
                 {
                   label: "Authority decision",
                   value:
                     authorityDecision ??
-                    (runSummary.terminal
-                      ? "Not reached — no Authority decision was returned"
-                      : "Not surfaced publicly yet"),
+                    absentValue(
+                      terminalRun,
+                      "Not reached — no Authority decision was returned",
+                      "Not surfaced publicly yet",
+                    ),
                 },
                 {
                   label: "Capability",
-                  value: run.workspace?.authority.capability ?? "Not surfaced publicly yet",
+                  value: run.workspace?.authority.capability ??
+                    absentValue(terminalRun, "Not reached", "Not surfaced publicly yet"),
                 },
                 {
                   label: "Explanation",
-                  value: run.workspace?.authority.explanation || "Not surfaced publicly yet",
+                  value: run.workspace?.authority.explanation ||
+                    absentValue(terminalRun, "Not reached", "Not surfaced publicly yet"),
                 },
               ]}
               details={run.workspace?.authority}
             />
+            {/* Approval and monitoring are downstream of Authority: if Authority
+                was never reached, neither was ever created. */}
             <StageCard
               title="Approval / Monitoring"
-              state={run.approval || monitoringId ? "present" : "waiting"}
+              state={run.approval || monitoringId ? "present" : terminalStageState}
               rows={[
                 {
                   label: "Approval",
-                  value: run.approval ? `${run.approval.id} · ${run.approval.status}` : "No approval row returned",
+                  value: run.approval
+                    ? `${run.approval.id} · ${run.approval.status}`
+                    : absentValue(
+                        terminalRun,
+                        authorityReached ? "Not created" : "Not reached — Authority was never reached",
+                        "No approval row returned",
+                      ),
                 },
                 {
                   label: "Monitoring",
-                  value: monitoringId ?? "No monitoring contract returned",
+                  value: monitoringId ??
+                    absentValue(
+                      terminalRun,
+                      authorityReached ? "Not created" : "Not reached — Authority was never reached",
+                      "No monitoring contract returned",
+                    ),
                 },
               ]}
               details={{
@@ -1283,12 +1372,20 @@ export function LiveDemoPage() {
             />
             <StageCard
               title="Execution"
-              state={run.workflow.execution || run.commit ? "present" : "waiting"}
+              state={executionCardState}
               rows={[
                 {
-                  label: "Execution status",
-                  value: run.workflow.execution?.status ?? run.commit?.status ?? "Not created yet",
+                  label: "Execution result",
+                  value: run.workflow.execution?.status ?? run.commit?.status ??
+                    absentValue(
+                      terminalRun,
+                      executionRecordPresent ? "Not executed — no execution result was returned" : "Not reached",
+                      "Not created yet",
+                    ),
                 },
+                ...(executionView?.phase
+                  ? [{ label: "Pipeline phase (not an execution result)", value: executionView.phase }]
+                  : []),
                 { label: "Execution id", value: run.workflow.execution?.executionId ?? run.commit?.executionId ?? "—" },
                 { label: "Result ref", value: run.workflow.execution?.resultRef ?? run.commit?.resultRef ?? "—" },
               ]}
@@ -1299,32 +1396,41 @@ export function LiveDemoPage() {
             />
             <StageCard
               title="Outcome"
-              state={run.outcome ? "present" : extractOutcomeContractId(run.workflow) ? "present" : "waiting"}
+              state={
+                run.outcome || extractOutcomeContractId(run.workflow) ? "present" : notCreatedStageState
+              }
               rows={[
                 {
                   label: "Outcome contract",
-                  value: run.outcome?.id ?? extractOutcomeContractId(run.workflow) ?? "Not created yet",
+                  value: run.outcome?.id ?? extractOutcomeContractId(run.workflow) ??
+                    absentValue(terminalRun, "Not created", "Not created yet"),
                 },
                 {
                   label: "State",
-                  value: run.outcome?.state ?? "No public outcome row returned yet",
+                  value: run.outcome?.state ??
+                    absentValue(terminalRun, "Not created", "No public outcome row returned yet"),
                 },
                 {
                   label: "Payment",
-                  value: run.outcome?.paymentStatus ?? "Not surfaced publicly yet",
+                  value: run.outcome?.paymentStatus ??
+                    absentValue(terminalRun, "Not created", "Not surfaced publicly yet"),
                 },
               ]}
               details={run.outcome ?? run.workflow.outcomeContract}
             />
             <StageCard
               title="Resolution"
-              state={run.resolution ? "present" : "waiting"}
+              state={run.resolution ? "present" : notCreatedStageState}
               rows={[
-                { label: "Case", value: run.resolution?.id ?? "No ResolutionCase returned" },
-                { label: "State", value: run.resolution?.state ?? "—" },
+                {
+                  label: "Case",
+                  value: run.resolution?.id ??
+                    absentValue(terminalRun, "Not created", "No ResolutionCase returned"),
+                },
+                { label: "State", value: run.resolution?.state ?? absentValue(terminalRun, "Not created", "—") },
                 {
                   label: "Responsibility",
-                  value: run.resolution?.responsibilityState ?? "—",
+                  value: run.resolution?.responsibilityState ?? absentValue(terminalRun, "Not created", "—"),
                 },
               ]}
               details={run.resolution}
