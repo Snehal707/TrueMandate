@@ -55,21 +55,66 @@ function safeStaticPath(urlPath) {
   return resolved;
 }
 
+/** Vite emits content-hashed filenames under /assets, so they are immutable. */
+function isHashedAsset(urlPath) {
+  return urlPath.split("?")[0].startsWith("/assets/");
+}
+
+/**
+ * Weak validator from size + mtime. Enough for a 304 on unchanged files, and it
+ * changes whenever a new image is deployed because every layer is rewritten.
+ */
+function entityTag(stats) {
+  return `W/"${stats.size.toString(16)}-${Math.floor(stats.mtimeMs).toString(16)}"`;
+}
+
 function serveStatic(req, res) {
-  let filePath = safeStaticPath(req.url ?? "/");
+  const urlPath = req.url ?? "/";
+  let filePath = safeStaticPath(urlPath);
   if (!filePath) {
     json(res, 400, { error: "BAD_PATH" });
     return;
   }
-  if (!existsSync(filePath) || statSync(filePath).isDirectory()) {
+
+  const missing = !existsSync(filePath) || statSync(filePath).isDirectory();
+  if (missing) {
+    // A stale index.html points at content-hashed assets that no longer exist.
+    // Falling back to index.html there returns HTML as JavaScript, which a
+    // module script rejects on MIME — a blank page that never self-heals.
+    // 404 lets the browser fail loudly and refetch the document instead.
+    if (isHashedAsset(urlPath)) {
+      json(res, 404, { error: "ASSET_NOT_FOUND" });
+      return;
+    }
     filePath = join(distDir, "index.html");
   }
   if (!existsSync(filePath)) {
     json(res, 404, { error: "NOT_FOUND" });
     return;
   }
+
+  const stats = statSync(filePath);
+  const etag = entityTag(stats);
   const type = MIME[extname(filePath)] ?? "application/octet-stream";
-  res.writeHead(200, { "content-type": type });
+
+  // Hashed assets are safe to cache forever; the document must be revalidated
+  // every load or a returning visitor keeps running the previous deployment.
+  const cacheControl = !missing && isHashedAsset(urlPath)
+    ? "public, max-age=31536000, immutable"
+    : "no-cache";
+
+  if ((req.headers["if-none-match"] ?? "") === etag) {
+    res.writeHead(304, { etag, "cache-control": cacheControl });
+    res.end();
+    return;
+  }
+
+  res.writeHead(200, {
+    "content-type": type,
+    "cache-control": cacheControl,
+    etag,
+    "last-modified": stats.mtime.toUTCString(),
+  });
   createReadStream(filePath).pipe(res);
 }
 
