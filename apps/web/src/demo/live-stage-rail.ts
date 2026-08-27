@@ -10,7 +10,7 @@
  * claim that the backend reported that stage. It is labelled accordingly.
  */
 
-export type RailStatus = "done" | "active" | "waiting" | "blocked";
+export type RailStatus = "done" | "active" | "waiting" | "blocked" | "not-reached";
 
 export type RailStageId =
   | "intent"
@@ -39,8 +39,17 @@ export interface RailInput {
   readonly workspacePresent: boolean;
   readonly artifactsPresent: boolean;
   readonly evaluationPresent: boolean;
+  /** `workspace.guardian.aggregator.decision` — the real Guardian artifact. */
+  readonly guardianDecision?: string;
+  readonly guardianSemanticStatus?: string;
+  /**
+   * `workspace.authority.decision` ONLY. The overall workflow state is never an
+   * Authority artifact: BLOCKED is reachable from any stage, so treating it as
+   * one made the rail claim Authority had returned when it was never reached.
+   */
   readonly authorityDecision?: string;
   readonly workflowState?: string;
+  readonly executionPhase?: string;
   readonly executionStatus?: string;
   readonly outcomePresent: boolean;
   readonly outcomeState?: string;
@@ -74,6 +83,17 @@ const REQUEST_FAILURE = new Set(["VALIDATION_FAILED", "LIVE_DEMO_ERROR"]);
 
 /** Workflow states that mean the governed path stopped deliberately. */
 const BLOCKED_WORKFLOW_STATES = new Set(["BLOCKED", "DENIED", "REJECTED"]);
+
+/**
+ * Guardian values that report an absence rather than deliver a verdict. A
+ * Guardian record reading UNAVAILABLE is where the run stopped, not a stage it
+ * completed, so it must not count as a returned judgment.
+ */
+export const GUARDIAN_UNUSABLE = new Set(["UNAVAILABLE", "UNKNOWN", "ERROR", "INDETERMINATE"]);
+
+export function guardianVerdictIsUsable(decision?: string): boolean {
+  return Boolean(decision) && !GUARDIAN_UNUSABLE.has(decision!.toUpperCase());
+}
 
 export function classifyFailure(errorCode?: string): FailurePresentation | undefined {
   if (!errorCode) return undefined;
@@ -118,10 +138,22 @@ interface StageSeed {
 }
 
 function seeds(input: RailInput): readonly StageSeed[] {
+  // An Authority artifact, or a workflow state that is only reachable *through*
+  // Authority. Blocked states are deliberately excluded: a workflow can be
+  // BLOCKED at verification, planning, or Guardian without Authority ever running.
   const authorityKnown = Boolean(input.authorityDecision) ||
-    BLOCKED_WORKFLOW_STATES.has(input.workflowState ?? "") ||
     input.workflowState === "AUTHORIZED" ||
     input.workflowState === "AWAITING_APPROVAL";
+
+  // A Guardian record saying "UNAVAILABLE" is a report of absence, not a verdict.
+  const guardianReturned = guardianVerdictIsUsable(input.guardianDecision) ||
+    (input.evaluationPresent && !input.guardianDecision);
+
+  const guardianDetail = input.guardianDecision
+    ? input.guardianSemanticStatus
+      ? `${input.guardianDecision} · ${input.guardianSemanticStatus}`
+      : input.guardianDecision
+    : undefined;
 
   return [
     {
@@ -153,19 +185,17 @@ function seeds(input: RailInput): readonly StageSeed[] {
       id: "guardian",
       label: "Guardian",
       plain: "Five independent judges review the action before authority is considered.",
-      done: input.evaluationPresent,
-      ...(input.authorityDecision ? { detail: input.authorityDecision } : {}),
+      done: guardianReturned,
+      ...(guardianDetail ? { detail: guardianDetail } : {}),
     },
     {
       id: "authority",
       label: "Authority",
       plain: "Was this action actually authorized?",
       done: authorityKnown,
-      ...(input.authorityDecision
-        ? { detail: input.authorityDecision }
-        : input.workflowState
-          ? { detail: input.workflowState }
-          : {}),
+      // Detail comes only from a real Authority decision. The overall workflow
+      // state must never be printed here as though Authority had returned it.
+      ...(input.authorityDecision ? { detail: input.authorityDecision } : {}),
     },
     {
       id: "execution",
@@ -194,6 +224,7 @@ function seeds(input: RailInput): readonly StageSeed[] {
 export function deriveStageRail(input: RailInput): readonly RailStage[] {
   const rows = seeds(input);
   const blocked = BLOCKED_WORKFLOW_STATES.has(input.workflowState ?? "") ||
+    input.executionPhase === "BLOCKED" ||
     isBlockingFailure(input.errorCode);
 
   // The first stage without a returned artifact is where the run currently sits.
@@ -205,6 +236,9 @@ export function deriveStageRail(input: RailInput): readonly RailStage[] {
     if (index === frontierIndex && input.requestInFlight) {
       return { ...row, status: "active" as const };
     }
+    // Past the stopping point of a terminal run, these stages will never occur.
+    // Showing them as "waiting" invites the judge to wait for nothing.
+    if (blocked) return { ...row, status: "not-reached" as const };
     return { ...row, status: "waiting" as const };
   });
 }
@@ -213,18 +247,26 @@ const STATUS_LABELS: Readonly<Record<RailStatus, string>> = {
   done: "Returned",
   active: "Working…",
   waiting: "Waiting",
-  blocked: "Stopped",
+  blocked: "Stopped here",
+  "not-reached": "Not reached",
 };
 
 export function railStatusLabel(status: RailStatus): string {
   return STATUS_LABELS[status];
 }
 
-/** Summary line for the rail header — derived, never asserted. */
+/**
+ * Summary line for the rail header — derived, never asserted. The counts add up
+ * to the full rail so a judge can see nothing has been quietly omitted.
+ */
 export function railProgressLabel(stages: readonly RailStage[]): string {
   const done = stages.filter((stage) => stage.status === "done").length;
+  const notReached = stages.filter((stage) => stage.status === "not-reached").length;
   const blocked = stages.find((stage) => stage.status === "blocked");
-  if (blocked) return `Stopped at ${blocked.label} · ${done} of ${stages.length} stages returned`;
+  if (blocked) {
+    const tail = notReached > 0 ? ` · ${notReached} not reached` : "";
+    return `Stopped at ${blocked.label} · ${done} returned${tail}`;
+  }
   const active = stages.find((stage) => stage.status === "active");
   if (active) return `${active.label} in progress · ${done} of ${stages.length} stages returned`;
   return `${done} of ${stages.length} stages returned`;

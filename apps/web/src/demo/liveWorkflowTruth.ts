@@ -551,8 +551,8 @@ export function buildGovernanceReport(input: LiveWorkflowTruthInput, graph: Live
     ]),
     section("observability", "Observability", workspace?.timeline.events.length ? "PRESENT" : "NOT_PUBLIC", [
       row("Public audit timeline", workspace?.timeline.events.map((event) => `${event.at} ${event.type}: ${event.summary}`).join(" | ")),
-      row("Live Gemini activity summary", "Not publicly available through the public API", "DERIVED_PRESENTATION"),
-      row("Trace/log correlation", "Not publicly available", "DERIVED_PRESENTATION"),
+      row("Model telemetry", "Internal model telemetry is private. This view uses verified public workflow artifacts.", "DERIVED_PRESENTATION"),
+      row("Trace / log correlation", "Internal traces and logs are private. Every value in this report comes from a returned public artifact.", "DERIVED_PRESENTATION"),
     ]),
   ];
 }

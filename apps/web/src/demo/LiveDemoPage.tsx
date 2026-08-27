@@ -24,6 +24,12 @@ import {
   type LiveEvidenceRecord,
 } from "./liveWorkflowTruth";
 import {
+  deriveRunSummary,
+  provenanceClaim,
+  type EconomicEffectValue,
+  type RunSummary,
+} from "./live-run-summary";
+import {
   classifyFailure,
   deriveStageRail,
   railProgressLabel,
@@ -270,6 +276,111 @@ export function FailClosedPanel(props: { readonly error: LiveDemoError }) {
           <span>{props.error.message}</span>
         </div>
       </details>
+    </section>
+  );
+}
+
+/**
+ * RESULT SUMMARY — the answer to "what happened?", above the fold.
+ *
+ * A judge must be able to answer five questions without opening a tab: what was
+ * asked, what was verified, why it stopped, whether it was authorized or
+ * executed, and whether anything economic happened. Every value here comes from
+ * `deriveRunSummary`, which reads returned artifacts only — the same derivation
+ * the Governance Report and the provenance lead use, so they cannot contradict
+ * each other the way the rail and the report once did.
+ */
+const OUTCOME_TONE: Readonly<Record<string, string>> = {
+  "authorized-executed": "good",
+  "authorized-pending": "info",
+  "awaiting-approval": "monitoring",
+  "blocked-by-governance": "warn",
+  "stopped-unavailable": "warn",
+  "in-progress": "info",
+  "request-failed": "neutral",
+  "no-run": "neutral",
+};
+
+const ECONOMIC_TONE: Readonly<Record<EconomicEffectValue, string>> = {
+  ZERO: "good",
+  RECORDED: "info",
+  UNKNOWN: "warn",
+};
+
+export function ResultSummaryCard(props: {
+  readonly summary: RunSummary;
+  readonly workflowId: string;
+  readonly createdAt: string;
+}) {
+  const { summary } = props;
+  return (
+    <section
+      className={`tm-result-summary ${summary.outcomeClass}`}
+      aria-label="Result summary"
+      data-outcome={summary.outcomeClass}
+    >
+      <header>
+        <div>
+          <p className="tm-live-kicker">Result</p>
+          <h3>{summary.headline}</h3>
+        </div>
+        <span className={`tm-badge ${OUTCOME_TONE[summary.outcomeClass] ?? "neutral"}`}>
+          {summary.terminal ? "Terminal" : "In progress"}
+        </span>
+      </header>
+
+      {summary.reason ? (
+        <p className="tm-result-reason">
+          <b>Why</b>
+          {summary.reason}
+        </p>
+      ) : null}
+
+      <div className="tm-result-columns">
+        <div className="tm-result-column succeeded">
+          <p className="tm-live-kicker">What succeeded</p>
+          {summary.succeeded.length ? (
+            <ul>
+              {summary.succeeded.map((fact) => (
+                <li key={fact.label}>
+                  <span>{fact.label}</span>
+                  {fact.detail ? <code>{fact.detail}</code> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="tm-result-empty">Nothing has been returned yet.</p>
+          )}
+        </div>
+        <div className="tm-result-column blocked">
+          <p className="tm-live-kicker">What did not happen</p>
+          {summary.didNotHappen.length ? (
+            <ul>
+              {summary.didNotHappen.map((fact) => (
+                <li key={fact.label}>
+                  <span>{fact.label}</span>
+                  {fact.detail ? <code>{fact.detail}</code> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="tm-result-empty">Every governed stage completed.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="tm-result-effect" data-effect={summary.economicEffect.value}>
+        <span className="tm-live-kicker">Economic effect</span>
+        <strong className={`tm-badge ${ECONOMIC_TONE[summary.economicEffect.value]}`}>
+          {summary.economicEffect.value}
+        </strong>
+        <p>{summary.economicEffect.statement}</p>
+      </div>
+
+      <div className="tm-result-meta">
+        <code>{props.workflowId}</code>
+        <span>{fmtDateTime(props.createdAt)}</span>
+      </div>
     </section>
   );
 }
@@ -766,6 +877,15 @@ export function LiveDemoPage() {
   const monitoringId = extractMonitoringId(run?.workflow);
   const linkedIds = run ? linkedIntentIds(run) : {};
 
+  // Authority comes from the workspace artifact — the same source the Governance
+  // Report reads. `workflow.evaluation` is kept only as a fallback for runs where
+  // no workspace has been returned; the overall workflow state is never used.
+  const authorityDecision = run?.workspace?.authority.decision ?? evaluationDecision;
+  const guardianAggregator = run?.workspace?.guardian.aggregator;
+  const executionView = run?.workspace?.execution;
+  const constraints = run?.workspace?.semantic.constraints ?? [];
+  const executionStatus = run?.workflow.execution?.status ?? run?.commit?.status;
+
   // Rail status is derived from returned artifacts only. `requestInFlight` is a
   // fact about this client, not a claim that the backend reported a stage.
   const stageRail = deriveStageRail({
@@ -775,15 +895,55 @@ export function LiveDemoPage() {
     workspacePresent: Boolean(run?.workspace),
     artifactsPresent: Boolean(run?.workflow.artifacts),
     evaluationPresent: Boolean(run?.workflow.evaluation),
-    ...(evaluationDecision ? { authorityDecision: evaluationDecision } : {}),
-    ...(run?.workflow.state ? { workflowState: run.workflow.state } : {}),
-    ...(run?.workflow.execution?.status ?? run?.commit?.status
-      ? { executionStatus: (run?.workflow.execution?.status ?? run?.commit?.status) as string }
+    ...(guardianAggregator?.decision ? { guardianDecision: guardianAggregator.decision } : {}),
+    ...(guardianAggregator?.semanticStatus
+      ? { guardianSemanticStatus: guardianAggregator.semanticStatus }
       : {}),
+    ...(authorityDecision ? { authorityDecision } : {}),
+    ...(run?.workflow.state ? { workflowState: run.workflow.state } : {}),
+    ...(executionView?.phase ? { executionPhase: executionView.phase } : {}),
+    ...(executionStatus ? { executionStatus } : {}),
     outcomePresent: Boolean(run?.outcome),
     ...(run?.outcome?.state ? { outcomeState: run.outcome.state } : {}),
     resolutionPresent: Boolean(run?.resolution),
     evidenceCount: run?.evidenceSubmissions.length ?? 0,
+    requestInFlight: pending === "working" || refreshing === "working",
+    ...(error?.code ? { errorCode: error.code } : {}),
+  });
+
+  const runSummary = deriveRunSummary({
+    hasRun: Boolean(run),
+    workspacePresent: Boolean(run?.workspace),
+    ...(run?.workflow.state ? { workflowState: run.workflow.state } : {}),
+    ...(linkedIds.intentId ? { intentId: linkedIds.intentId } : {}),
+    ...(linkedIds.intentStateId ? { intentStateId: linkedIds.intentStateId } : {}),
+    ...(run?.workspace ? { constraintsTotal: constraints.length } : {}),
+    ...(run?.workspace
+      ? {
+          constraintsWithoutCriticalFailure: constraints.filter(
+            (constraint) => !constraint.criticalFailure,
+          ).length,
+        }
+      : {}),
+    ...(run?.workspace ? { planStepCount: run.workspace.plan.steps.length } : {}),
+    planArtifactsPresent: Boolean(run?.workflow.artifacts),
+    ...(guardianAggregator?.decision ? { guardianDecision: guardianAggregator.decision } : {}),
+    ...(guardianAggregator?.semanticStatus
+      ? { guardianSemanticStatus: guardianAggregator.semanticStatus }
+      : {}),
+    ...(guardianAggregator ? { guardianCriticalFailure: guardianAggregator.criticalFailure } : {}),
+    ...(authorityDecision ? { authorityDecision } : {}),
+    ...(run?.workspace?.authority.explanation
+      ? { authorityExplanation: run.workspace.authority.explanation }
+      : {}),
+    ...(run?.approval?.status ? { approvalStatus: run.approval.status } : {}),
+    ...(executionView?.phase ? { executionPhase: executionView.phase } : {}),
+    ...(executionView?.stopReason ? { executionStopReason: executionView.stopReason } : {}),
+    ...(executionStatus ? { executionStatus } : {}),
+    ...(executionView ? { sideEffectCount: executionView.sideEffects.length } : {}),
+    outcomePresent: Boolean(run?.outcome),
+    ...(run?.outcome?.state ? { outcomeState: run.outcome.state } : {}),
+    resolutionPresent: Boolean(run?.resolution),
     requestInFlight: pending === "working" || refreshing === "working",
     ...(error?.code ? { errorCode: error.code } : {}),
   });
@@ -906,24 +1066,11 @@ export function LiveDemoPage() {
 
           <OriginalRequestCard run={run} />
 
-          <div className="tm-live-summary-grid">
-            <div className="tm-live-summary-card">
-              <span>Domain</span>
-              <strong>{liveDomainLabel(run.domainId, run.customPackId)}</strong>
-            </div>
-            <div className="tm-live-summary-card">
-              <span>Workflow</span>
-              <strong>{run.workflow.workflowId}</strong>
-            </div>
-            <div className="tm-live-summary-card">
-              <span>Workflow state</span>
-              <strong>{run.workflow.state}</strong>
-            </div>
-            <div className="tm-live-summary-card">
-              <span>Created</span>
-              <strong>{fmtDateTime(run.createdAt)}</strong>
-            </div>
-          </div>
+          <ResultSummaryCard
+            summary={runSummary}
+            workflowId={run.workflow.workflowId}
+            createdAt={run.createdAt}
+          />
 
           <div className="tm-live-actions secondary">
             <button
@@ -1183,6 +1330,12 @@ export function LiveDemoPage() {
                 </div>
                 <span className="tm-live-route-chip">GET /v1/workspace/:intentId</span>
               </div>
+              <p className="tm-provenance-claim">
+                {provenanceClaim(
+                  runSummary,
+                  provenanceModel.nodes.filter((node) => node.source === "PUBLIC_API").length,
+                )}
+              </p>
               <LiveProvenanceGraph model={provenanceModel} />
             </section>
           ) : null}
@@ -1192,6 +1345,12 @@ export function LiveDemoPage() {
               <GovernanceReport
                 workflowId={run.workflow.workflowId}
                 sections={governanceReport}
+                summary={runSummary}
+                request={
+                  run.request.intent.kind === "RAW"
+                    ? run.request.intent.rawText
+                    : `Intent reference ${run.request.intent.intentId}`
+                }
               />
             </section>
           ) : null}

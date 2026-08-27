@@ -224,9 +224,29 @@
 .tm-rail-stage.active .dot { background: var(--blue); opacity: 1; animation: tm-rail-pulse 1.35s var(--ease) infinite; }
 .tm-rail-stage.active .status { color: var(--blue); }
 
-.tm-rail-stage.blocked { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 46%, transparent); }
+/* Stopped here — the one stage a judge must find instantly. */
+.tm-rail-stage.blocked {
+  box-shadow: inset 0 0 0 1px var(--amber);
+  background: linear-gradient(180deg, var(--amber-soft), transparent 78%), var(--surface-2);
+}
 .tm-rail-stage.blocked .dot { background: var(--amber); opacity: 1; }
-.tm-rail-stage.blocked .status { color: var(--amber); }
+.tm-rail-stage.blocked .status { color: var(--amber); font-weight: 700; }
+.tm-rail-stage.blocked .label { color: var(--amber); }
+
+/* Not reached — this will never happen. It must not read as "wait for me".
+   Recessed and hollow, so it is plainly distinct from an amber stop and from
+   a waiting stage that can still progress. */
+.tm-rail-stage.not-reached {
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  opacity: 0.55;
+}
+.tm-rail-stage.not-reached .dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--text-faint);
+  opacity: 1;
+}
+.tm-rail-stage.not-reached .label { color: var(--text-dim); }
+.tm-rail-stage.not-reached .status { color: var(--text-faint); font-style: italic; }
 
 @keyframes tm-rail-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(78, 161, 255, 0.5); }
@@ -472,11 +492,171 @@
   letter-spacing: 0.08em;
 }
 
-/* The request now leads the report, so the grid's ID cell steps back. */
-.tm-live-summary-grid .tm-live-summary-card:nth-child(2) strong {
+/* ---------- Result summary (Live Proof) ----------
+   The whole outcome in under five seconds, directly under the request. */
+.tm-result-summary {
+  position: relative;
+  display: grid;
+  gap: 16px;
+  padding: 20px 24px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  overflow: hidden;
+}
+.tm-result-summary::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--text-dim);
+}
+.tm-result-summary[data-outcome="stopped-unavailable"]::before,
+.tm-result-summary[data-outcome="blocked-by-governance"]::before { background: var(--amber); }
+.tm-result-summary[data-outcome="authorized-executed"]::before { background: var(--emerald); }
+.tm-result-summary[data-outcome="authorized-pending"]::before,
+.tm-result-summary[data-outcome="in-progress"]::before { background: var(--blue); }
+
+.tm-result-summary > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tm-result-summary h3 {
+  margin: 4px 0 0;
+  font-size: 1.32rem;
+  line-height: 1.25;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+.tm-result-reason {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
   color: var(--text-dim);
-  font-size: 0.78rem;
-  font-weight: 500;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  max-width: 92ch;
+}
+.tm-result-reason b {
+  color: var(--text-faint);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.tm-result-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.tm-result-column ul { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.tm-result-column li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--text-strong);
+}
+.tm-result-column li::before {
+  content: "✓";
+  color: var(--emerald);
+  font-size: 0.82rem;
+}
+.tm-result-column.blocked li::before { content: "✕"; color: var(--text-faint); }
+.tm-result-column.blocked li { color: var(--text-dim); }
+.tm-result-column li code {
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+.tm-result-empty { margin: 8px 0 0; color: var(--text-faint); font-size: 0.85rem; }
+
+.tm-result-effect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 14px;
+  padding: 13px 16px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.tm-result-effect[data-effect="ZERO"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emerald) 42%, transparent);
+}
+.tm-result-effect[data-effect="UNKNOWN"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 42%, transparent);
+}
+.tm-result-effect p { margin: 0; color: var(--text-dim); font-size: 0.85rem; line-height: 1.5; }
+.tm-result-effect .tm-badge { font-size: 0.82rem; font-weight: 700; }
+
+.tm-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+}
+.tm-result-meta code { word-break: break-all; }
+
+/* ---------- Governance Report: plain language first ---------- */
+.tm-governance-plain {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.tm-governance-plain h4 {
+  margin: 4px 0 0;
+  font-size: 1.08rem;
+  color: var(--text-strong);
+}
+.tm-governance-plain dl { display: grid; gap: 10px; margin: 0; }
+.tm-governance-plain dl > div {
+  display: grid;
+  grid-template-columns: minmax(160px, 210px) minmax(0, 1fr);
+  gap: 6px 18px;
+  align-items: baseline;
+}
+.tm-governance-plain dt {
+  color: var(--text-faint);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.tm-governance-plain dd {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.tm-governance-plain-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  max-width: 88ch;
+}
+
+/* ---------- Provenance: what this graph proves ---------- */
+.tm-provenance-claim {
+  margin: 0 0 16px;
+  max-width: 96ch;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  padding-left: 12px;
+  border-left: 2px solid color-mix(in srgb, var(--emerald) 50%, transparent);
 }
 
 /* ---------- Responsive: protects 1920x1080 capture and laptops ---------- */
@@ -494,4 +674,6 @@
   .tm-request-card { padding: 16px 18px; }
   .tm-request-text { font-size: 1rem; }
   .tm-request-workflow { margin-left: 0; }
+  .tm-result-columns { grid-template-columns: 1fr; }
+  .tm-governance-plain dl > div { grid-template-columns: 1fr; }
 }

@@ -1,17 +1,75 @@
 import type { GovernanceReportSection } from "./liveWorkflowTruth";
+import type { RunSummary } from "./live-run-summary";
 
 function availabilityLabel(value: GovernanceReportSection["availability"]): string {
   switch (value) {
     case "PRESENT": return "Recorded";
     case "NOT_CREATED": return "Not created";
     case "NOT_REACHED": return "Not reached";
-    case "NOT_PUBLIC": return "Not publicly available";
+    case "NOT_PUBLIC": return "Private (internal)";
   }
+}
+
+/**
+ * Plain-language answers first, technical evidence below. The six lines are the
+ * questions a non-technical judge actually has; each is derived from the same
+ * `RunSummary` the rail and the Result Summary use.
+ */
+function PlainSummary(props: { readonly summary: RunSummary; readonly request: string }) {
+  const { summary } = props;
+  const verified = summary.succeeded
+    .filter((fact) => fact.label !== "Intent recorded")
+    .map((fact) => (fact.detail ? `${fact.label} (${fact.detail})` : fact.label));
+
+  const granted = summary.succeeded.find((fact) => fact.label === "Authority granted");
+  const refused = summary.didNotHappen.find((fact) => fact.label === "Authority did not grant");
+  const authorityLine = granted
+    ? `Yes — ${granted.detail ?? "granted"}.`
+    : refused
+      ? `No — Authority returned ${refused.detail ?? "a non-granting decision"}.`
+      : "No — Authority was never reached.";
+
+  const executed = summary.succeeded.find((fact) => fact.label === "Execution ran");
+  const executionLine = executed
+    ? `Yes — execution reported ${executed.detail ?? "a result"}.`
+    : "No — the action was never executed.";
+
+  const rows: readonly (readonly [string, string])[] = [
+    ["What was requested", props.request],
+    ["What TrueMandate verified", verified.length ? verified.join(" · ") : "Nothing has been verified yet."],
+    ["Why it stopped", summary.reason ?? (summary.terminal ? "No stop reason was returned." : "It has not stopped — this run is still in progress.")],
+    ["Was authority granted", authorityLine],
+    ["Did execution occur", executionLine],
+    ["Economic side effects", `${summary.economicEffect.value} — ${summary.economicEffect.statement}`],
+  ];
+
+  return (
+    <section className="tm-governance-plain" aria-label="Plain language summary">
+      <header>
+        <p className="tm-live-kicker">In plain language</p>
+        <h4>{summary.headline}</h4>
+      </header>
+      <dl>
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="tm-governance-plain-note">
+        Everything above is derived from the returned public artifacts. The technical evidence
+        those answers came from is recorded below.
+      </p>
+    </section>
+  );
 }
 
 export function GovernanceReport(props: {
   readonly workflowId: string;
   readonly sections: readonly GovernanceReportSection[];
+  readonly summary?: RunSummary;
+  readonly request?: string;
 }) {
   return (
     <article className="tm-governance-report" aria-label={`Governance Report for ${props.workflowId}`}>
@@ -27,6 +85,10 @@ export function GovernanceReport(props: {
           <strong>Explanation is generated. Provenance is recorded.</strong>
         </div>
       </header>
+
+      {props.summary ? (
+        <PlainSummary summary={props.summary} request={props.request ?? "Not recorded."} />
+      ) : null}
 
       <div className="tm-governance-section-list">
         {props.sections.map((section) => (

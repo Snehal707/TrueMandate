@@ -3,6 +3,7 @@ import {
   classifyFailure,
   deriveStageRail,
   railProgressLabel,
+  railStatusLabel,
   type RailInput,
 } from "./live-stage-rail";
 
@@ -113,6 +114,94 @@ describe("stage rail derivation", () => {
     expect(railProgressLabel(deriveStageRail(EMPTY))).toContain("0 of 7");
     const blocked = deriveStageRail({ ...EMPTY, hasRun: true, workflowState: "BLOCKED" });
     expect(railProgressLabel(blocked)).toContain("Stopped at");
+  });
+});
+
+/**
+ * Regression: a workflow state of BLOCKED used to satisfy `authorityKnown`, so
+ * the rail rendered "Authority · Returned · BLOCKED" for runs where Authority was
+ * never reached — contradicting the Governance Report on the same screen.
+ */
+describe("overall workflow state is not an Authority artifact", () => {
+  const guardianUnavailable: RailInput = {
+    ...EMPTY,
+    hasRun: true,
+    intentId: "intent-1",
+    intentStateId: "state-1",
+    workspacePresent: true,
+    artifactsPresent: true,
+    guardianDecision: "UNAVAILABLE",
+    guardianSemanticStatus: "UNCERTAIN",
+    workflowState: "BLOCKED",
+    executionPhase: "BLOCKED",
+  };
+
+  it("never marks Authority returned from a blocked workflow state alone", () => {
+    for (const state of ["BLOCKED", "DENIED", "REJECTED"]) {
+      const rail = deriveStageRail({ ...guardianUnavailable, workflowState: state });
+      const authority = rail.find((stage) => stage.id === "authority")!;
+      expect(authority.status, state).not.toBe("done");
+      expect(authority.detail, state).toBeUndefined();
+    }
+  });
+
+  it("still marks Authority returned for states only reachable through Authority", () => {
+    for (const state of ["AUTHORIZED", "AWAITING_APPROVAL"]) {
+      const rail = deriveStageRail({
+        ...guardianUnavailable,
+        guardianDecision: "ALLOW",
+        workflowState: state,
+        executionPhase: "AUTHORIZE",
+      });
+      expect(rail.find((stage) => stage.id === "authority")?.status, state).toBe("done");
+    }
+  });
+
+  it("marks Authority returned when a real decision exists, and shows that decision", () => {
+    const rail = deriveStageRail({
+      ...guardianUnavailable,
+      guardianDecision: "BLOCK",
+      authorityDecision: "DENY",
+    });
+    const authority = rail.find((stage) => stage.id === "authority")!;
+    expect(authority.status).toBe("done");
+    expect(authority.detail).toBe("DENY");
+  });
+
+  it("treats an unavailable Guardian record as the stopping point, not a verdict", () => {
+    const rail = deriveStageRail(guardianUnavailable);
+    const guardian = rail.find((stage) => stage.id === "guardian")!;
+    expect(guardian.status).toBe("blocked");
+    // The Guardian row shows the Guardian decision — not the Authority decision.
+    expect(guardian.detail).toBe("UNAVAILABLE · UNCERTAIN");
+  });
+
+  it("shows terminal downstream stages as not reached, never as waiting", () => {
+    const rail = deriveStageRail(guardianUnavailable);
+    for (const id of ["authority", "execution", "provenance"]) {
+      expect(rail.find((stage) => stage.id === id)?.status, id).toBe("not-reached");
+    }
+    expect(rail.some((stage) => stage.status === "waiting")).toBe(false);
+  });
+
+  it("keeps waiting for a run that can genuinely still progress", () => {
+    const rail = deriveStageRail({
+      ...guardianUnavailable,
+      guardianDecision: "ALLOW",
+      authorityDecision: "ALLOW",
+      workflowState: "AUTHORIZED",
+      executionPhase: "COMMIT",
+    });
+    expect(rail.some((stage) => stage.status === "waiting")).toBe(true);
+    expect(rail.some((stage) => stage.status === "not-reached")).toBe(false);
+  });
+
+  it("labels every status distinctly", () => {
+    const labels = (["done", "active", "waiting", "blocked", "not-reached"] as const).map(
+      railStatusLabel,
+    );
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels).toEqual(["Returned", "Working…", "Waiting", "Stopped here", "Not reached"]);
   });
 });
 

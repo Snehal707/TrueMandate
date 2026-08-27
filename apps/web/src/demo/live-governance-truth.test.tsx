@@ -222,14 +222,19 @@ describe("live provenance and governance truth", () => {
     expect(sections.find((item) => item.id === "resolution")?.availability).toBe("NOT_CREATED");
     const observability = sections.find((item) => item.id === "observability");
     expect(observability?.availability).toBe("NOT_PUBLIC");
+    // Private is stated as private — the absence of internal telemetry is never
+    // reported as a number, and never as a gap in what the public API can show.
     expect(observability?.rows).toContainEqual({
-      label: "Live Gemini activity summary",
-      value: "Not publicly available through the public API",
+      label: "Model telemetry",
+      value: "Internal model telemetry is private. This view uses verified public workflow artifacts.",
       source: "DERIVED_PRESENTATION",
     });
     expect(observability?.rows).not.toContainEqual(expect.objectContaining({
-      label: "Live Gemini activity summary",
+      label: "Model telemetry",
       value: "0",
     }));
+    for (const forbidden of ["Not publicly available through the public API", "Not publicly available"]) {
+      expect(observability?.rows.map((item) => item.value), forbidden).not.toContain(forbidden);
+    }
   });
 });

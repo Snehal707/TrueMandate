@@ -384,7 +384,6 @@ body {
 .tm-live-pillars div,
 .tm-live-panel,
 .tm-live-stage,
-.tm-live-summary-card,
 .tm-live-outcome-button,
 .tm-live-error {
   background: var(--surface);
@@ -544,31 +543,6 @@ body {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 35%, transparent);
 }
 
-.tm-live-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.8rem;
-}
-
-.tm-live-summary-card {
-  padding: 0.85rem 0.95rem;
-}
-
-.tm-live-summary-card span {
-  display: block;
-  color: var(--text-faint);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-}
-
-.tm-live-summary-card strong {
-  display: block;
-  margin-top: 0.35rem;
-  color: var(--text-strong);
-  font-size: 0.95rem;
-  word-break: break-word;
-}
 
 .tm-live-stage-grid {
   display: grid;
