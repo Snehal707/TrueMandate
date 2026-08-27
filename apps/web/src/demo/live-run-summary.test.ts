@@ -120,6 +120,30 @@ describe("absence is never evidence", () => {
     expect(summary.reasonSource).toBe("authority.decision");
   });
 
+  it("never contradicts itself when Authority ran but its decision is not public", () => {
+    // AUTHORIZED is only reachable through Authority, so the headline may say
+    // authorized — but the fact list must then agree, and must name its source.
+    const summary = deriveRunSummary({
+      ...GUARDIAN_UNAVAILABLE,
+      workflowState: "AUTHORIZED",
+      executionPhase: "COMMIT",
+      guardianDecision: "ALLOW",
+      authorityDecision: undefined,
+    });
+    expect(summary.outcomeClass).toBe("authorized-pending");
+    expect(summary.didNotHappen.map((f) => f.label)).not.toContain("Authority was not reached");
+    const granted = summary.succeeded.find((f) => f.label === "Authority granted");
+    expect(granted?.detail).toBe("workflow state AUTHORIZED");
+  });
+
+  it("still refuses to infer Authority from a blocked workflow state", () => {
+    for (const state of ["BLOCKED", "DENIED", "REJECTED"]) {
+      const summary = deriveRunSummary({ ...GUARDIAN_UNAVAILABLE, workflowState: state });
+      expect(summary.didNotHappen.map((f) => f.label), state).toContain("Authority was not reached");
+      expect(summary.succeeded.map((f) => f.label), state).not.toContain("Authority granted");
+    }
+  });
+
   it("prefers the backend's own stopReason over any derived wording", () => {
     const summary = deriveRunSummary({
       ...GUARDIAN_UNAVAILABLE,

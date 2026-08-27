@@ -606,17 +606,28 @@ export function OriginalRequestCard(props: { readonly run: LiveRunState }) {
   );
 }
 
+const STAGE_CARD_LABELS = {
+  present: "LIVE",
+  waiting: "Not returned yet",
+  "not-reached": "Not reached",
+} as const;
+
 function StageCard(props: {
   readonly title: string;
-  readonly state: "present" | "waiting";
+  /** `not-reached` is terminal: this stage will never run for this workflow. */
+  readonly state: "present" | "waiting" | "not-reached";
   readonly rows: readonly { readonly label: string; readonly value: string }[];
   readonly details?: unknown;
 }) {
   return (
-    <section className={`tm-live-stage${props.state === "present" ? " present" : ""}`}>
+    <section
+      className={`tm-live-stage${props.state === "present" ? " present" : ""}${
+        props.state === "not-reached" ? " not-reached" : ""
+      }`}
+    >
       <header>
         <h4>{props.title}</h4>
-        <span>{props.state === "present" ? "LIVE" : "Not returned yet"}</span>
+        <span>{STAGE_CARD_LABELS[props.state]}</span>
       </header>
       <div className="tm-live-stage-body">
         {props.rows.map((row) => (
@@ -1193,9 +1204,26 @@ export function LiveDemoPage() {
             />
             <StageCard
               title="Guardian"
-              state={run.workflow.evaluation ? "present" : "waiting"}
+              state={
+                guardianAggregator || run.workflow.evaluation
+                  ? "present"
+                  : runSummary.terminal
+                    ? "not-reached"
+                    : "waiting"
+              }
               rows={[
-                { label: "Decision", value: evaluationDecision ?? "Not surfaced publicly yet" },
+                {
+                  label: "Decision",
+                  value: guardianAggregator?.decision ?? evaluationDecision ?? "Not surfaced publicly yet",
+                },
+                {
+                  label: "Semantic status",
+                  value: guardianAggregator?.semanticStatus ?? "Not surfaced publicly yet",
+                },
+                {
+                  label: "Critical failure",
+                  value: guardianAggregator ? String(guardianAggregator.criticalFailure) : "Not surfaced publicly yet",
+                },
                 {
                   label: "Materialization eligible",
                   value:
@@ -1204,16 +1232,36 @@ export function LiveDemoPage() {
                       : String(materializationEligible),
                 },
               ]}
-              details={run.workflow.evaluation}
+              details={run.workspace?.guardian ?? run.workflow.evaluation}
             />
+            {/*
+              Authority reports only what an Authority artifact says. The overall
+              workflow state is deliberately absent here: BLOCKED is reachable
+              from any stage, so printing it in this card told judges Authority
+              had decided when it had never been reached.
+            */}
             <StageCard
               title="Authority"
-              state={run.workflow.evaluation ? "present" : "waiting"}
+              state={authorityDecision ? "present" : runSummary.terminal ? "not-reached" : "waiting"}
               rows={[
-                { label: "Workflow state", value: run.workflow.state },
-                { label: "Authority decision", value: evaluationDecision ?? "Not surfaced publicly yet" },
+                {
+                  label: "Authority decision",
+                  value:
+                    authorityDecision ??
+                    (runSummary.terminal
+                      ? "Not reached — no Authority decision was returned"
+                      : "Not surfaced publicly yet"),
+                },
+                {
+                  label: "Capability",
+                  value: run.workspace?.authority.capability ?? "Not surfaced publicly yet",
+                },
+                {
+                  label: "Explanation",
+                  value: run.workspace?.authority.explanation || "Not surfaced publicly yet",
+                },
               ]}
-              details={run.workflow}
+              details={run.workspace?.authority}
             />
             <StageCard
               title="Approval / Monitoring"

@@ -492,6 +492,14 @@
   letter-spacing: 0.08em;
 }
 
+/* A stage card for something that will never run, matching the rail's
+   "Not reached": recessed, so it does not read as "waiting for me". */
+.tm-live-stage.not-reached { opacity: 0.6; }
+.tm-live-stage.not-reached header span {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
 /* ---------- Result summary (Live Proof) ----------
    The whole outcome in under five seconds, directly under the request. */
 .tm-result-summary {

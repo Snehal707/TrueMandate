@@ -232,10 +232,19 @@ export function deriveRunSummary(input: RunSummaryInput): RunSummary {
     didNotHappen.push({ label: "Guardian did not return a usable verdict", detail: input.guardianDecision });
   }
 
+  // AUTHORIZED and AWAITING_APPROVAL are only reachable *through* Authority, so
+  // they are evidence that it ran even when the decision artifact is not public.
+  // BLOCKED is not: it is reachable from any stage, which is the whole bug.
+  const authorityRanPerState =
+    input.workflowState === "AUTHORIZED" || input.workflowState === "AWAITING_APPROVAL";
+
   if (authorityGranted(input.authorityDecision)) {
     succeeded.push({ label: "Authority granted", detail: input.authorityDecision });
   } else if (input.authorityDecision) {
     didNotHappen.push({ label: "Authority did not grant", detail: input.authorityDecision });
+  } else if (authorityRanPerState) {
+    // Name the source, so this never reads as a returned Authority decision.
+    succeeded.push({ label: "Authority granted", detail: `workflow state ${input.workflowState}` });
   } else {
     // No Authority artifact at all — say exactly that, never "denied".
     didNotHappen.push({ label: "Authority was not reached" });
