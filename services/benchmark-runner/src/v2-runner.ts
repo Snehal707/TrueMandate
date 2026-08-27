@@ -116,7 +116,11 @@ async function submitWhenReady(
       status: result.ok ? result.value.state : result.code,
       stateId,
     });
-    if (result.ok || !new Set(["INTENT_STATE_NOT_READY", "GUARDIAN_VERDICT_STALE", "PLAN_STALE"]).has(result.code)) break;
+    // intentStateId existence (STATE_AVAILABLE) is not sufficient for state-bound submission:
+    // the canonical gate (assertPlanningAllowed) can still reject with SEMANTIC_READINESS_INSUFFICIENT
+    // while readiness has not yet reached PLANNABLE. Keep polling within the existing budget instead
+    // of treating that rejection as terminal.
+    if (result.ok || !new Set(["INTENT_STATE_NOT_READY", "GUARDIAN_VERDICT_STALE", "PLAN_STALE", "SEMANTIC_READINESS_INSUFFICIENT"]).has(result.code)) break;
   }
   config.diagnostic?.({
     scenarioId,

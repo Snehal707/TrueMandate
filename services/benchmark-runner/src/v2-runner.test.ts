@@ -154,4 +154,290 @@ describe("current-system benchmark fixtures", () => {
     expect(run.results[0]?.status).toBe("PASS");
     expect(rawSubmissions).toBe(1);
   });
+
+  const rawNotReadyResponse = () =>
+    JSON.stringify({ error: { code: "INTENT_STATE_NOT_READY", message: "pending" } });
+  const workspaceBody = (stateId: string) =>
+    JSON.stringify({
+      summary: { intentId: "intent-readiness", intentStateId: stateId, stateHash: `hash-${stateId}` },
+      evidence: [], approvals: [], monitoring: [], execution: null, outcome: null, resolution: null,
+    });
+  const readinessInsufficientResponse = () =>
+    JSON.stringify({ error: { code: "SEMANTIC_READINESS_INSUFFICIENT", message: "Readiness below PLANNABLE" } });
+
+  it("continues polling past SEMANTIC_READINESS_INSUFFICIENT until a superseded state is PLANNABLE", async () => {
+    let workspacePolls = 0;
+    const stateBoundSubmissions: string[] = [];
+    const server = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.method === "GET" && request.url?.includes("/workspace/")) {
+        workspacePolls += 1;
+        response.writeHead(200);
+        response.end(workspaceBody(workspacePolls === 1 ? "state-not-ready" : "state-superseded"));
+        return;
+      }
+      let body = "";
+      request.on("data", (chunk) => { body += String(chunk); });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as { intent?: { kind?: string; expectedIntentStateId?: string } };
+        if (parsed.intent?.kind === "RAW") {
+          response.writeHead(503);
+          response.end(rawNotReadyResponse());
+          return;
+        }
+        const stateId = parsed.intent?.expectedIntentStateId ?? "";
+        stateBoundSubmissions.push(stateId);
+        if (stateId === "state-superseded") {
+          response.writeHead(200);
+          response.end(JSON.stringify({ workflowId: "wf-superseded", state: "BLOCKED", artifacts: [] }));
+          return;
+        }
+        response.writeHead(409);
+        response.end(readinessInsufficientResponse());
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing test server port");
+    const phases: string[] = [];
+
+    const run = await runWorkflowLoadLevel({
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      concurrencyLevels: [1], workflowsPerLevel: 1, timeoutMs: 5_000,
+      readinessPollMs: 1, readinessAttempts: 2,
+      domains: ["logistics_fulfillment"],
+      diagnostic: (event) => phases.push(event.phase),
+    }, 1, 1);
+
+    expect(run.results[0]?.status).toBe("PASS");
+    expect(run.results[0]?.workflowId).toBe("wf-superseded");
+    expect(workspacePolls).toBe(2);
+    expect(stateBoundSubmissions).toEqual(["state-not-ready", "state-superseded"]);
+    expect(phases.filter((phase) => phase === "STATE_BOUND_SUBMISSION")).toHaveLength(2);
+  });
+
+  it("submits the state-bound request exactly once when the first observed state is already PLANNABLE", async () => {
+    let workspacePolls = 0;
+    let stateBoundSubmissions = 0;
+    const server = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.method === "GET" && request.url?.includes("/workspace/")) {
+        workspacePolls += 1;
+        response.writeHead(200);
+        response.end(workspaceBody("state-ready"));
+        return;
+      }
+      let body = "";
+      request.on("data", (chunk) => { body += String(chunk); });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as { intent?: { kind?: string } };
+        if (parsed.intent?.kind === "RAW") {
+          response.writeHead(503);
+          response.end(rawNotReadyResponse());
+          return;
+        }
+        stateBoundSubmissions += 1;
+        response.writeHead(200);
+        response.end(JSON.stringify({ workflowId: "wf-ready", state: "BLOCKED", artifacts: [] }));
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing test server port");
+
+    const run = await runWorkflowLoadLevel({
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      concurrencyLevels: [1], workflowsPerLevel: 1, timeoutMs: 5_000,
+      readinessPollMs: 1, readinessAttempts: 3,
+      domains: ["logistics_fulfillment"],
+    }, 1, 1);
+
+    expect(run.results[0]?.status).toBe("PASS");
+    expect(workspacePolls).toBe(1);
+    expect(stateBoundSubmissions).toBe(1);
+  });
+
+  it("fails closed once the polling budget is exhausted when readiness never advances", async () => {
+    let workspacePolls = 0;
+    let stateBoundSubmissions = 0;
+    const server = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.method === "GET" && request.url?.includes("/workspace/")) {
+        workspacePolls += 1;
+        response.writeHead(200);
+        response.end(workspaceBody("state-stuck"));
+        return;
+      }
+      let body = "";
+      request.on("data", (chunk) => { body += String(chunk); });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as { intent?: { kind?: string } };
+        if (parsed.intent?.kind === "RAW") {
+          response.writeHead(503);
+          response.end(rawNotReadyResponse());
+          return;
+        }
+        stateBoundSubmissions += 1;
+        response.writeHead(409);
+        response.end(readinessInsufficientResponse());
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing test server port");
+
+    const run = await runWorkflowLoadLevel({
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      concurrencyLevels: [1], workflowsPerLevel: 1, timeoutMs: 5_000,
+      readinessPollMs: 1, readinessAttempts: 3,
+      domains: ["logistics_fulfillment"],
+    }, 1, 1);
+
+    expect(run.results[0]?.status).toBe("FAIL");
+    expect(run.results[0]?.actualStatus).toBe("SEMANTIC_READINESS_INSUFFICIENT");
+    expect(workspacePolls).toBe(3);
+    expect(stateBoundSubmissions).toBe(1);
+  });
+
+  it("does not resubmit against a state it has already attempted (no duplicate submission)", async () => {
+    let workspacePolls = 0;
+    const stateBoundSubmissions: string[] = [];
+    const server = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.method === "GET" && request.url?.includes("/workspace/")) {
+        workspacePolls += 1;
+        const stateId = workspacePolls <= 2 ? "state-repeat" : "state-advanced";
+        response.writeHead(200);
+        response.end(workspaceBody(stateId));
+        return;
+      }
+      let body = "";
+      request.on("data", (chunk) => { body += String(chunk); });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as { intent?: { kind?: string; expectedIntentStateId?: string } };
+        if (parsed.intent?.kind === "RAW") {
+          response.writeHead(503);
+          response.end(rawNotReadyResponse());
+          return;
+        }
+        const stateId = parsed.intent?.expectedIntentStateId ?? "";
+        stateBoundSubmissions.push(stateId);
+        if (stateId === "state-advanced") {
+          response.writeHead(200);
+          response.end(JSON.stringify({ workflowId: "wf-advanced", state: "BLOCKED", artifacts: [] }));
+          return;
+        }
+        response.writeHead(409);
+        response.end(readinessInsufficientResponse());
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing test server port");
+
+    const run = await runWorkflowLoadLevel({
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      concurrencyLevels: [1], workflowsPerLevel: 1, timeoutMs: 5_000,
+      readinessPollMs: 1, readinessAttempts: 3,
+      domains: ["logistics_fulfillment"],
+    }, 1, 1);
+
+    expect(run.results[0]?.status).toBe("PASS");
+    expect(workspacePolls).toBe(3);
+    expect(stateBoundSubmissions.filter((id) => id === "state-repeat")).toHaveLength(1);
+    expect(stateBoundSubmissions).toEqual(["state-repeat", "state-advanced"]);
+  });
+
+  it("never surfaces more than one workflow for a scenario across retried submissions (no duplicate workflow)", async () => {
+    let workspacePolls = 0;
+    const createdWorkflowIds = new Set<string>();
+    const server = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.method === "GET" && request.url?.includes("/workspace/")) {
+        workspacePolls += 1;
+        response.writeHead(200);
+        response.end(workspaceBody(workspacePolls === 1 ? "state-not-ready" : "state-superseded"));
+        return;
+      }
+      let body = "";
+      request.on("data", (chunk) => { body += String(chunk); });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as { intent?: { kind?: string; expectedIntentStateId?: string } };
+        if (parsed.intent?.kind === "RAW") {
+          response.writeHead(503);
+          response.end(rawNotReadyResponse());
+          return;
+        }
+        if (parsed.intent?.expectedIntentStateId === "state-superseded") {
+          createdWorkflowIds.add("wf-single");
+          response.writeHead(200);
+          response.end(JSON.stringify({ workflowId: "wf-single", state: "BLOCKED", artifacts: [] }));
+          return;
+        }
+        response.writeHead(409);
+        response.end(readinessInsufficientResponse());
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing test server port");
+
+    const run = await runWorkflowLoadLevel({
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      concurrencyLevels: [1], workflowsPerLevel: 1, timeoutMs: 5_000,
+      readinessPollMs: 1, readinessAttempts: 2,
+      domains: ["logistics_fulfillment"],
+    }, 1, 1);
+
+    expect(run.results).toHaveLength(1);
+    expect(run.results[0]?.status).toBe("PASS");
+    expect(run.readTargets).toHaveLength(1);
+    expect(createdWorkflowIds.size).toBe(1);
+  });
+
+  it("reports no authorization, side effects, or workflow before readiness reaches PLANNABLE (no authority advancement)", async () => {
+    const server = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.method === "GET" && request.url?.includes("/workspace/")) {
+        response.writeHead(200);
+        response.end(workspaceBody("state-stuck"));
+        return;
+      }
+      let body = "";
+      request.on("data", (chunk) => { body += String(chunk); });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as { intent?: { kind?: string } };
+        if (parsed.intent?.kind === "RAW") {
+          response.writeHead(503);
+          response.end(rawNotReadyResponse());
+          return;
+        }
+        response.writeHead(409);
+        response.end(readinessInsufficientResponse());
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing test server port");
+
+    const run = await runWorkflowLoadLevel({
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      concurrencyLevels: [1], workflowsPerLevel: 1, timeoutMs: 5_000,
+      readinessPollMs: 1, readinessAttempts: 2,
+      domains: ["logistics_fulfillment"],
+    }, 1, 1);
+
+    const scenario = run.results[0];
+    expect(scenario?.status).toBe("FAIL");
+    expect(scenario?.authorizationCorrect).toBe(false);
+    expect(scenario?.unauthorizedExecution).toBe(false);
+    expect(scenario?.sideEffectCount).toBe(0);
+    expect(scenario?.workflowId).toBeUndefined();
+  });
 });
