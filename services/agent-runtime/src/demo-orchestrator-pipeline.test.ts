@@ -16,10 +16,26 @@ import { explicitConstraint, replaceConstraints, runtime, temporalConstraint } f
  *    and execute through the real pipeline (Guardian, PreparedAction,
  *    CommitToken, MockPaymentAdapter, Outcome, Provenance, exactly-once
  *    replay)?
- *  - PROCUREMENT CAUSALITY + ISOLATION: control (quantity 500) and attack
- *    (quantity 450) submitted against the exact same evidence-backed S1,
- *    proving control executes first, then attack's own evaluation is
- *    unaffected by that execution and stops at actionFidelity specifically.
+ *  - CAUSALITY + ISOLATION, all six trusted attack variants: control and
+ *    attack submitted against the exact same evidence-backed S1, proving
+ *    control executes and attack's own evaluation is unaffected by that
+ *    execution.
+ *
+ * Sequencing is deliberately EXACT to what demo-orchestrator.ts and
+ * attackLabCore.ts's executeTrustedAttackComparison actually do in
+ * production, not a convenient shortcut: control leg 2 is submitted, THEN
+ * attack leg 2 is submitted immediately (pinned to control's bound S1) —
+ * demo-orchestrator.ts commits NEITHER. Only afterward, mirroring
+ * resolveGovernedResult's per-lane resolution order, is control committed
+ * first and attack's commit attempted second. This distinction matters: the
+ * exposure ledger that Authority's cumulative-exposure check reads is only
+ * WRITTEN by gateway-service's two-phase COMMIT path
+ * (reserveIfUnderThreshold in two-phase.ts) — never by Authority's
+ * evaluate-for-authorization call, which is a pure read. An earlier version
+ * of these tests committed control BEFORE submitting attack, which produced
+ * a materially different (and more favorable) result for capability_expansion
+ * than what demo-orchestrator.ts's actual submit/submit/commit/commit order
+ * produces — see that describe block below for what the real order reveals.
  */
 
 const DEADLINE = "2026-12-31T00:00:00.000Z";
@@ -289,194 +305,158 @@ describe("all five domain controls reach AUTHORIZED and execute through the real
   }
 });
 
-describe("procurement: control (500) executes, then attack (450) against the exact same S1", () => {
+interface CausalityTrace {
+  readonly controlValue: { readonly state: string; readonly workflowId: string };
+  readonly attackValue: { readonly state: string; readonly workflowId: string };
+  readonly s1Id: string;
+  readonly s1Hash: string;
+  readonly s0Id: string;
+  readonly attackRows: readonly { readonly kind: string; readonly payload: Record<string, unknown> }[];
+  readonly controlCommitOk: boolean;
+  readonly attackCommitAttempted: boolean;
+  readonly attackCommitOk: boolean;
+  readonly attackCommitCode?: string;
+  readonly sideEffectLedgerLength: number;
+  readonly evaluationCalls: number;
+  readonly prepareCalls: number;
+}
+
+/**
+ * Submits control leg 2, then attack leg 2 immediately (pinned to control's
+ * bound S1) — NO commit call happens between these two submissions, exactly
+ * matching demo-orchestrator.ts. Only afterward are commits attempted, in
+ * the same order attackLabCore.ts's resolveGovernedResult resolves lanes:
+ * control first, attack second.
+ */
+async function runCausalityTrace(
+  domainCase: DomainCase,
+  label: string,
+  attackAction: Record<string, unknown>,
+  attackPayload?: Record<string, unknown>,
+): Promise<CausalityTrace> {
+  const rt = await runtime({
+    rawText: domainCase.rawText,
+    omitProofSummary: true,
+    capabilities: { [domainCase.capability]: AuthorityDecision.ALLOW },
+    compilerTransform: replaceConstraints(domainCase.rawText, domainCase.constraints),
+    demoEvidence: [{ envelope: envelope(EVIDENCE_ID, `demo-fixture:${domainCase.packId}:v1`), claims: claims(EVIDENCE_ID, domainCase.facts) }],
+  });
+  const s0Id = rt.state.id;
+
+  const controlBody = (expectedIntentStateId: string) => ({
+    intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId },
+    action: domainCase.controlAction,
+    domain: { packId: domainCase.packId, payload: domainCase.payload(EVIDENCE_ID) },
+    idempotencyKey: `demo-control-${label}`,
+  });
+  let controlResult = await rt.dispatcher.submitWorkflow(controlBody(rt.state.id));
+  if (!controlResult.ok && controlResult.code === "INTENT_STATE_NOT_READY") {
+    const details = controlResult.details as Record<string, unknown>;
+    controlResult = await rt.dispatcher.submitWorkflow(controlBody(String(details.intentStateId)));
+  }
+  if (!controlResult.ok) throw new Error(`${label} control: ${controlResult.code}: ${controlResult.message}`);
+  const controlValue = controlResult.value as { state: string; workflowId: string };
+
+  // Read back the exact bound state via the durable WORKFLOW artifact —
+  // never assumed, never independently derived.
+  const controlArtifacts = await rt.owner.listWorkflowArtifacts(controlValue.workflowId);
+  const controlRows = controlArtifacts.ok ? (controlArtifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
+  const controlWorkflowRow = controlRows.find((row) => row.kind === "WORKFLOW");
+  const s1Id = String(controlWorkflowRow?.payload.intentStateId);
+  const s1Hash = String(controlWorkflowRow?.payload.intentStateHash);
+
+  // Attack leg 2 — submitted immediately, pinned to S1. NO commit call
+  // happens before this, matching demo-orchestrator.ts exactly.
+  const attackResult = await rt.dispatcher.submitWorkflow({
+    intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId: s1Id },
+    action: attackAction,
+    domain: { packId: domainCase.packId, payload: attackPayload ?? domainCase.payload(EVIDENCE_ID) },
+    idempotencyKey: `demo-attack-${label}`,
+  });
+  if (!attackResult.ok) throw new Error(`${label} attack: ${attackResult.code}: ${attackResult.message}`);
+  const attackValue = attackResult.value as { state: string; workflowId: string };
+
+  const attackArtifacts = await rt.owner.listWorkflowArtifacts(attackValue.workflowId);
+  const attackRows = attackArtifacts.ok ? (attackArtifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
+
+  // NOW commit — control first, attack second, mirroring
+  // resolveGovernedResult's per-lane resolution order.
+  let controlCommitOk = false;
+  if (controlValue.state === "AUTHORIZED") {
+    const committed = await rt.dispatcher.commitWorkflow(controlValue.workflowId);
+    controlCommitOk = committed.ok && (committed.value as { status: string }).status === "SUCCESS";
+  }
+
+  let attackCommitAttempted = false;
+  let attackCommitOk = false;
+  let attackCommitCode: string | undefined;
+  if (attackValue.state === "AUTHORIZED") {
+    attackCommitAttempted = true;
+    const attackCommit = await rt.dispatcher.commitWorkflow(attackValue.workflowId);
+    attackCommitOk = attackCommit.ok && (attackCommit.value as { status: string }).status === "SUCCESS";
+    if (!attackCommit.ok) attackCommitCode = attackCommit.code;
+  }
+
+  return {
+    controlValue, attackValue, s1Id, s1Hash, s0Id, attackRows,
+    controlCommitOk, attackCommitAttempted, attackCommitOk, attackCommitCode,
+    sideEffectLedgerLength: (await rt.gateway.getSideEffectLedger().listAll()).length,
+    evaluationCalls: rt.calls.evaluation,
+    prepareCalls: rt.calls.prepare,
+  };
+}
+
+/**
+ * Common assertions for the five variants whose mutation IS caught by
+ * domain-pack-level actionFidelity before Authority is ever reached: shared
+ * S1, control executes, attack is BLOCKED at its own submit (never
+ * AUTHORIZED, never committed), zero attack side effects, zero orphan
+ * successor state.
+ */
+function expectFidelityBlockedAttack(trace: CausalityTrace) {
+  expect(trace.s1Id).not.toBe(trace.s0Id);
+  expect(trace.controlValue.state).toBe("AUTHORIZED");
+  expect(trace.controlCommitOk).toBe(true);
+
+  expect(trace.attackValue.state).toBe("BLOCKED");
+  expect(trace.attackValue.workflowId).not.toBe(trace.controlValue.workflowId);
+  const attackWorkflowRow = trace.attackRows.find((row) => row.kind === "WORKFLOW");
+  expect(String(attackWorkflowRow?.payload.intentStateId)).toBe(trace.s1Id);
+  expect(String(attackWorkflowRow?.payload.intentStateHash)).toBe(trace.s1Hash);
+
+  const attackProofs = trace.attackRows.filter((row) => row.kind === "PROOF").map((row) => row.payload);
+  expect(attackProofs.length).toBeGreaterThan(0);
+  for (const proof of attackProofs) expect(proof.status).toBe("SATISFIED");
+
+  expect(trace.attackRows.find((row) => row.kind === "EXECUTION_AUTHORIZATION")).toBeUndefined();
+  expect(trace.attackCommitAttempted).toBe(false);
+  expect(trace.evaluationCalls).toBe(1);
+  expect(trace.prepareCalls).toBe(1);
+  expect(trace.sideEffectLedgerLength).toBe(1);
+
+  const attackGuardian = trace.attackRows.find((row) => row.kind === "GUARDIAN")?.payload;
+  expect(attackGuardian).toBeDefined();
+}
+
+describe("procurement: control (500) executes, then quantity_drift (450) against the exact same S1", () => {
   it("shares S1, control reaches AUTHORIZED and executes, attack's first causal blocker is actionFidelity, Authority NOT_REACHED, zero side effects for attack", async () => {
     const procurement = CASES[0]!;
-    const rt = await runtime({
-      rawText: procurement.rawText,
-      omitProofSummary: true,
-      capabilities: { [procurement.capability]: AuthorityDecision.ALLOW },
-      compilerTransform: replaceConstraints(procurement.rawText, procurement.constraints),
-      demoEvidence: [{ envelope: envelope(EVIDENCE_ID, `demo-fixture:${procurement.packId}:v1`), claims: claims(EVIDENCE_ID, procurement.facts) }],
-    });
-
-    const controlBody = (expectedIntentStateId: string) => ({
-      intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId },
-      action: procurement.controlAction,
-      domain: { packId: procurement.packId, payload: procurement.payload(EVIDENCE_ID) },
-      idempotencyKey: "demo-control-procurement-causality",
-    });
-
-    // Control leg 2, unpinned in spirit (first attempt bound to the pre-evidence
-    // tip; the retry below mirrors resolveEvidenceBackedState's own
-    // caller-must-rebind contract when a caller DOES name a state).
-    let controlResult = await rt.dispatcher.submitWorkflow(controlBody(rt.state.id));
-    let boundStateId = rt.state.id;
-    let boundStateHash = rt.state.stateHash;
-    if (!controlResult.ok && controlResult.code === "INTENT_STATE_NOT_READY") {
-      const details = controlResult.details as Record<string, unknown>;
-      boundStateId = String(details.intentStateId);
-      boundStateHash = String(details.intentStateHash);
-      controlResult = await rt.dispatcher.submitWorkflow(controlBody(boundStateId));
-    }
-    if (!controlResult.ok) throw new Error(`control: ${controlResult.code}: ${controlResult.message}`);
-    const controlValue = controlResult.value as { state: string; workflowId: string };
-    expect(controlValue.state).toBe("AUTHORIZED");
-
-    // Read back the exact bound state via the durable WORKFLOW artifact —
-    // never assumed, never independently derived.
-    const controlArtifacts = await rt.owner.listWorkflowArtifacts(controlValue.workflowId);
-    const controlRows = controlArtifacts.ok ? (controlArtifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
-    const controlWorkflowRow = controlRows.find((row) => row.kind === "WORKFLOW");
-    const s1Id = String(controlWorkflowRow?.payload.intentStateId);
-    const s1Hash = String(controlWorkflowRow?.payload.intentStateHash);
-    expect(s1Id).toBe(boundStateId);
-    expect(s1Hash).toBe(boundStateHash);
-    expect(s1Id).not.toBe(rt.state.id); // genuinely superseded from S0
-
-    // Control executes BEFORE attack is even submitted.
-    const committed = await rt.dispatcher.commitWorkflow(controlValue.workflowId);
-    if (!committed.ok) throw new Error(`control commit: ${committed.code}: ${committed.message}`);
-    expect(committed.value).toMatchObject({ status: "SUCCESS" });
-    expect(await rt.gateway.getSideEffectLedger().listAll()).toHaveLength(1);
-
-    // Attack leg 2: explicitly pinned to the exact S1 control established,
-    // same evidence, same intent, only the action's quantity differs.
-    const attackAction = { ...procurement.controlAction, quantity: 450 };
-    const attackResult = await rt.dispatcher.submitWorkflow({
-      intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId: s1Id },
-      action: attackAction,
-      domain: { packId: procurement.packId, payload: procurement.payload(EVIDENCE_ID) },
-      idempotencyKey: "demo-attack-procurement-quantity-drift",
-    });
-    if (!attackResult.ok) throw new Error(`attack: ${attackResult.code}: ${attackResult.message}`);
-    const attackValue = attackResult.value as { state: string; workflowId: string };
-
-    // No orphan second semantic successor: attack's own bound state, read
-    // from ITS OWN durable WORKFLOW artifact, is byte-identical to control's.
-    const attackArtifacts = await rt.owner.listWorkflowArtifacts(attackValue.workflowId);
-    const attackRows = attackArtifacts.ok ? (attackArtifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
-    const attackWorkflowRow = attackRows.find((row) => row.kind === "WORKFLOW");
-    expect(String(attackWorkflowRow?.payload.intentStateId)).toBe(s1Id);
-    expect(String(attackWorkflowRow?.payload.intentStateHash)).toBe(s1Hash);
-
-    // Same proof/evidence basis: attack's own proofs are STILL satisfied
-    // (evidence still says 500, matching the intent — the action is what
-    // diverged, not the evidence).
-    const attackProofs = attackRows.filter((row) => row.kind === "PROOF").map((row) => row.payload);
-    expect(attackProofs.length).toBeGreaterThan(0);
-    for (const proof of attackProofs) expect(proof.status).toBe("SATISFIED");
-
-    // First causal divergence is BLOCKED — never AUTHORIZED, never executed.
-    expect(attackValue.state).toBe("BLOCKED");
-    expect(attackValue.workflowId).not.toBe(controlValue.workflowId);
-
-    // Authority never reached for attack: no EXECUTION_AUTHORIZATION row,
-    // no PreparedAction, no CommitToken, and the call counter attack alone
-    // contributes zero authority/prepare/mint/authorize calls beyond
-    // control's own (already-counted) ones.
-    const attackAuthorization = attackRows.find((row) => row.kind === "EXECUTION_AUTHORIZATION");
-    expect(attackAuthorization).toBeUndefined();
-    expect(rt.calls.evaluation).toBe(1); // control's only — attack never called Authority
-    expect(rt.calls.prepare).toBe(1); // control's only — attack never prepared an action
-
-    // Zero side effects from attack: the ledger still holds exactly
-    // control's one entry, not two.
-    expect(await rt.gateway.getSideEffectLedger().listAll()).toHaveLength(1);
-
-    // Guardian is not falsely blamed: it DID run for attack (the fidelity
-    // check and Guardian both run before the eligibility gate), and its own
-    // verdict is reported honestly rather than being the reason blocked.
-    const attackGuardian = attackRows.find((row) => row.kind === "GUARDIAN")?.payload;
-    expect(attackGuardian).toBeDefined();
+    const trace = await runCausalityTrace(procurement, "procurement-quantity-drift", { ...procurement.controlAction, quantity: 450 });
+    expectFidelityBlockedAttack(trace);
   });
 });
 
 describe("travel: control executes, then provider_substitution against the exact same S1", () => {
-  /**
-   * Travel is the other domain (besides invoice) whose attack variant
-   * mutates the counterparty merchant — provider_substitution swaps in
-   * "Unapproved Provider" and flips refundable to false. Same requirement as
-   * invoice: the attack's domain.payload.provider.id must mirror
-   * action.merchant or workflow-registry.ts rejects the request outright
-   * before proof evaluation ever runs.
-   */
-  it("shares S1, control executes, attack's first causal blocker is actionFidelity, zero attack side effects", async () => {
+  it("shares S1, control reaches AUTHORIZED and executes, attack's first causal blocker is actionFidelity, Authority NOT_REACHED, zero side effects for attack", async () => {
     const travel = CASES.find((item) => item.packId === "travel")!;
-    const rt = await runtime({
-      rawText: travel.rawText,
-      omitProofSummary: true,
-      capabilities: { [travel.capability]: AuthorityDecision.ALLOW },
-      compilerTransform: replaceConstraints(travel.rawText, travel.constraints),
-      demoEvidence: [{ envelope: envelope(EVIDENCE_ID, `demo-fixture:${travel.packId}:v1`), claims: claims(EVIDENCE_ID, travel.facts) }],
-    });
-
-    const controlBody = (expectedIntentStateId: string) => ({
-      intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId },
-      action: travel.controlAction,
-      domain: { packId: travel.packId, payload: travel.payload(EVIDENCE_ID) },
-      idempotencyKey: "demo-control-travel-causality",
-    });
-
-    let controlResult = await rt.dispatcher.submitWorkflow(controlBody(rt.state.id));
-    if (!controlResult.ok && controlResult.code === "INTENT_STATE_NOT_READY") {
-      const details = controlResult.details as Record<string, unknown>;
-      controlResult = await rt.dispatcher.submitWorkflow(controlBody(String(details.intentStateId)));
-    }
-    if (!controlResult.ok) throw new Error(`control: ${controlResult.code}: ${controlResult.message}`);
-    const controlValue = controlResult.value as { state: string; workflowId: string };
-    expect(controlValue.state).toBe("AUTHORIZED");
-
-    const controlArtifacts = await rt.owner.listWorkflowArtifacts(controlValue.workflowId);
-    const controlRows = controlArtifacts.ok ? (controlArtifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
-    const controlWorkflowRow = controlRows.find((row) => row.kind === "WORKFLOW");
-    const s1Id = String(controlWorkflowRow?.payload.intentStateId);
-    const s1Hash = String(controlWorkflowRow?.payload.intentStateHash);
-    expect(s1Id).not.toBe(rt.state.id);
-
-    const committed = await rt.dispatcher.commitWorkflow(controlValue.workflowId);
-    if (!committed.ok) throw new Error(`control commit: ${committed.code}: ${committed.message}`);
-    expect(committed.value).toMatchObject({ status: "SUCCESS" });
-    expect(await rt.gateway.getSideEffectLedger().listAll()).toHaveLength(1);
-
-    // Attack leg 2: same intent, same evidence, explicitly pinned to S1 —
-    // merchant (unapproved provider) and refundable differ. domain.payload
-    // must mirror the merchant mutation for the same reason as invoice.
-    const attackAction = { ...travel.controlAction, merchant: "Unapproved Provider", refundable: false };
     const controlPayload = travel.payload(EVIDENCE_ID) as { provider: Record<string, unknown> };
-    const attackPayload = {
-      ...controlPayload,
-      provider: { ...controlPayload.provider, id: "Unapproved Provider", name: "Unapproved Provider", approved: false },
-    };
-    const attackResult = await rt.dispatcher.submitWorkflow({
-      intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId: s1Id },
-      action: attackAction,
-      domain: { packId: travel.packId, payload: attackPayload },
-      idempotencyKey: "demo-attack-travel-provider-substitution",
-    });
-    if (!attackResult.ok) throw new Error(`attack: ${attackResult.code}: ${attackResult.message}`);
-    const attackValue = attackResult.value as { state: string; workflowId: string };
-
-    const attackArtifacts = await rt.owner.listWorkflowArtifacts(attackValue.workflowId);
-    const attackRows = attackArtifacts.ok ? (attackArtifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
-    const attackWorkflowRow = attackRows.find((row) => row.kind === "WORKFLOW");
-    expect(String(attackWorkflowRow?.payload.intentStateId)).toBe(s1Id);
-    expect(String(attackWorkflowRow?.payload.intentStateHash)).toBe(s1Hash);
-
-    const attackProofs = attackRows.filter((row) => row.kind === "PROOF").map((row) => row.payload);
-    expect(attackProofs.length).toBeGreaterThan(0);
-    for (const proof of attackProofs) expect(proof.status).toBe("SATISFIED");
-
-    expect(attackValue.state).toBe("BLOCKED");
-    expect(attackValue.workflowId).not.toBe(controlValue.workflowId);
-    const attackAuthorization = attackRows.find((row) => row.kind === "EXECUTION_AUTHORIZATION");
-    expect(attackAuthorization).toBeUndefined();
-    expect(rt.calls.evaluation).toBe(1);
-    expect(rt.calls.prepare).toBe(1);
-    expect(await rt.gateway.getSideEffectLedger().listAll()).toHaveLength(1);
-
-    const attackGuardian = attackRows.find((row) => row.kind === "GUARDIAN")?.payload;
-    expect(attackGuardian).toBeDefined();
+    const attackAction = { ...travel.controlAction, merchant: "Unapproved Provider", refundable: false };
+    // Mirrors demo-evidence-templates.ts's provider_substitution fixture:
+    // domain.payload.provider.id must track action.merchant or
+    // workflow-registry.ts rejects the request before proof evaluation.
+    const attackPayload = { ...controlPayload, provider: { ...controlPayload.provider, id: "Unapproved Provider", name: "Unapproved Provider", approved: false } };
+    const trace = await runCausalityTrace(travel, "travel-provider-substitution", attackAction, attackPayload);
+    expectFidelityBlockedAttack(trace);
   });
 });
 
@@ -490,114 +470,140 @@ describe("invoice: control executes, then payee_substitution against the exact s
    * evidence claim, exactly like `approved_payee` or `invoice_id`. This
    * test proves that reading is correct: after control's REAL commit
    * (a genuine side effect), the attack leg's own duplicate_payment proof
-   * is still independently SATISFIED from the same evidence claim — it did
-   * not flip, get skipped, or get reinterpreted because a payment already
-   * executed. The attack's first causal blocker is actionFidelity (shadow
-   * payee / substituted invoice id), the same class of blocker as
-   * procurement's quantity drift, not a domain-specific duplicate-payment
-   * mechanism.
+   * is still independently SATISFIED from the same evidence claim.
    */
   it("shares S1, control executes, attack's duplicate_payment proof stays SATISFIED, first causal blocker is actionFidelity, zero attack side effects", async () => {
     const invoice = CASES.find((item) => item.packId === "invoice_vendor_payment")!;
-    const rt = await runtime({
-      rawText: invoice.rawText,
-      omitProofSummary: true,
-      capabilities: { [invoice.capability]: AuthorityDecision.ALLOW },
-      compilerTransform: replaceConstraints(invoice.rawText, invoice.constraints),
-      demoEvidence: [{ envelope: envelope(EVIDENCE_ID, `demo-fixture:${invoice.packId}:v1`), claims: claims(EVIDENCE_ID, invoice.facts) }],
-    });
-
-    const controlBody = (expectedIntentStateId: string) => ({
-      intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId },
-      action: invoice.controlAction,
-      domain: { packId: invoice.packId, payload: invoice.payload(EVIDENCE_ID) },
-      idempotencyKey: "demo-control-invoice-causality",
-    });
-
-    let controlResult = await rt.dispatcher.submitWorkflow(controlBody(rt.state.id));
-    if (!controlResult.ok && controlResult.code === "INTENT_STATE_NOT_READY") {
-      const details = controlResult.details as Record<string, unknown>;
-      controlResult = await rt.dispatcher.submitWorkflow(controlBody(String(details.intentStateId)));
-    }
-    if (!controlResult.ok) throw new Error(`control: ${controlResult.code}: ${controlResult.message}`);
-    const controlValue = controlResult.value as { state: string; workflowId: string };
-    expect(controlValue.state).toBe("AUTHORIZED");
-
-    const controlArtifacts = await rt.owner.listWorkflowArtifacts(controlValue.workflowId);
-    const controlRows = controlArtifacts.ok ? (controlArtifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
-    const controlWorkflowRow = controlRows.find((row) => row.kind === "WORKFLOW");
-    const s1Id = String(controlWorkflowRow?.payload.intentStateId);
-    const s1Hash = String(controlWorkflowRow?.payload.intentStateHash);
-    expect(s1Id).not.toBe(rt.state.id);
-
-    // Control's REAL payment commits before attack is even submitted — the
-    // one genuine side effect this test's contamination check pivots on.
-    const committed = await rt.dispatcher.commitWorkflow(controlValue.workflowId);
-    if (!committed.ok) throw new Error(`control commit: ${committed.code}: ${committed.message}`);
-    expect(committed.value).toMatchObject({ status: "SUCCESS" });
-    expect(await rt.gateway.getSideEffectLedger().listAll()).toHaveLength(1);
-
-    // Attack leg 2: same intent, same evidence, explicitly pinned to S1 —
-    // only merchant/product/invoiceId (the payee) differ. Mirrors (not
-    // imports — see the module docstring) the `payee_substitution` fixture
-    // in services/phase-c-verifier/src/demo-evidence-templates.ts, INCLUDING
-    // that fixture's domain.payload.payee.id/invoice.invoiceId mutation:
-    // workflow-registry.ts's invoice adapter rejects a request outright
-    // (VALIDATION_FAILED, before proof evaluation) if those don't match
-    // action.merchant/action.product — this is not optional plumbing, it's
-    // required for the attack to even reach the interesting causal point.
-    const attackAction = {
-      ...invoice.controlAction,
-      merchant: "shadow-payee",
-      product: "INV-ATTACK-999",
-      parameters: { invoiceId: "INV-ATTACK-999", remittanceReference: "remit-1" },
-    };
     const controlPayload = invoice.payload(EVIDENCE_ID) as { payee: Record<string, unknown>; invoice: Record<string, unknown> };
+    const attackAction = { ...invoice.controlAction, merchant: "shadow-payee", product: "INV-ATTACK-999", parameters: { invoiceId: "INV-ATTACK-999", remittanceReference: "remit-1" } };
     const attackPayload = {
       ...controlPayload,
       payee: { ...controlPayload.payee, id: "shadow-payee", name: "shadow-payee", approved: false },
       invoice: { ...controlPayload.invoice, invoiceId: "INV-ATTACK-999" },
     };
-    const attackResult = await rt.dispatcher.submitWorkflow({
-      intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId: s1Id },
-      action: attackAction,
-      domain: { packId: invoice.packId, payload: attackPayload },
-      idempotencyKey: "demo-attack-invoice-payee-substitution",
-    });
-    if (!attackResult.ok) throw new Error(`attack: ${attackResult.code}: ${attackResult.message}`);
-    const attackValue = attackResult.value as { state: string; workflowId: string };
+    const trace = await runCausalityTrace(invoice, "invoice-payee-substitution", attackAction, attackPayload);
+    expectFidelityBlockedAttack(trace);
 
-    const attackArtifacts = await rt.owner.listWorkflowArtifacts(attackValue.workflowId);
-    const attackRows = attackArtifacts.ok ? (attackArtifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
-    const attackWorkflowRow = attackRows.find((row) => row.kind === "WORKFLOW");
-    expect(String(attackWorkflowRow?.payload.intentStateId)).toBe(s1Id);
-    expect(String(attackWorkflowRow?.payload.intentStateHash)).toBe(s1Hash);
-
-    // The duplicate_payment proof — the concept this domain is singled out
-    // for — is independently SATISFIED for the attack leg too. It is
-    // evaluated from the same static evidence claim ("dup-1"), not from
-    // whether a payment has already executed in this session.
-    const attackProofs = attackRows.filter((row) => row.kind === "PROOF").map((row) => row.payload);
-    expect(attackProofs.length).toBeGreaterThan(0);
-    for (const proof of attackProofs) expect(proof.status).toBe("SATISFIED");
+    const attackProofs = trace.attackRows.filter((row) => row.kind === "PROOF").map((row) => row.payload);
     const duplicatePaymentProof = attackProofs.find((proof) => proof.constraintId === "i-duplicate");
     expect(duplicatePaymentProof?.status).toBe("SATISFIED");
+  });
+});
 
-    // First causal divergence is BLOCKED on actionFidelity, not a
-    // duplicate-payment-shaped rejection.
-    expect(attackValue.state).toBe("BLOCKED");
-    expect(attackValue.workflowId).not.toBe(controlValue.workflowId);
-    const attackAuthorization = attackRows.find((row) => row.kind === "EXECUTION_AUTHORIZATION");
-    expect(attackAuthorization).toBeUndefined();
-    expect(rt.calls.evaluation).toBe(1);
-    expect(rt.calls.prepare).toBe(1);
+describe("logistics: control executes, then destination_substitution against the exact same S1", () => {
+  it("shares S1, control reaches AUTHORIZED and executes, attack's first causal blocker is actionFidelity, Authority NOT_REACHED, zero side effects for attack", async () => {
+    const logistics = CASES.find((item) => item.packId === "logistics_fulfillment")!;
+    const controlPayload = logistics.payload(EVIDENCE_ID) as { shipment: Record<string, unknown> };
+    const attackAction = { ...logistics.controlAction, parameters: { destination: "Remote Transfer Depot", serviceLevel: "EXPRESS", fulfillCount: 12 } };
+    // LogisticsFulfillmentDomainPack.buildActionProposal derives
+    // ActionProposal.parameters.destination from domain.payload.shipment.destination,
+    // unconditionally overwriting action.parameters.destination — the mutation has
+    // to land here or actionFidelity never sees it (see demo-evidence-templates.ts fix).
+    const attackPayload = { ...controlPayload, shipment: { ...controlPayload.shipment, destination: "Remote Transfer Depot" } };
+    const trace = await runCausalityTrace(logistics, "logistics-destination-substitution", attackAction, attackPayload);
+    expectFidelityBlockedAttack(trace);
+  });
+});
 
-    // Zero side effects from attack: control's single real payment is the
-    // only entry in the ledger — no second, no reversal, no duplicate-check
-    // side effect of any kind triggered by the attack leg.
+describe("saas: control executes, then renewal_flip against the exact same S1", () => {
+  it("shares S1, control reaches AUTHORIZED and executes, attack's first causal blocker is actionFidelity, Authority NOT_REACHED, zero side effects for attack", async () => {
+    const saas = CASES.find((item) => item.packId === "saas_it_spend")!;
+    const controlPayload = saas.payload(EVIDENCE_ID) as { subscription: Record<string, unknown> };
+    const attackAction = { ...saas.controlAction, parameters: { renewalSetting: "AUTO", termMonths: 12, seatCount: 10 } };
+    // SaasItSpendDomainPack.buildActionProposal derives
+    // ActionProposal.parameters.renewalSetting from
+    // domain.payload.subscription.renewalSetting, unconditionally
+    // overwriting action.parameters.renewalSetting — same reason as
+    // logistics's destination above.
+    const attackPayload = { ...controlPayload, subscription: { ...controlPayload.subscription, renewalSetting: "AUTO" } };
+    const trace = await runCausalityTrace(saas, "saas-renewal-flip", attackAction, attackPayload);
+    expectFidelityBlockedAttack(trace);
+  });
+});
+
+describe("logistics: control executes, then capability_expansion against the exact same S1 — DIFFERENT causal story, reported honestly", () => {
+  /**
+   * UNLIKE the five variants above, capability_expansion is NOT caught by
+   * domain-pack actionFidelity: none of the five domain packs' fidelity
+   * checks (grep-verified) ever compare action.capability against
+   * anything. Authority's own capability-scope check
+   * (authority-service/src/service.ts: `cap === BLOCK || cap === undefined`)
+   * only fires when a capability is explicitly BLOCK/REQUIRE_APPROVAL in
+   * the compiled IntentState; an absent capability defaults to ALLOW
+   * (generic-workflow-engine.ts's own documented framing:
+   * `state.value.capabilities?.[domainAction.capability] ??
+   * AuthorityDecision.ALLOW`). So the attack genuinely reaches AUTHORIZED —
+   * PreparedAction, CommitToken, and Grant all get minted for a request
+   * that swapped arrange_fulfillment for execute_payment.
+   *
+   * The only thing that stops real execution is that control committed
+   * FIRST and consumed the shared per-intent-per-currency exposure budget
+   * (gateway-service's two-phase reserveIfUnderThreshold) before attack's
+   * own commit is attempted. This is a commit-ORDER-dependent backstop, not
+   * a capability-substitution defense — see the standalone describe block
+   * below, which proves a capability_expansion request with no prior
+   * same-intent commit reaches AUTHORIZED **and executes**.
+   */
+  it("attack itself reaches AUTHORIZED with PreparedAction/CommitToken/Grant minted; only the later commit is rejected, and only because control committed first", async () => {
+    const logistics = CASES.find((item) => item.packId === "logistics_fulfillment")!;
+    const trace = await runCausalityTrace(logistics, "logistics-capability-expansion", { ...logistics.controlAction, capability: "execute_payment" });
+
+    expect(trace.s1Id).not.toBe(trace.s0Id);
+    expect(trace.controlValue.state).toBe("AUTHORIZED");
+    expect(trace.controlCommitOk).toBe(true);
+
+    expect(trace.attackValue.state).toBe("AUTHORIZED");
+    expect(trace.attackValue.workflowId).not.toBe(trace.controlValue.workflowId);
+    const attackWorkflowRow = trace.attackRows.find((row) => row.kind === "WORKFLOW");
+    expect(String(attackWorkflowRow?.payload.intentStateId)).toBe(trace.s1Id);
+    expect(String(attackWorkflowRow?.payload.intentStateHash)).toBe(trace.s1Hash);
+    const attackAuthorization = trace.attackRows.find((row) => row.kind === "EXECUTION_AUTHORIZATION")?.payload;
+    expect(typeof attackAuthorization?.preparedActionId).toBe("string");
+    expect(typeof attackAuthorization?.commitTokenId).toBe("string");
+    expect(typeof attackAuthorization?.grantId).toBe("string");
+    expect(trace.evaluationCalls).toBe(2); // Authority WAS invoked for attack, unlike the fidelity-blocked variants.
+    expect(trace.prepareCalls).toBe(2); // PrepareAction WAS invoked for attack too.
+
+    expect(trace.attackCommitAttempted).toBe(true);
+    expect(trace.attackCommitOk).toBe(false);
+    expect(trace.attackCommitCode).toBe("CUMULATIVE_EXPOSURE_EXCEEDED");
+
+    // Net safety property still holds — exactly one real side effect, from
+    // control only — but via a fragile, order-dependent mechanism rather
+    // than an intent-aware capability check.
+    expect(trace.sideEffectLedgerLength).toBe(1);
+  });
+});
+
+describe("known gap: capability substitution has no capability-aware structural defense", () => {
+  it("a capability_expansion request submitted and committed with NO prior same-intent commit reaches AUTHORIZED and actually executes", async () => {
+    const logistics = CASES.find((item) => item.packId === "logistics_fulfillment")!;
+    const rt = await runtime({
+      rawText: logistics.rawText,
+      omitProofSummary: true,
+      capabilities: { arrange_fulfillment: AuthorityDecision.ALLOW },
+      compilerTransform: replaceConstraints(logistics.rawText, logistics.constraints),
+      demoEvidence: [{ envelope: envelope(EVIDENCE_ID, `demo-fixture:${logistics.packId}:v1`), claims: claims(EVIDENCE_ID, logistics.facts) }],
+    });
+    const soloAction = { ...logistics.controlAction, capability: "execute_payment" };
+    const body = (expectedIntentStateId: string) => ({
+      intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId },
+      action: soloAction,
+      domain: { packId: logistics.packId, payload: logistics.payload(EVIDENCE_ID) },
+      idempotencyKey: "demo-solo-capability-expansion",
+    });
+    let result = await rt.dispatcher.submitWorkflow(body(rt.state.id));
+    if (!result.ok && result.code === "INTENT_STATE_NOT_READY") {
+      const details = result.details as Record<string, unknown>;
+      result = await rt.dispatcher.submitWorkflow(body(String(details.intentStateId)));
+    }
+    if (!result.ok) throw new Error(`solo capability_expansion: ${result.code}: ${result.message}`);
+    const value = result.value as { state: string; workflowId: string };
+    expect(value.state).toBe("AUTHORIZED");
+
+    const committed = await rt.dispatcher.commitWorkflow(value.workflowId);
+    if (!committed.ok) throw new Error(`solo capability_expansion commit: ${committed.code}: ${committed.message}`);
+    expect(committed.value).toMatchObject({ status: "SUCCESS" });
     expect(await rt.gateway.getSideEffectLedger().listAll()).toHaveLength(1);
-
-    const attackGuardian = attackRows.find((row) => row.kind === "GUARDIAN")?.payload;
-    expect(attackGuardian).toBeDefined();
   });
 });

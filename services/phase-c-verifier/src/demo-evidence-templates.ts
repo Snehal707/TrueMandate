@@ -261,7 +261,14 @@ const SAAS: DemoScenarioTemplate = {
       planId: "plan-business",
       planName: action.product,
       termMonths: 12,
-      renewalSetting: "MANUAL",
+      // SaasItSpendDomainPack.buildActionProposal derives the
+      // ENGINE-EVALUATED ActionProposal.parameters.renewalSetting from
+      // input.subscription.renewalSetting (this field), unconditionally
+      // overwriting whatever the action's OWN parameters.renewalSetting
+      // said. renewal_flip's mutated setting therefore has to be mirrored
+      // here or the attack never reaches the actionFidelity check it's
+      // meant to exercise.
+      renewalSetting: typeof action.parameters.renewalSetting === "string" ? action.parameters.renewalSetting : "MANUAL",
       seatCount: 10,
     },
     evidenceIds,
@@ -375,7 +382,14 @@ const LOGISTICS: DemoScenarioTemplate = {
     },
     shipment: {
       serviceLevel: action.product,
-      destination: "Mumbai Warehouse",
+      // LogisticsFulfillmentDomainPack.buildActionProposal derives the
+      // ENGINE-EVALUATED ActionProposal.parameters.destination from
+      // input.shipment.destination (this field), unconditionally
+      // overwriting whatever the action's OWN parameters.destination said.
+      // destination_substitution's mutated destination therefore has to be
+      // mirrored here, exactly like merchant/product above, or the attack
+      // never reaches the actionFidelity check it's meant to exercise.
+      destination: typeof action.parameters.destination === "string" ? action.parameters.destination : "Mumbai Warehouse",
       shipBy: "2026-09-20T00:00:00.000Z",
       fulfillCount: 12,
     },

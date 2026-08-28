@@ -636,9 +636,24 @@ resource "google_cloud_run_v2_service" "s2s" {
       }
 
       # public-bff needs the new service's URL to reach its one narrowly
-      # allowlisted route.
+      # allowlisted route. Guarded on the key's PRESENCE, not just on
+      # each.key — service_urls is a plain input variable, not something
+      # Terraform computes from google_cloud_run_v2_service.s2s's own .uri
+      # within this module, so demo-evidence-orchestrator's URL genuinely
+      # does not exist until AFTER it has been created and its real .uri has
+      # been read back (via `terraform output cloud_run_services`) and added
+      # to service_urls for a second apply. A bare `var.service_urls["demo-
+      # evidence-orchestrator"]` index would make apply 1 (before that key
+      # exists) fail outright with "Invalid index" for the ENTIRE plan, not
+      # just this resource. lookup() makes the first apply create the new
+      # service cleanly, with this one optional env var simply absent —
+      # packages/public-api/src/bin/start.ts already treats
+      # DEMO_ORCHESTRATOR_URL as optional (`ports.demoOrchestration`
+      # stays undefined, and router.ts never registers the route), so an
+      # absent value here is a safe, inert intermediate state, not a
+      # partially-broken one.
       dynamic "env" {
-        for_each = each.key == "public-bff" ? [1] : []
+        for_each = each.key == "public-bff" && lookup(var.service_urls, "demo-evidence-orchestrator", null) != null ? [1] : []
         content {
           name  = "DEMO_ORCHESTRATOR_URL"
           value = var.service_urls["demo-evidence-orchestrator"]
