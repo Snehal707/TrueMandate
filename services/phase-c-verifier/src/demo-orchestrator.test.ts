@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ErrorCode, ok, type Result } from "@truemandate/protocol";
+import { ErrorCode, err, ok, type Result } from "@truemandate/protocol";
 import { runDemoOrchestration, type DemoOrchestratorPorts } from "./demo-orchestrator.js";
 
 /**
@@ -205,6 +205,173 @@ describe("fail-closed: attack leg is never submitted if control's leg 2 fails", 
     });
     const result = await runDemoOrchestration(ports, { scenarioId: "procurement", variantId: "quantity_drift" });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("establishIntent's tip poll performs a real retry, not a single cached attempt", () => {
+  // Reproduces the shape of a real production incident: the demo
+  // orchestrator's first tip poll landed before compilation finished (a
+  // correct, expected "not ready" response), but intent-provenance's logs
+  // showed zero further requests ever reached it for the rest of the ~137s
+  // retry budget, even though the tip had finished compiling 27s in — well
+  // inside the window. A mock that succeeds on the first call (as every
+  // pre-existing test in this file uses) cannot catch that: it never
+  // exercises the retry path at all.
+  it("performs another real getTip call and succeeds once the tip becomes ready", async () => {
+    let calls = 0;
+    const getTip = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) {
+        return err(ErrorCode.INTENT_STATE_NOT_READY, "not ready yet", { status: 404, retryable: false });
+      }
+      return tip("S0", "hash-s0");
+    });
+    const result = await runDemoOrchestration(mockPorts({ intents: { getTip } }), {
+      scenarioId: "procurement",
+      variantId: "control",
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(2);
+  });
+
+  it("issues one real getTip call per attempt across multiple not-ready responses before timeout", async () => {
+    let calls = 0;
+    const getTip = vi.fn(async () => {
+      calls += 1;
+      if (calls <= 5) {
+        return err(ErrorCode.INTENT_STATE_NOT_READY, "not ready yet", { status: 404, retryable: false });
+      }
+      return tip("S0", "hash-s0");
+    });
+    const result = await runDemoOrchestration(mockPorts({ intents: { getTip } }), {
+      scenarioId: "procurement",
+      variantId: "control",
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(6);
+  });
+
+  it("calls getTip exactly maxTipPollAttempts times, no more and no fewer, before giving up on sustained not-ready", async () => {
+    const getTip = vi.fn(async () =>
+      err(ErrorCode.INTENT_STATE_NOT_READY, "not ready yet", { status: 404, retryable: false }),
+    );
+    const result = await runDemoOrchestration(mockPorts({ intents: { getTip }, maxTipPollAttempts: 3 }), {
+      scenarioId: "procurement",
+      variantId: "control",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe(ErrorCode.INTENT_STATE_NOT_READY);
+    expect(getTip).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("immediate transport retry — scoped to exactly {status: 503, retryable: true}", () => {
+  const notReady404 = (): Result<{ id: string; stateHash: string }> =>
+    err(ErrorCode.INTENT_STATE_NOT_READY, "not ready yet", { status: 404, retryable: false });
+  const transport503 = (): Result<{ id: string; stateHash: string }> =>
+    err(ErrorCode.VALIDATION_FAILED, "transport failure", { status: 503, retryable: true });
+  const permanent400 = (): Result<{ id: string; stateHash: string }> =>
+    err(ErrorCode.VALIDATION_FAILED, "permanently invalid", { status: 400, retryable: false });
+
+  // A: an ordinary 404 must wait for the OUTER loop's own backoff, not
+  // trigger an immediate second call. A same-tick second call would look
+  // identical on a bare call count, so this also asserts sleep ran first —
+  // the one signal that distinguishes "next outer attempt" from "immediate
+  // retry within this attempt".
+  it("A: does not immediately retry a plain 404 — waits for the next outer attempt", async () => {
+    let calls = 0;
+    let sleepsBeforeSecondCall = -1;
+    let sleeps = 0;
+    const getTip = vi.fn(async () => {
+      calls += 1;
+      if (calls === 2) sleepsBeforeSecondCall = sleeps;
+      return calls === 1 ? notReady404() : tip("S0", "hash-s0");
+    });
+    const sleep = vi.fn(async () => {
+      sleeps += 1;
+    });
+    const result = await runDemoOrchestration(mockPorts({ intents: { getTip }, sleep }), {
+      scenarioId: "procurement",
+      variantId: "control",
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(2);
+    expect(sleepsBeforeSecondCall).toBe(1);
+  });
+
+  // B: a retryable 503 gets exactly one immediate retry, resolved within the
+  // SAME outer attempt — no backoff needed if the retry succeeds.
+  it("B: immediately retries a retryable 503 and succeeds without waiting for another outer attempt", async () => {
+    let calls = 0;
+    const getTip = vi.fn(async () => {
+      calls += 1;
+      return calls === 1 ? transport503() : tip("S0", "hash-s0");
+    });
+    const sleep = vi.fn(async () => undefined);
+    const result = await runDemoOrchestration(mockPorts({ intents: { getTip }, sleep }), {
+      scenarioId: "procurement",
+      variantId: "control",
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(2);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  // C: the immediate retry's own result is processed normally — if IT comes
+  // back not-ready, that is not retried again (no recursion); the outer loop
+  // backs off and tries again on its own schedule.
+  it("C: processes the immediate retry's result normally — a not-ready retry waits for the next outer attempt, no infinite retry", async () => {
+    let calls = 0;
+    const getTip = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) return transport503();
+      if (calls === 2) return notReady404();
+      return tip("S0", "hash-s0");
+    });
+    const result = await runDemoOrchestration(mockPorts({ intents: { getTip } }), {
+      scenarioId: "procurement",
+      variantId: "control",
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(3);
+  });
+
+  // D: sustained retryable 503 never exceeds 2 calls per outer attempt, and
+  // still times out through the ordinary exhaustion path — bounded, not
+  // unbounded/infinite.
+  it("D: bounds to at most 2 getTip calls per outer attempt under a persistent retryable 503, and still times out", async () => {
+    const getTip = vi.fn(async () => transport503());
+    const result = await runDemoOrchestration(mockPorts({ intents: { getTip }, maxTipPollAttempts: 3 }), {
+      scenarioId: "procurement",
+      variantId: "control",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe(ErrorCode.INTENT_STATE_NOT_READY);
+    expect(getTip).toHaveBeenCalledTimes(6); // 3 outer attempts x (primary + immediate retry)
+  });
+
+  // E: a non-retryable, non-404 error (e.g. a permanent validation failure)
+  // gets no special treatment either — existing orchestration semantics
+  // don't ask for one, so none is added.
+  it("E: does not immediately retry a non-retryable, non-404 error", async () => {
+    let calls = 0;
+    let sleepsBeforeSecondCall = -1;
+    let sleeps = 0;
+    const getTip = vi.fn(async () => {
+      calls += 1;
+      if (calls === 2) sleepsBeforeSecondCall = sleeps;
+      return calls === 1 ? permanent400() : tip("S0", "hash-s0");
+    });
+    const sleep = vi.fn(async () => {
+      sleeps += 1;
+    });
+    const result = await runDemoOrchestration(mockPorts({ intents: { getTip }, sleep }), {
+      scenarioId: "procurement",
+      variantId: "control",
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(2);
+    expect(sleepsBeforeSecondCall).toBe(1);
   });
 });
 

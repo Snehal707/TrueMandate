@@ -134,6 +134,70 @@ function workflowRequestBody(options: {
   };
 }
 
+type TipResult = Result<{ id: string; stateHash: string }>;
+
+function tipResultCategory(tip: TipResult): "READY" | "NOT_READY" | "ERROR" {
+  if (tip.ok) return "READY";
+  return tip.details?.status === 404 ? "NOT_READY" : "ERROR";
+}
+
+function logTipPoll(input: {
+  readonly intentId: string;
+  readonly attempt: number;
+  readonly maxAttempts: number;
+  readonly phase: "PRIMARY" | "IMMEDIATE_RETRY";
+  readonly tip: TipResult;
+}): void {
+  console.log(
+    JSON.stringify({
+      msg: "demo-orchestrator tip poll",
+      intentId: input.intentId,
+      attempt: input.attempt,
+      maxAttempts: input.maxAttempts,
+      phase: input.phase,
+      status: input.tip.ok ? 200 : input.tip.details?.status,
+      retryable: input.tip.ok ? undefined : input.tip.details?.retryable,
+      result: tipResultCategory(input.tip),
+    }),
+  );
+}
+
+/**
+ * One outer polling attempt: a primary getTip call, plus — ONLY when that
+ * call fails with the exact transport-unavailable shape (status 503,
+ * retryable true), never for an ordinary 404/not-ready response — a single
+ * immediate retry, whose result is then used as-is (never retried again).
+ *
+ * Deliberately scoped to this one call site, not to IntentProvenanceS2SClient
+ * or fetchS2SJson: the production failure that motivated this (a GET that
+ * reached intent-provenance once, then reached it zero more times for the
+ * rest of a ~137s retry budget, despite the outer loop genuinely running to
+ * completion) has only been demonstrated on this newly introduced polling
+ * path. GET /tip is idempotent, so one immediate retry here is safe. This is
+ * NOT a claim that the underlying transport-level cause (most consistent
+ * with a stale pooled keep-alive connection) has been definitively proven,
+ * and it is NOT evidence that any other deployed service sharing
+ * fetchS2SJson has the same exposure — every other S2S caller keeps its
+ * current behavior unchanged.
+ */
+async function pollTip(
+  ports: DemoOrchestratorPorts,
+  intentId: string,
+  attempt: number,
+  maxAttempts: number,
+): Promise<TipResult> {
+  const primary = await ports.intents.getTip(intentId);
+  logTipPoll({ intentId, attempt, maxAttempts, phase: "PRIMARY", tip: primary });
+  if (primary.ok) return primary;
+
+  const isRetryableTransportFailure = primary.details?.status === 503 && primary.details?.retryable === true;
+  if (!isRetryableTransportFailure) return primary;
+
+  const retry = await ports.intents.getTip(intentId);
+  logTipPoll({ intentId, attempt, maxAttempts, phase: "IMMEDIATE_RETRY", tip: retry });
+  return retry;
+}
+
 async function establishIntent(
   ports: DemoOrchestratorPorts,
   template: DemoScenarioTemplate,
@@ -164,7 +228,7 @@ async function establishIntent(
 
   let delayMs = 500;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const tip = await ports.intents.getTip(intentId);
+    const tip = await pollTip(ports, intentId, attempt + 1, maxAttempts);
     if (tip.ok) {
       return ok({ intentId, intentStateId: tip.value.id, intentStateHash: tip.value.stateHash });
     }
