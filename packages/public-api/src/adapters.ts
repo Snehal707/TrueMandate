@@ -28,6 +28,7 @@ import type {
   ApprovalDecidePort,
   ApprovalReadPort,
   DemoCanonicalReadPort,
+  DemoEvidenceProvisionPort,
   DemoOrchestrationPort,
   IntentCreatePort,
   OutcomeReadPort,
@@ -140,6 +141,15 @@ export function createLivePublicBffPorts(input: {
   readonly outcomeRead?: {
     getOutcomeContract(id: string): Promise<Result<unknown>> | Result<unknown>;
   };
+  /**
+   * A-Prime source-evidence provisioning (see DemoEvidenceProvisionPort).
+   * The caller-visible input is exactly {scenarioId, runId, intentId,
+   * intentStateId} — this adapter is a pure pass-through; all lineage
+   * validation and deterministic content reconstruction happens in the
+   * implementation supplied here (constructed in bin/start.ts, where the
+   * real IntentProvenanceS2SClient/EvidenceS2SClient instances live).
+   */
+  readonly demoEvidenceProvision?: DemoEvidenceProvisionPort;
 }): PublicBffPorts {
   const {
     intentCreate,
@@ -153,6 +163,7 @@ export function createLivePublicBffPorts(input: {
     workflow,
     outcomeRead,
     demoOrchestration,
+    demoEvidenceProvision,
   } = input;
 
   const toApprovalResult = async (result: Promise<Result<unknown>> | Result<unknown>): Promise<Result<import("./dto.js").PublicApprovalView>> => {
@@ -430,5 +441,6 @@ export function createLivePublicBffPorts(input: {
           } satisfies DemoOrchestrationPort,
         }
       : {}),
+    ...(demoEvidenceProvision ? { demoEvidenceProvision } : {}),
   };
 }

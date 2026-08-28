@@ -106,14 +106,19 @@ describe("control-only orchestration", () => {
     expect(ports.submitWorkflowCalls).toHaveLength(2);
   });
 
-  it("never sends browser-shaped free-form content — only the two allowlisted fields select anything", async () => {
+  it("sends only closed identifiers to evidence provisioning — never envelope/claim content", async () => {
     const ports = mockPorts();
     await runDemoOrchestration(ports, { scenarioId: "travel", variantId: "control" });
-    for (const call of ports.submitEvidenceCalls) {
-      const body = call as { claims: readonly { value: unknown }[] };
-      // Every claim value traces back to the fixture, never to the input args.
-      expect(body.claims.every((c) => typeof c.value !== "undefined")).toBe(true);
-    }
+    expect(ports.submitEvidenceCalls).toHaveLength(1);
+    const body = ports.submitEvidenceCalls[0] as Record<string, unknown>;
+    // A-Prime content-authority boundary: the orchestrator structurally has
+    // no field through which it could supply claim/envelope content — it
+    // can only name which pre-approved scenario/run/intent to provision.
+    expect(Object.keys(body).sort()).toEqual(["intentId", "intentStateId", "runId", "scenarioId"]);
+    expect(body.scenarioId).toBe("travel");
+    expect(body.runId).toBe("run-fixed");
+    expect(typeof body.intentId).toBe("string");
+    expect(typeof body.intentStateId).toBe("string");
   });
 });
 
@@ -383,8 +388,12 @@ describe("idempotency: retrying the whole orchestration with the same runId is s
     await runDemoOrchestration(first, { scenarioId: "procurement", variantId: "control" });
     await runDemoOrchestration(second, { scenarioId: "procurement", variantId: "control" });
 
-    const firstEnvelope = (first.submitEvidenceCalls[0] as { envelopes: { id: string }[] }).envelopes[0]!.id;
-    const secondEnvelope = (second.submitEvidenceCalls[0] as { envelopes: { id: string }[] }).envelopes[0]!.id;
+    // submitEvidence now carries only closed identifiers — a full replay
+    // must send byte-identical provisioning requests both times.
+    expect(first.submitEvidenceCalls[0]).toEqual(second.submitEvidenceCalls[0]);
+
+    const firstEnvelope = (first.verifyEvidenceCalls[0] as { envelopeId: string }).envelopeId;
+    const secondEnvelope = (second.verifyEvidenceCalls[0] as { envelopeId: string }).envelopeId;
     expect(firstEnvelope).toBe(secondEnvelope);
 
     const firstVerification = (first.verifyEvidenceCalls[0] as { verificationId: string }).verificationId;

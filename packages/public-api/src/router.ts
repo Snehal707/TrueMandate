@@ -1,7 +1,9 @@
+import { adcGoogleIdentityVerifier, type InternalCallerIdentityVerifier } from "@truemandate/cloud-runtime";
 import type { PublicBffConfig } from "./config.js";
 import { createHealthHandlers, type HealthState } from "./handlers/health.js";
 import { createDemoCanonicalHandler } from "./handlers/demo-canonical.js";
 import { createDemoOrchestrationHandler } from "./handlers/demo-orchestration.js";
+import { createDemoEvidenceProvisioningHandler } from "./handlers/demo-evidence-provisioning.js";
 import { createApprovalHandler } from "./handlers/approvals.js";
 import { createApprovalReadHandler } from "./handlers/approval-read.js";
 import { createApprovalDecideHandler } from "./handlers/approval-decide.js";
@@ -60,6 +62,10 @@ export function createPublicBffRouter(
   ports: PublicBffPorts,
   config: PublicBffConfig,
   healthState?: HealthState,
+  /** Injectable so tests can supply a fake verifier instead of performing
+   * real Google OIDC verification. Defaults to real ADC-based verification,
+   * matching createCloudRunHttpServer's own default. */
+  identityVerifier: InternalCallerIdentityVerifier = adcGoogleIdentityVerifier(),
 ): (method: string, pathname: string, req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => Promise<void> {
   const { healthz, readyz } = createHealthHandlers(config, healthState);
 
@@ -130,6 +136,23 @@ export function createPublicBffRouter(
             "POST",
             "/v1/demo/scenarios/:scenarioId/variants/:variantId/run",
             createDemoOrchestrationHandler(ports.demoOrchestration),
+          ),
+        ]
+      : []),
+    // Narrow, application-auth-gated route: does not even register unless
+    // both a port implementation AND at least one allowed caller are
+    // configured (mirrors evidence-service's own submitCallers.length > 0
+    // gating for its internal routes).
+    ...(ports.demoEvidenceProvision && config.demoEvidenceProvisionCallerEmails.length > 0
+      ? [
+          route(
+            "POST",
+            "/internal/demo/evidence-provisioning",
+            createDemoEvidenceProvisioningHandler(ports.demoEvidenceProvision, {
+              identityVerifier,
+              audience: config.internalAuthAudience ?? "",
+              allowedCallers: config.demoEvidenceProvisionCallerEmails,
+            }),
           ),
         ]
       : []),

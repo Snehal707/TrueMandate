@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { URL } from "node:url";
+import type { InternalCallerIdentityVerifier } from "@truemandate/cloud-runtime";
 import {
   loadPublicBffConfig,
   type CreatePublicBffOptions,
@@ -19,9 +20,12 @@ export function createPublicBff(
   ports: PublicBffPorts,
   options: CreatePublicBffOptions = {},
   healthState?: HealthState,
+  /** Injectable so tests can supply a fake verifier. Defaults to real
+   * ADC-based Google OIDC verification (set inside createPublicBffRouter). */
+  identityVerifier?: InternalCallerIdentityVerifier,
 ): PublicBff {
   const config = loadPublicBffConfig(options);
-  const handleRequest = createPublicBffRouter(ports, config, healthState);
+  const handleRequest = createPublicBffRouter(ports, config, healthState, identityVerifier);
   return { config, ports, handleRequest };
 }
 
@@ -36,8 +40,9 @@ export function createPublicBffServer(
   ports: PublicBffPorts,
   options: CreatePublicBffOptions = {},
   healthState?: HealthState,
+  identityVerifier?: InternalCallerIdentityVerifier,
 ): PublicBffServer {
-  const bff = createPublicBff(ports, options, healthState);
+  const bff = createPublicBff(ports, options, healthState, identityVerifier);
 
   const server = createServer(async (req, res) => {
     try {

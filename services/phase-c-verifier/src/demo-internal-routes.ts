@@ -6,7 +6,10 @@ import { runDemoOrchestration, type DemoOrchestratorPorts } from "./demo-orchest
  * acceptance job. Gated to whichever callers are configured
  * (TM_DEMO_PROVISION_CALLER_EMAILS — public-bff only, in the deployed
  * config). The route itself accepts nothing but the two path params;
- * everything else comes from `demo-evidence-templates.ts`.
+ * everything else comes from the shared `@truemandate/demo-fixtures`
+ * catalog (action/domainPayload/variants). Source evidence content is a
+ * separate concern, handled by public-bff's own provisioning route — see
+ * demo-orchestrator.ts's module docstring.
  */
 export function createDemoInternalRoutes(
   ports: DemoOrchestratorPorts,

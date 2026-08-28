@@ -1,18 +1,28 @@
+import { hashCanonical } from "@truemandate/crypto";
+
 /**
  * Server-owned fixtures for the trusted demo-evidence orchestration.
  *
  * Every scenario's human intent, evidence claims, control action, and each
  * attack variant's mutated action are compile-time constants here. Nothing
- * in this file is ever constructed from a request body — the browser
- * selects a `scenarioId`/`variantId` pair and gets exactly this content,
- * never anything it supplied itself.
+ * in this file is ever constructed from a request body — a caller selects a
+ * `scenarioId`/`variantId` (or `scenarioId`/`runId`) pair and gets exactly
+ * this content, never anything it supplied itself.
+ *
+ * This is the single canonical copy, shared by demo-evidence-orchestrator
+ * (which needs the full template — rawText/action/domainPayload/variants —
+ * to build workflow requests) and public-bff (which needs only the source
+ * evidence portion — rawText for cross-check, evidenceSource/
+ * evidenceCaptureTime/evidenceClaims for reconstruction). Server-side only:
+ * never imported by apps/web or any browser-bundled code.
  *
  * Evidence content is intentionally static (no `new Date()`, no random
- * ids): `demo-orchestrator.ts` derives every envelope/claim/verification id
- * deterministically from the run's own `intentId`, so identical retries of
- * the same orchestration attempt produce byte-identical content and are
- * safe to replay against `persistEnvelope`/`persistClaim`'s
- * content-hash-equality idempotency check.
+ * ids): the deterministic id/hash helpers below derive every envelope/
+ * claim/verification id from the run's own `scenarioId`/`runId`, so
+ * identical retries of the same orchestration attempt produce
+ * byte-identical content and are safe to replay against
+ * `persistEnvelope`/`persistClaim`'s content-hash-equality idempotency
+ * check.
  *
  * rawText/action/domain-payload values are reused verbatim from
  * `apps/web/src/demo/liveDemoPresets.ts` — the existing, already-reviewed
@@ -449,4 +459,24 @@ export function isAllowedDemoVariant(scenarioId: string, variantId: string): boo
   const template = demoScenarioTemplate(scenarioId);
   if (!template) return false;
   return Object.prototype.hasOwnProperty.call(template.variants, variantId);
+}
+
+/**
+ * Deterministic id/hash derivation, shared by demo-evidence-orchestrator
+ * (which predicts these same ids to ask evidence-service to verify) and
+ * public-bff (which derives them to actually construct and submit the
+ * envelope/claims). Both sides MUST compute identical ids from identical
+ * inputs — that's the whole point of keeping one canonical implementation
+ * here rather than two independently-maintained copies.
+ */
+export function evidenceEnvelopeId(scenarioId: string, runId: string): string {
+  return `demo-${scenarioId}-${runId}-offer`;
+}
+
+export function evidenceClaimId(scenarioId: string, runId: string, concept: string): string {
+  return `demo-${scenarioId}-${runId}-${concept}`;
+}
+
+export function contentHashFor(template: DemoScenarioTemplate): string {
+  return hashCanonical({ scenarioId: template.scenarioId, claims: template.evidenceClaims }).padEnd(64, "0").slice(0, 64);
 }

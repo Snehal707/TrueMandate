@@ -1,11 +1,12 @@
-import { hashCanonical } from "@truemandate/crypto";
 import { ErrorCode, err, ok, type Result } from "@truemandate/protocol";
 import {
   demoScenarioTemplate,
+  evidenceClaimId,
+  evidenceEnvelopeId,
   isAllowedDemoVariant,
   type DemoActionFixture,
   type DemoScenarioTemplate,
-} from "./demo-evidence-templates.js";
+} from "@truemandate/demo-fixtures";
 
 /**
  * Trusted demo-evidence orchestration. Runs as the existing `phase-c-verifier`
@@ -14,8 +15,19 @@ import {
  * unchanged by this module). Nothing here mints a new identity, widens that
  * allowlist, or accepts browser-supplied action/evidence/claim content —
  * every value that reaches evidence-service or the public workflow route
- * comes from `demo-evidence-templates.ts`, selected only by the caller's
- * `scenarioId`/`variantId` enum pair.
+ * comes from the shared `@truemandate/demo-fixtures` catalog, selected only
+ * by the caller's `scenarioId`/`variantId` enum pair.
+ *
+ * Source evidence content authority: this module does NOT submit evidence
+ * envelopes/claims directly to evidence-service. It sends only
+ * `{scenarioId, runId, intentId, intentStateId}` to public-bff's narrow
+ * `/internal/demo/evidence-provisioning` route, which independently
+ * reconstructs the deterministic fixture from the SAME shared catalog and
+ * submits it as its own (public-bff) identity. This orchestrator process
+ * never has the ability to choose submitted claim content — only which
+ * pre-approved scenario/run to provision. Verification
+ * (`/internal/evidence/verifications`) remains direct, unchanged, under this
+ * service's own `phase-c-verifier` identity.
  *
  * CAVEAT — compiler fidelity: this module's fixtures are proven, in this
  * repository's own tests, against the deterministic test compiler
@@ -41,7 +53,12 @@ export interface DemoOrchestratorPorts {
    * this route accepts any caller, exactly as it accepts a browser. */
   readonly submitWorkflow: (body: unknown) => Promise<Result<Record<string, unknown>>>;
   readonly evidence: {
+    /** Sends only {scenarioId, runId, intentId, intentStateId} to public-bff's
+     * narrow demo evidence-provisioning route — never envelope/claim content.
+     * public-bff reconstructs and submits the fixture as its own identity. */
     submitEvidence(body: unknown): Promise<Result<{ envelopeIds: readonly string[]; claimIds: readonly string[] }>>;
+    /** Direct call to evidence-service, under this service's own
+     * phase-c-verifier identity. Unchanged by the A-Prime redesign. */
     verifyEvidence(body: unknown): Promise<Result<{ envelopeIds: readonly string[]; claimIds: readonly string[] }>>;
   };
   readonly intents: {
@@ -74,18 +91,6 @@ export interface DemoAttackOrchestrationResult {
 export type DemoOrchestrationResult =
   | ({ readonly kind: "control" } & DemoControlOrchestrationResult)
   | ({ readonly kind: "attack" } & DemoAttackOrchestrationResult);
-
-function evidenceEnvelopeId(scenarioId: string, runId: string): string {
-  return `demo-${scenarioId}-${runId}-offer`;
-}
-
-function evidenceClaimId(scenarioId: string, runId: string, concept: string): string {
-  return `demo-${scenarioId}-${runId}-${concept}`;
-}
-
-function contentHashFor(template: DemoScenarioTemplate): string {
-  return hashCanonical({ scenarioId: template.scenarioId, claims: template.evidenceClaims }).padEnd(64, "0").slice(0, 64);
-}
 
 function actionBody(action: DemoActionFixture): Record<string, unknown> {
   return {
@@ -248,28 +253,21 @@ async function provisionAndVerifyEvidence(
   intentId: string,
   intentStateId: string,
 ): Promise<Result<{ readonly evidenceIds: readonly string[]; readonly claimIds: readonly string[] }>> {
+  // Deterministic ids this orchestrator predicts locally so it can name
+  // exactly what to verify below — it does NOT construct or send the
+  // envelope/claim content itself. public-bff derives the identical ids
+  // from the same shared template and is the one that actually submits.
   const envelopeId = evidenceEnvelopeId(template.scenarioId, runId);
   const claimIds = template.evidenceClaims.map((claim) => evidenceClaimId(template.scenarioId, runId, claim.concept));
-  const contentHash = contentHashFor(template);
 
+  // Narrow request: closed identifiers only. public-bff independently
+  // reconstructs and submits the fixture as its own identity — this
+  // orchestrator has no field through which it could alter the content.
   const submitted = await ports.evidence.submitEvidence({
-    envelopes: [
-      {
-        id: envelopeId,
-        source: template.evidenceSource,
-        contentHash,
-        captureTime: template.evidenceCaptureTime,
-        mimeType: "application/json",
-      },
-    ],
-    claims: template.evidenceClaims.map((claim, index) => ({
-      id: claimIds[index],
-      evidenceId: envelopeId,
-      concept: claim.concept,
-      value: claim.value,
-      confidence: 1,
-    })),
-    lineage: { intentId, intentStateId },
+    scenarioId: template.scenarioId,
+    runId,
+    intentId,
+    intentStateId,
   });
   if (!submitted.ok) return submitted as Result<never>;
 

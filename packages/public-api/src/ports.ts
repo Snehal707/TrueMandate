@@ -108,6 +108,28 @@ export interface ResolutionReadPort {
   getMandate(id: string): Promise<Result<unknown>> | Result<unknown>;
 }
 
+/**
+ * Trusted demo evidence-provisioning (A-Prime source-evidence leg). Accepts
+ * ONLY {scenarioId, runId, intentId, intentStateId} — no envelope, claim,
+ * concept, value, confidence, trustClass, taint, or free-text content field
+ * exists on this surface. The implementation independently reconstructs the
+ * fixed demo evidence fixture from the shared @truemandate/demo-fixtures
+ * catalog and submits it under public-bff's OWN identity — the caller has
+ * no path to influence the persisted content, only which pre-approved
+ * scenario/run to provision. Caller identity is verified at the
+ * application layer (TM_DEMO_EVIDENCE_PROVISION_CALLER_EMAILS), independent
+ * of and in addition to Cloud Run IAM — see the handler, not this port,
+ * for that check (this port is only ever invoked after it passes).
+ */
+export interface DemoEvidenceProvisionPort {
+  provisionDemoEvidence(input: {
+    readonly scenarioId: string;
+    readonly runId: string;
+    readonly intentId: string;
+    readonly intentStateId: string;
+  }): Promise<Result<unknown>> | Result<unknown>;
+}
+
 export interface PublicBffPorts {
   readonly intentCreate: IntentCreatePort;
   readonly workspaceRead: WorkspaceReadPort;
@@ -126,4 +148,5 @@ export interface PublicBffPorts {
   readonly outcomeRead?: OutcomeReadPort;
   readonly demoCanonical?: DemoCanonicalReadPort;
   readonly demoOrchestration?: DemoOrchestrationPort;
+  readonly demoEvidenceProvision?: DemoEvidenceProvisionPort;
 }

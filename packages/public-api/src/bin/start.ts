@@ -1,4 +1,5 @@
 import { createLivePublicBffPorts } from "../adapters.js";
+import { createDemoEvidenceProvisionPort } from "../demo-evidence-provisioning.js";
 import { createPublicBffServer } from "../server.js";
 import {
   AgentRuntimeS2SClient,
@@ -125,6 +126,15 @@ async function main(): Promise<void> {
     // Read-only canonical projection for the judge demo (GET-only route).
     canonicalStore: persist.store,
     ...(demoOrchestration ? { demoOrchestration } : {}),
+    // A-Prime: reuses the SAME already-constructed owner/evidence S2S
+    // clients (public-bff's own identity) — no new client, no new URL.
+    // The route itself only registers if TM_DEMO_EVIDENCE_PROVISION_CALLER_EMAILS
+    // is configured (see router.ts).
+    demoEvidenceProvision: createDemoEvidenceProvisionPort({
+      getIntent: (intentId) => owner.getIntent(intentId),
+      getTip: (intentId) => owner.getTip(intentId),
+      submitEvidence: (raw) => evidence.submitEvidence(raw),
+    }),
   });
 
   const { listen, bff } = createPublicBffServer(

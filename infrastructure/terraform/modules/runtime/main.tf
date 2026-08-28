@@ -660,6 +660,34 @@ resource "google_cloud_run_v2_service" "s2s" {
         }
       }
 
+      # A-Prime: public-bff's narrow /internal/demo/evidence-provisioning
+      # route restricts itself to exactly the phase-c-verifier identity, at
+      # the APPLICATION layer, independent of and in addition to Cloud Run
+      # IAM (the existing phase-c-verifier->public-bff invoker edge). Every
+      # other public-bff route (including ordinary POST /v1/evidence) is
+      # untouched by this — it has no application-level caller check and
+      # never reads this allowlist.
+      dynamic "env" {
+        for_each = each.key == "public-bff" ? [1] : []
+        content {
+          name  = "TM_DEMO_EVIDENCE_PROVISION_CALLER_EMAILS"
+          value = local.service_account_emails["phase-c-verifier"]
+        }
+      }
+
+      # Required only to VERIFY the allowlist above: the OIDC audience the
+      # provisioning route's identityVerifier checks incoming tokens
+      # against. Same name/pattern already used for intent-provenance,
+      # gateway, evidence-service, agent-runtime, and authority — always the
+      # service's own known URL.
+      dynamic "env" {
+        for_each = each.key == "public-bff" ? [1] : []
+        content {
+          name  = "TM_INTERNAL_AUTH_AUDIENCE"
+          value = var.service_urls["public-bff"]
+        }
+      }
+
       # Wave 1 approval lifecycle: the durable human/operator decision route
       # derives decidedBy from the VERIFIED caller identity — authority must
       # verify internal auth. The allowlist carries exactly the existing

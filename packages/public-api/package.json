@@ -18,6 +18,7 @@
   "dependencies": {
     "@truemandate/cloud-firestore": "workspace:*",
     "@truemandate/cloud-runtime": "workspace:*",
+    "@truemandate/demo-fixtures": "workspace:*",
     "@truemandate/evidence-service": "workspace:*",
     "@truemandate/observability-service": "workspace:*",
     "@truemandate/protocol": "workspace:*",

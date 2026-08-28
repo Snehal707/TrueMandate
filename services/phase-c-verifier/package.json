@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@truemandate/cloud-pubsub": "workspace:*",
+    "@truemandate/demo-fixtures": "workspace:*",
     "@truemandate/outcome-core": "workspace:*",
     "@truemandate/cloud-runtime": "workspace:*",
     "@truemandate/crypto": "workspace:*",

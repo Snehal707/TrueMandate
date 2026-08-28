@@ -676,6 +676,19 @@ importers:
         specifier: ^5.8.2
         version: 5.9.3
 
+  packages/demo-fixtures:
+    dependencies:
+      '@truemandate/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+    devDependencies:
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.8
+        version: 3.2.7(@types/node@24.13.3)(tsx@4.23.12)(yaml@2.9.0)
+
   packages/guardian-core:
     dependencies:
       '@truemandate/crypto':
@@ -833,6 +846,9 @@ importers:
       '@truemandate/cloud-runtime':
         specifier: workspace:*
         version: link:../cloud-runtime
+      '@truemandate/demo-fixtures':
+        specifier: workspace:*
+        version: link:../demo-fixtures
       '@truemandate/evidence-service':
         specifier: workspace:*
         version: link:../../services/evidence-service
@@ -1510,6 +1526,9 @@ importers:
       '@truemandate/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto
+      '@truemandate/demo-fixtures':
+        specifier: workspace:*
+        version: link:../../packages/demo-fixtures
       '@truemandate/evidence-service':
         specifier: workspace:*
         version: link:../evidence-service
