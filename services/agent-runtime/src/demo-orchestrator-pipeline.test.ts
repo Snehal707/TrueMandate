@@ -521,62 +521,54 @@ describe("saas: control executes, then renewal_flip against the exact same S1", 
   });
 });
 
-describe("logistics: control executes, then capability_expansion against the exact same S1 — DIFFERENT causal story, reported honestly", () => {
+describe("logistics: control executes, then capability_expansion against the exact same S1", () => {
   /**
-   * UNLIKE the five variants above, capability_expansion is NOT caught by
-   * domain-pack actionFidelity: none of the five domain packs' fidelity
-   * checks (grep-verified) ever compare action.capability against
-   * anything. Authority's own capability-scope check
-   * (authority-service/src/service.ts: `cap === BLOCK || cap === undefined`)
-   * only fires when a capability is explicitly BLOCK/REQUIRE_APPROVAL in
-   * the compiled IntentState; an absent capability defaults to ALLOW
-   * (generic-workflow-engine.ts's own documented framing:
-   * `state.value.capabilities?.[domainAction.capability] ??
-   * AuthorityDecision.ALLOW`). So the attack genuinely reaches AUTHORIZED —
-   * PreparedAction, CommitToken, and Grant all get minted for a request
-   * that swapped arrange_fulfillment for execute_payment.
-   *
-   * The only thing that stops real execution is that control committed
-   * FIRST and consumed the shared per-intent-per-currency exposure budget
-   * (gateway-service's two-phase reserveIfUnderThreshold) before attack's
-   * own commit is attempted. This is a commit-ORDER-dependent backstop, not
-   * a capability-substitution defense — see the standalone describe block
-   * below, which proves a capability_expansion request with no prior
-   * same-intent commit reaches AUTHORIZED **and executes**.
+   * Capability-fidelity invariant (generic-workflow-engine.ts): the
+   * submitted action's capability must equal the selected domain pack's own
+   * planning.executionCapability, checked in the same eligible conjunction
+   * as actionPreservesIntent/completeProofs/Guardian/privilegedReady. Before
+   * this invariant existed, capability_expansion was the one variant with a
+   * genuinely different (and weaker) causal story than the other five: the
+   * attack reached AUTHORIZED, with PreparedAction/CommitToken/Grant all
+   * minted, and was stopped only by a commit-order-dependent exposure
+   * backstop (see the standalone describe block below for proof that a
+   * fresh, unrelated submission is now blocked WITHOUT that backstop). This
+   * test proves capability_expansion now follows the exact same
+   * BLOCKED-before-Authority shape as every other variant.
    */
-  it("attack itself reaches AUTHORIZED with PreparedAction/CommitToken/Grant minted; only the later commit is rejected, and only because control committed first", async () => {
+  it("shares S1, control reaches AUTHORIZED and executes, attack's first causal blocker is capability fidelity, Authority NOT_REACHED, zero side effects for attack", async () => {
     const logistics = CASES.find((item) => item.packId === "logistics_fulfillment")!;
     const trace = await runCausalityTrace(logistics, "logistics-capability-expansion", { ...logistics.controlAction, capability: "execute_payment" });
+    expectFidelityBlockedAttack(trace);
 
-    expect(trace.s1Id).not.toBe(trace.s0Id);
-    expect(trace.controlValue.state).toBe("AUTHORIZED");
-    expect(trace.controlCommitOk).toBe(true);
-
-    expect(trace.attackValue.state).toBe("AUTHORIZED");
-    expect(trace.attackValue.workflowId).not.toBe(trace.controlValue.workflowId);
-    const attackWorkflowRow = trace.attackRows.find((row) => row.kind === "WORKFLOW");
-    expect(String(attackWorkflowRow?.payload.intentStateId)).toBe(trace.s1Id);
-    expect(String(attackWorkflowRow?.payload.intentStateHash)).toBe(trace.s1Hash);
-    const attackAuthorization = trace.attackRows.find((row) => row.kind === "EXECUTION_AUTHORIZATION")?.payload;
-    expect(typeof attackAuthorization?.preparedActionId).toBe("string");
-    expect(typeof attackAuthorization?.commitTokenId).toBe("string");
-    expect(typeof attackAuthorization?.grantId).toBe("string");
-    expect(trace.evaluationCalls).toBe(2); // Authority WAS invoked for attack, unlike the fidelity-blocked variants.
-    expect(trace.prepareCalls).toBe(2); // PrepareAction WAS invoked for attack too.
-
-    expect(trace.attackCommitAttempted).toBe(true);
-    expect(trace.attackCommitOk).toBe(false);
-    expect(trace.attackCommitCode).toBe("CUMULATIVE_EXPOSURE_EXCEEDED");
-
-    // Net safety property still holds — exactly one real side effect, from
-    // control only — but via a fragile, order-dependent mechanism rather
-    // than an intent-aware capability check.
-    expect(trace.sideEffectLedgerLength).toBe(1);
+    // Distinctly attributable: capability fidelity failed, not action
+    // fidelity (which never inspects action.capability at all).
+    const attackAction = trace.attackRows.find((row) => row.kind === "ACTION")?.payload;
+    const capabilityFidelity = attackAction?.capabilityFidelity as { matches?: boolean; actual?: string; expected?: string } | undefined;
+    expect(capabilityFidelity?.matches).toBe(false);
+    expect(capabilityFidelity?.actual).toBe("execute_payment");
+    expect(capabilityFidelity?.expected).toBe("arrange_fulfillment");
+    const deterministicActionFidelity = attackAction?.deterministicActionFidelity as { preservesIntent?: boolean } | undefined;
+    expect(deterministicActionFidelity?.preservesIntent).toBe(true);
   });
 });
 
-describe("known gap: capability substitution has no capability-aware structural defense", () => {
-  it("a capability_expansion request submitted and committed with NO prior same-intent commit reaches AUTHORIZED and actually executes", async () => {
+describe("standalone: capability_expansion blocked with NO prior same-intent commit", () => {
+  /**
+   * Critical isolation proof: unlike the paired trace above (which shares an
+   * intent with a control that commits first), THIS test submits the
+   * capability-expanded action completely alone — fresh intent, no control
+   * workflow ever ran, no CommitToken ever consumed, exposure ledger
+   * untouched for this intent+currency. If the fix here were merely
+   * incidental (e.g. only reachable via the shared-S1 causal trace, or only
+   * effective when exposure happens to be exhausted), this would still
+   * reach AUTHORIZED, exactly as it did before the invariant existed (see
+   * git history — this test previously proved the opposite). It must now be
+   * BLOCKED, and rt.calls.evaluation must be 0 — not "evaluated then
+   * rejected," but never reached at all — proving the fix closes the actual
+   * vulnerability rather than masking it behind exposure exhaustion.
+   */
+  it("a capability_expansion request with no prior same-intent execution is BLOCKED before Authority — not merely rejected at commit", async () => {
     const logistics = CASES.find((item) => item.packId === "logistics_fulfillment")!;
     const rt = await runtime({
       rawText: logistics.rawText,
@@ -599,11 +591,87 @@ describe("known gap: capability substitution has no capability-aware structural 
     }
     if (!result.ok) throw new Error(`solo capability_expansion: ${result.code}: ${result.message}`);
     const value = result.value as { state: string; workflowId: string };
-    expect(value.state).toBe("AUTHORIZED");
+    expect(value.state).toBe("BLOCKED");
 
-    const committed = await rt.dispatcher.commitWorkflow(value.workflowId);
-    if (!committed.ok) throw new Error(`solo capability_expansion commit: ${committed.code}: ${committed.message}`);
-    expect(committed.value).toMatchObject({ status: "SUCCESS" });
-    expect(await rt.gateway.getSideEffectLedger().listAll()).toHaveLength(1);
+    const artifacts = await rt.owner.listWorkflowArtifacts(value.workflowId);
+    const rows = artifacts.ok ? (artifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
+    expect(rows.find((row) => row.kind === "EXECUTION_AUTHORIZATION")).toBeUndefined();
+    const actionRow = rows.find((row) => row.kind === "ACTION")?.payload;
+    const capabilityFidelity = actionRow?.capabilityFidelity as { matches?: boolean } | undefined;
+    expect(capabilityFidelity?.matches).toBe(false);
+
+    // Authority never invoked at all — not evaluated-then-rejected. This is
+    // the assertion that distinguishes "the vulnerability is closed" from
+    // "the vulnerability is masked by exposure exhaustion": there is no
+    // prior workflow, no prior commit, nothing in the exposure ledger for
+    // this intent+currency, and the attack is still blocked.
+    expect(rt.calls.evaluation).toBe(0);
+    expect(rt.calls.prepare).toBe(0);
+    expect(rt.calls.mint).toBe(0);
+    expect(rt.calls.authorize).toBe(0);
+    expect(await rt.gateway.getSideEffectLedger().listAll()).toHaveLength(0);
   });
+});
+
+describe("generic cross-domain coverage: a foreign capability cannot cross the eligibility boundary in any domain", () => {
+  /**
+   * One shared GenericWorkflowEngine invariant enforces all five domains —
+   * not five separate policy implementations. Proof: for each domain,
+   * submit that domain's OWN otherwise-legitimate control action but with
+   * capability swapped to a DIFFERENT domain's real, valid capability name
+   * (cyclically: procurement→travel's, travel→saas's, saas→invoice's,
+   * invoice→logistics's, logistics→procurement's) — a genuinely foreign,
+   * well-formed capability, not a nonsense string, so this can't pass by
+   * accident of a missing string-format check. Each must be BLOCKED before
+   * Authority, with zero side effects, using nothing but the single
+   * `domainAction.capability === this.deps.pack.planning.executionCapability`
+   * check shared by every domain pack.
+   */
+  const foreignCapability: Readonly<Record<string, string>> = {
+    procurement: "book_travel",
+    travel: "manage_saas_subscription",
+    saas_it_spend: "pay_invoice",
+    invoice_vendor_payment: "arrange_fulfillment",
+    logistics_fulfillment: "execute_payment",
+  };
+
+  for (const domainCase of CASES) {
+    it(`${domainCase.label}: capability=${foreignCapability[domainCase.packId]} (foreign to this domain) is BLOCKED before Authority`, async () => {
+      const rt = await runtime({
+        rawText: domainCase.rawText,
+        omitProofSummary: true,
+        capabilities: { [domainCase.capability]: AuthorityDecision.ALLOW, [foreignCapability[domainCase.packId]!]: AuthorityDecision.ALLOW },
+        compilerTransform: replaceConstraints(domainCase.rawText, domainCase.constraints),
+        demoEvidence: [{ envelope: envelope(EVIDENCE_ID, `demo-fixture:${domainCase.packId}:v1`), claims: claims(EVIDENCE_ID, domainCase.facts) }],
+      });
+      const foreignAction = { ...domainCase.controlAction, capability: foreignCapability[domainCase.packId] };
+      const body = (expectedIntentStateId: string) => ({
+        intent: { kind: "REFERENCE", intentId: "intent-e2e", expectedIntentStateId },
+        action: foreignAction,
+        domain: { packId: domainCase.packId, payload: domainCase.payload(EVIDENCE_ID) },
+        idempotencyKey: `demo-foreign-capability-${domainCase.packId}`,
+      });
+      let result = await rt.dispatcher.submitWorkflow(body(rt.state.id));
+      if (!result.ok && result.code === "INTENT_STATE_NOT_READY") {
+        const details = result.details as Record<string, unknown>;
+        result = await rt.dispatcher.submitWorkflow(body(String(details.intentStateId)));
+      }
+      if (!result.ok) throw new Error(`${domainCase.label} foreign capability: ${result.code}: ${result.message}`);
+      const value = result.value as { state: string; workflowId: string };
+      expect(value.state).toBe("BLOCKED");
+
+      const artifacts = await rt.owner.listWorkflowArtifacts(value.workflowId);
+      const rows = artifacts.ok ? (artifacts.value as { kind: string; payload: Record<string, unknown> }[]) : [];
+      expect(rows.find((row) => row.kind === "EXECUTION_AUTHORIZATION")).toBeUndefined();
+      const actionRow = rows.find((row) => row.kind === "ACTION")?.payload;
+      const capabilityFidelity = actionRow?.capabilityFidelity as { matches?: boolean; actual?: string; expected?: string } | undefined;
+      expect(capabilityFidelity?.matches).toBe(false);
+      expect(capabilityFidelity?.actual).toBe(foreignCapability[domainCase.packId]);
+      expect(capabilityFidelity?.expected).toBe(domainCase.capability);
+
+      expect(rt.calls.evaluation).toBe(0);
+      expect(rt.calls.prepare).toBe(0);
+      expect(await rt.gateway.getSideEffectLedger().listAll()).toHaveLength(0);
+    });
+  }
 });

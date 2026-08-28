@@ -432,6 +432,8 @@ export function projectLifecycle(input: {
     workflowState === "EXECUTED";
   const fidelity = record(action?.deterministicActionFidelity);
   const fidelityFailed = fidelity?.preservesIntent === false;
+  const capabilityFidelity = record(action?.capabilityFidelity);
+  const capabilityMismatch = capabilityFidelity?.matches === false;
 
   const unsatisfied = proofs.filter((proof) => proof.status !== "SATISFIED");
   const proofsAbsent = proofs.some(
@@ -441,8 +443,13 @@ export function projectLifecycle(input: {
   const guardianDecision = typeof guardianVerdict?.decision === "string" ? guardianVerdict.decision : undefined;
   const guardianBlocked = guardianDecision === "BLOCK" || guardianVerdict?.criticalFailure === true;
 
-  // Execution order: plan verification, then proofs, then action fidelity, then
-  // Guardian, then the eligibility conjunction itself.
+  // Execution order: plan verification, then proofs, then action fidelity,
+  // then capability fidelity, then Guardian, then the eligibility
+  // conjunction itself. capabilityFidelity is deliberately its own stage —
+  // distinct from actionFidelity (which never inspects action.capability;
+  // see generic-workflow-engine.ts) and from Guardian/authorityEligibility
+  // — so a capability-substitution attack is never misattributed to any of
+  // those.
   let blockingStage: string | undefined;
   let blockingReason: string | undefined;
   if (plan && !planVerified) {
@@ -457,6 +464,9 @@ export function projectLifecycle(input: {
   } else if (fidelityFailed) {
     blockingStage = "actionFidelity";
     blockingReason = "The proposed action did not preserve the recorded human intent.";
+  } else if (capabilityMismatch) {
+    blockingStage = "capabilityFidelity";
+    blockingReason = "The proposed capability is outside the capability authorized by this workflow domain.";
   } else if (guardianBlocked) {
     blockingStage = "guardian";
     blockingReason = "Guardian review blocked the action.";

@@ -220,6 +220,7 @@ const LIFECYCLE_STAGE_LABELS: Readonly<Record<string, string>> = {
   planVerification: "Plan verification",
   guardian: "Guardian",
   authority: "Authority",
+  capabilityFidelity: "Capability fidelity",
   preparedAction: "Prepared action",
   execution: "Execution",
   outcome: "Outcome",

@@ -584,6 +584,16 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       state.value,
       action,
     );
+    // Capability-fidelity invariant: the submitted action's capability must
+    // equal the capability the SELECTED DOMAIN PACK itself owns
+    // (planning.executionCapability) — independent of, and in addition to,
+    // IntentState.capabilities (owner policy, unchanged, still governs
+    // ALLOW/BLOCK/REQUIRE_APPROVAL for whichever capability is actually
+    // requested). Domain-pack adapters and buildActionProposal all pass
+    // action.capability through verbatim from the caller with no cross-check
+    // (requireCoreActionFields only validates it's a string) — this is the
+    // one place, shared by all five domains, that closes that gap.
+    const capabilityMatchesDomain = domainAction.capability === this.deps.pack.planning.executionCapability;
     // The capability permission is authoritative IntentState policy (absent =
     // bounded ALLOW framing); business input / pack can never elevate it.
     const capabilityPermission = state.value.capabilities?.[domainAction.capability] ?? AuthorityDecision.ALLOW;
@@ -592,6 +602,15 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       intentStateHash: state.value.stateHash,
       action,
       deterministicActionFidelity: actionFidelity,
+      // Sibling to deterministicActionFidelity, not nested inside it: this is
+      // a distinct invariant (capability identity) from action fidelity
+      // (field-level constraint preservation), so it must be distinctly
+      // attributable rather than folded into or mistaken for the other.
+      capabilityFidelity: {
+        matches: capabilityMatchesDomain,
+        actual: domainAction.capability,
+        expected: this.deps.pack.planning.executionCapability,
+      },
       requiredProofObligationIds,
       temporalAuthority: state.value.temporalAuthority,
       authorityRequest: {
@@ -709,7 +728,7 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       verification.value.readiness === "ACTIONABLE" ||
       verification.value.readiness === "EXECUTABLE";
     const actionPreservesIntent = actionFidelity.preservesIntent;
-    const eligible = checked.value.status === "VERIFIED" && completeProofs && actionPreservesIntent && guardianResult.value.decision !== AuthorityDecision.BLOCK && !guardianResult.value.criticalFailure && privilegedReady;
+    const eligible = checked.value.status === "VERIFIED" && completeProofs && actionPreservesIntent && capabilityMatchesDomain && guardianResult.value.decision !== AuthorityDecision.BLOCK && !guardianResult.value.criticalFailure && privilegedReady;
     if (eligible && Date.now() >= workflowDeadlineAtMs) {
       return err(ErrorCode.MODEL_UNAVAILABLE, "Governed workflow budget exhausted before Authority", {
         retryable: true,

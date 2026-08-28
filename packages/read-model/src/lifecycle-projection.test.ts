@@ -20,9 +20,12 @@ const proof = (status: string, method: string, constraintId: string): LifecycleA
   kind: "PROOF",
   payload: { status, method, constraintId },
 });
-const action = (preservesIntent: boolean): LifecycleArtifactRow => ({
+const action = (preservesIntent: boolean, capabilityMatches = true): LifecycleArtifactRow => ({
   kind: "ACTION",
-  payload: { deterministicActionFidelity: { preservesIntent } },
+  payload: {
+    deterministicActionFidelity: { preservesIntent },
+    capabilityFidelity: { matches: capabilityMatches, actual: "execute_payment", expected: "arrange_fulfillment" },
+  },
 });
 const guardian = (decision: string, criticalFailure = false): LifecycleArtifactRow => ({
   kind: "GUARDIAN",
@@ -88,6 +91,41 @@ describe("action-fidelity blocked workflow", () => {
   it("blames action fidelity, not Guardian", () => {
     expect(view.blockingStage).toBe("actionFidelity");
     expect(view.blockingReason).toContain("did not preserve the recorded human intent");
+  });
+
+  it("still reports Guardian as completed, and Authority as not reached", () => {
+    expect(stageOf(view, "guardian")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "evidence")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "planVerification")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "authority")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "execution")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "outcome")?.status).toBe("NOT_PRODUCED");
+  });
+});
+
+describe("capability-fidelity blocked workflow", () => {
+  // Proofs pass, the plan verifies, and the rest of the proposed action
+  // preserves intent (preservesIntent: true) — action fidelity never checks
+  // action.capability. What fails is capability identity specifically: the
+  // submitted capability is not the one the selected domain pack owns.
+  const view = projectLifecycle({
+    artifacts: [
+      ...satisfiedProofs(5),
+      plan(),
+      planVerification("VERIFIED"),
+      action(true, false),
+      guardian("ALLOW"),
+      workflow("BLOCKED"),
+    ],
+    readiness: "ACTIONABLE",
+  });
+
+  it("blames capability fidelity, not action fidelity, Guardian, or Authority", () => {
+    expect(view.blockingStage).toBe("capabilityFidelity");
+    expect(view.blockingReason).toBe("The proposed capability is outside the capability authorized by this workflow domain.");
+    expect(view.blockingStage).not.toBe("actionFidelity");
+    expect(view.blockingStage).not.toBe("guardian");
+    expect(view.blockingStage).not.toBe("authorityEligibility");
   });
 
   it("still reports Guardian as completed, and Authority as not reached", () => {
