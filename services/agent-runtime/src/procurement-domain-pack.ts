@@ -206,15 +206,15 @@ export const ProcurementDomainPack: DomainPack<ProcurementInput> = {
     conceptFamilies: [
       {
         canonicalConcept: "supplier",
-        aliases: ["supplier", "approved_supplier", "supplier_approved"],
+        aliases: ["supplier", "approved_supplier", "supplier_approved", "supplier_status"],
         factFamilies: [
           { factType: "approval", aliases: ["approved_supplier", "supplier_approved"] },
         ],
       },
       { canonicalConcept: "material", aliases: ["material", "food_grade", "food_grade_certificate", "food_grade_certified", "item_specification"] },
       { canonicalConcept: "quantity", aliases: ["quantity", "quantity_min"] },
-      { canonicalConcept: "budget", aliases: ["budget", "budget_max", "budget_per_kg", "max_total_budget", "total_cost", "total_price", "price", "amount"] },
-      { canonicalConcept: "delivery_deadline", aliases: ["delivery_deadline", "execution_deadline", "delivery_before", "arrive_before"] },
+      { canonicalConcept: "budget", aliases: ["budget", "budget_max", "budget_per_kg", "max_total_budget", "total_cost", "total_price", "price", "amount", "budget_limit"] },
+      { canonicalConcept: "delivery_deadline", aliases: ["delivery_deadline", "execution_deadline", "delivery_before", "arrive_before", "deadline"] },
     ],
     executionCriticalConceptRules: ["supplier", "material", "quantity", "budget", "delivery_deadline"]
       .map((canonicalConcept) => ({ canonicalConcept, proofMechanism: { kind: "EVIDENCE_OBLIGATION" as const } })),

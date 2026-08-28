@@ -29,6 +29,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@truemandate/demo-fixtures": "workspace:*",
     "@truemandate/intent-service": "workspace:*",
     "typescript": "^5.8.2"
   }

@@ -757,6 +757,14 @@ export async function runtime(options: {
     verifier,
     provenance,
     intentPublisher,
+    // Exposed (undefined unless `demoEvidence` was supplied) so a test can call
+    // `.evaluate()` directly and inspect its full per-constraint `proofRows`/
+    // `coverage` return value — the only place that differentiated detail is
+    // observable. When supersession isn't eligible, resolveEvidenceBackedState
+    // only reads the boolean `superseded` field and discards the rest, so the
+    // durable PROOF artifacts collapse to a uniform
+    // authoritative-proof-handoff-absent/UNKNOWN for every constraint.
+    preExecutionReadiness: realPreExecutionReadiness,
     decideApproval: async (id: string, body: unknown) =>
       approvalDecideRoute.handler({ body, headers: {}, params: { id }, caller: { email: "human-approver@example.com" } }),
   };

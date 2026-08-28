@@ -103,6 +103,13 @@ function evidenceSourceFor(scenarioId: DemoScenarioId): string {
   return `demo-fixture:${scenarioId}:v1`;
 }
 
+// The Procurement control action's own approved execution/delivery deadline
+// (see variants.control.deliveryTerms below) — the single source of truth for
+// both the domainPayload's delivery.deadline and the execution_deadline
+// evidence claim, so the claim actually proves the deadline the action
+// commits to rather than an unrelated later timestamp.
+const PROCUREMENT_EXECUTION_DEADLINE = "2026-12-30T23:59:59.000Z";
+
 const PROCUREMENT: DemoScenarioTemplate = {
   scenarioId: "procurement",
   packId: "procurement",
@@ -112,10 +119,10 @@ const PROCUREMENT: DemoScenarioTemplate = {
   evidenceCaptureTime: "2026-06-01T00:00:00.000Z",
   evidenceClaims: [
     { concept: "quantity", value: 500 },
-    { concept: "food_grade", value: true },
+    { concept: "item_specification", value: "food-grade containers" },
     { concept: "budget", value: 742000 },
     { concept: "approved_supplier", value: true },
-    { concept: "execution_deadline", value: "2026-12-31T17:00:00.000Z" },
+    { concept: "execution_deadline", value: PROCUREMENT_EXECUTION_DEADLINE },
   ],
   domainPayload: (evidenceIds, action) => ({
     supplier: {
@@ -127,7 +134,7 @@ const PROCUREMENT: DemoScenarioTemplate = {
     item: { specification: action.product },
     foodGradeEvidenceId: evidenceIds[0] ?? "food-evidence",
     evidenceIds,
-    delivery: { terms: "deliver before 2026-12-30", deadline: "2026-12-30T23:59:59.000Z" },
+    delivery: { terms: "deliver before 2026-12-30", deadline: PROCUREMENT_EXECUTION_DEADLINE },
   }),
   variants: {
     control: {
