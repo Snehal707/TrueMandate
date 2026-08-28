@@ -596,6 +596,51 @@ resource "google_cloud_run_v2_service" "s2s" {
         }
       }
 
+      # Trusted demo-evidence orchestration. Runs as the existing
+      # phase-c-verifier identity (see runtime_services above); this only
+      # adds the narrow route-level allowlist for its own new internal
+      # route, plus the peer URLs it needs. Never touches
+      # TM_EVIDENCE_VERIFY_CALLER_EMAILS or /internal/evidence/verifications'
+      # allowlist.
+      dynamic "env" {
+        for_each = each.key == "demo-evidence-orchestrator" ? [1] : []
+        content {
+          name  = "TM_DEMO_PROVISION_CALLER_EMAILS"
+          value = local.service_account_emails["public-bff"]
+        }
+      }
+      dynamic "env" {
+        for_each = each.key == "demo-evidence-orchestrator" ? [1] : []
+        content {
+          name  = "WEB_URL"
+          value = var.service_urls["public-bff"]
+        }
+      }
+      dynamic "env" {
+        for_each = each.key == "demo-evidence-orchestrator" ? [1] : []
+        content {
+          name  = "EVIDENCE_URL"
+          value = var.service_urls["evidence-service"]
+        }
+      }
+      dynamic "env" {
+        for_each = each.key == "demo-evidence-orchestrator" ? [1] : []
+        content {
+          name  = "INTENT_PROVENANCE_URL"
+          value = var.service_urls["intent-provenance"]
+        }
+      }
+
+      # public-bff needs the new service's URL to reach its one narrowly
+      # allowlisted route.
+      dynamic "env" {
+        for_each = each.key == "public-bff" ? [1] : []
+        content {
+          name  = "DEMO_ORCHESTRATOR_URL"
+          value = var.service_urls["demo-evidence-orchestrator"]
+        }
+      }
+
       # Wave 1 approval lifecycle: the durable human/operator decision route
       # derives decidedBy from the VERIFIED caller identity — authority must
       # verify internal auth. The allowlist carries exactly the existing

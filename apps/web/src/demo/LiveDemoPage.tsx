@@ -758,22 +758,14 @@ export function LiveDemoPage() {
     // this submission is in flight.
     setRun(undefined);
     try {
-      const request = buildLiveDemoWorkflowRequest(domainId, {
-        rawText: domainId === "custom_intent" ? customRawText : undefined,
-        customPackId,
-      });
-      const result = await submitFreshWorkflowWhenReady(sdk, request, {
-        onProgress: setProgress,
-      });
-      if (!result.ok) throw result;
-      const initialRun: LiveRunState = {
-        createdAt: new Date().toISOString(),
-        domainId,
-        customPackId: domainId === "custom_intent" ? customPackId : undefined,
-        request,
-        workflow: result.value,
-        evidenceSubmissions: [],
-      };
+      // Custom Intent is free browser-authored text — the trusted
+      // demo-evidence path structurally cannot cover it (there is no
+      // server-owned fixture for text nobody predefined). It stays on the
+      // existing unevidenced submission path, unchanged.
+      const initialRun =
+        domainId === "custom_intent"
+          ? await launchUnevidencedCustomIntent()
+          : await launchTrustedControlScenario(domainId);
       const refreshed = await refreshWorkflowChain(sdk, initialRun).catch(() => initialRun);
       setRun(refreshed);
       setWorkflowView("lifecycle");
@@ -783,6 +775,58 @@ export function LiveDemoPage() {
       setPending("idle");
       setProgress(undefined);
     }
+  };
+
+  const launchUnevidencedCustomIntent = async (): Promise<LiveRunState> => {
+    const request = buildLiveDemoWorkflowRequest(domainId, {
+      rawText: customRawText,
+      customPackId,
+    });
+    const result = await submitFreshWorkflowWhenReady(sdk, request, {
+      onProgress: setProgress,
+    });
+    if (!result.ok) throw result;
+    return {
+      createdAt: new Date().toISOString(),
+      domainId,
+      customPackId,
+      request,
+      workflow: result.value,
+      evidenceSubmissions: [],
+    };
+  };
+
+  const launchTrustedControlScenario = async (
+    trustedDomainId: Exclude<LiveDemoDomainId, "custom_intent">,
+  ): Promise<LiveRunState> => {
+    // A single server round-trip (the orchestrator owns intent
+    // establishment, evidence provisioning/verification, and submission) —
+    // the existing `pending` "working" state already covers it; there is no
+    // finer-grained client-visible phase to report mid-flight the way the
+    // multi-step unevidenced path has.
+    const result = await sdk.runDemoScenario(trustedDomainId, "control");
+    if (!result.ok) throw result;
+    const value = result.value as { intentId?: unknown; workflowId?: unknown; workflow?: unknown };
+    if (typeof value.intentId !== "string" || typeof value.workflowId !== "string" || !value.workflow) {
+      throw { code: "SCHEMA_PARSE_FAILED", message: "Unexpected demo scenario response shape" };
+    }
+    // The request shown for "what was asked" mirrors the same server-owned
+    // fixture text the orchestrator itself used — the browser never composed
+    // this content. Only the identity fields are overridden, to match the
+    // real intentId/workflowId the orchestrator established.
+    const baseRequest = buildLiveDemoWorkflowRequest(trustedDomainId);
+    const request: SdkWorkflowRequest = {
+      ...baseRequest,
+      workflowId: value.workflowId,
+      intent: baseRequest.intent.kind === "RAW" ? { ...baseRequest.intent, id: value.intentId } : baseRequest.intent,
+    };
+    return {
+      createdAt: new Date().toISOString(),
+      domainId: trustedDomainId,
+      request,
+      workflow: value.workflow as SdkWorkflowView,
+      evidenceSubmissions: [],
+    };
   };
 
   const refreshLiveState = async () => {

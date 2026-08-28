@@ -8,6 +8,7 @@ import {
   OutcomeS2SClient,
   ResolutionS2SClient,
   adcIdentityTokenProvider,
+  fetchS2SJson,
   initRuntimePersistence,
   loadRuntimeConfig,
   requireAgentRuntimeUrl,
@@ -15,7 +16,9 @@ import {
   requireEvidenceUrl,
   requireIntentProvenanceUrl,
   requireOutcomeResolutionUrl,
+  s2sResultFromHttp,
   staticTokenProvider,
+  type IdentityTokenProvider,
 } from "@truemandate/cloud-runtime";
 import { DemoRuntime } from "@truemandate/observability-service";
 
@@ -65,6 +68,24 @@ async function main(): Promise<void> {
     tokenProvider,
   );
 
+  const demoOrchestratorUrl = process.env.DEMO_ORCHESTRATOR_URL;
+  const demoOrchestration = demoOrchestratorUrl
+    ? {
+        runScenario: async (scenarioId: string, variantId: string) => {
+          const token = await (tokenProvider as IdentityTokenProvider).getIdentityToken(demoOrchestratorUrl);
+          if (!token) throw new Error("S2S identity token missing for demo-evidence-orchestrator");
+          return s2sResultFromHttp(
+            await fetchS2SJson({
+              baseUrl: demoOrchestratorUrl,
+              path: `/internal/demo/scenarios/${encodeURIComponent(scenarioId)}/variants/${encodeURIComponent(variantId)}/run`,
+              method: "POST",
+              token,
+            }),
+          );
+        },
+      }
+    : undefined;
+
   const demo = new DemoRuntime();
   const ports = createLivePublicBffPorts({
     intentCreate: { createIntent: (raw) => owner.createIntent(raw) },
@@ -103,6 +124,7 @@ async function main(): Promise<void> {
     },
     // Read-only canonical projection for the judge demo (GET-only route).
     canonicalStore: persist.store,
+    ...(demoOrchestration ? { demoOrchestration } : {}),
   });
 
   const { listen, bff } = createPublicBffServer(

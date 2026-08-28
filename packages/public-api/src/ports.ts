@@ -12,6 +12,19 @@ export interface DemoCanonicalReadPort {
   readCanonicalPhaseCv5(): Promise<Result<unknown>> | Result<unknown>;
 }
 
+/**
+ * Trusted demo-evidence orchestration (judge-facing Live Proof / Attack
+ * Lab). `scenarioId`/`variantId` are the ONLY inputs — no action, domain
+ * payload, claim, evidence, or free-text intent field exists on this
+ * surface for a caller to supply. The implementation delegates to the
+ * internal demo-orchestrator service (running under the existing
+ * phase-c-verifier identity), which selects server-owned fixture content
+ * by these two values alone.
+ */
+export interface DemoOrchestrationPort {
+  runScenario(scenarioId: string, variantId: string): Promise<Result<unknown>> | Result<unknown>;
+}
+
 /** Injected port — public BFF must not import intent-service directly. */
 export interface IntentCreatePort {
   createIntent(raw: unknown): Promise<Result<Intent>> | Result<Intent>;
@@ -112,4 +125,5 @@ export interface PublicBffPorts {
   readonly evidenceSubmit?: EvidenceSubmitPort;
   readonly outcomeRead?: OutcomeReadPort;
   readonly demoCanonical?: DemoCanonicalReadPort;
+  readonly demoOrchestration?: DemoOrchestrationPort;
 }

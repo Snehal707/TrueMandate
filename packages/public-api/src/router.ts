@@ -1,6 +1,7 @@
 import type { PublicBffConfig } from "./config.js";
 import { createHealthHandlers, type HealthState } from "./handlers/health.js";
 import { createDemoCanonicalHandler } from "./handlers/demo-canonical.js";
+import { createDemoOrchestrationHandler } from "./handlers/demo-orchestration.js";
 import { createApprovalHandler } from "./handlers/approvals.js";
 import { createApprovalReadHandler } from "./handlers/approval-read.js";
 import { createApprovalDecideHandler } from "./handlers/approval-decide.js";
@@ -122,6 +123,15 @@ export function createPublicBffRouter(
       : []),
     ...(ports.demoCanonical
       ? [route("GET", "/v1/demo/canonical-phase-c-v5", createDemoCanonicalHandler(ports.demoCanonical))]
+      : []),
+    ...(ports.demoOrchestration
+      ? [
+          route(
+            "POST",
+            "/v1/demo/scenarios/:scenarioId/variants/:variantId/run",
+            createDemoOrchestrationHandler(ports.demoOrchestration),
+          ),
+        ]
       : []),
   ];
 

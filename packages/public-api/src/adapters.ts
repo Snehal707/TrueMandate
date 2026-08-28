@@ -28,6 +28,7 @@ import type {
   ApprovalDecidePort,
   ApprovalReadPort,
   DemoCanonicalReadPort,
+  DemoOrchestrationPort,
   IntentCreatePort,
   OutcomeReadPort,
   PublicBffPorts,
@@ -106,6 +107,16 @@ export function createLivePublicBffPorts(input: {
   };
   /** Optional read-only canonical projection (judge demo). */
   readonly canonicalStore?: DocumentStore;
+  /**
+   * Trusted demo-evidence orchestration (judge-facing Live Proof / Attack
+   * Lab). The browser selects only `scenarioId`/`variantId` — this port's
+   * implementation is the ONLY thing that turns that choice into a call to
+   * the internal orchestrator service; no other field from the request body
+   * ever reaches it.
+   */
+  readonly demoOrchestration?: {
+    runScenario(scenarioId: string, variantId: string): Promise<Result<unknown>> | Result<unknown>;
+  };
   /** Wave 1: durable approval lifecycle ports (owner reads/decisions only). */
   readonly approvalRead?: {
     getApproval(id: string): Promise<Result<unknown>> | Result<unknown>;
@@ -141,6 +152,7 @@ export function createLivePublicBffPorts(input: {
     resolutionRead,
     workflow,
     outcomeRead,
+    demoOrchestration,
   } = input;
 
   const toApprovalResult = async (result: Promise<Result<unknown>> | Result<unknown>): Promise<Result<import("./dto.js").PublicApprovalView>> => {
@@ -409,6 +421,14 @@ export function createLivePublicBffPorts(input: {
     ...(outcomeReadPort ? { outcomeRead: outcomeReadPort } : {}),
     ...(canonicalStore
       ? { demoCanonical: createDemoCanonicalAdapter(canonicalStore) }
+      : {}),
+    ...(demoOrchestration
+      ? {
+          demoOrchestration: {
+            runScenario: (scenarioId: string, variantId: string) =>
+              Promise.resolve(demoOrchestration.runScenario(scenarioId, variantId)),
+          } satisfies DemoOrchestrationPort,
+        }
       : {}),
   };
 }

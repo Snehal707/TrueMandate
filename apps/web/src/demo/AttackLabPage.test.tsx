@@ -15,8 +15,10 @@ import {
   buildBaselineScenario,
   CURATED_ATTACKS,
   executeAttackComparison,
+  executeTrustedAttackComparison,
   exportAttackScenario,
   generateRandomAttackScenario,
+  TRUSTED_ATTACK_VARIANTS,
   validateAttackScenario,
   type AttackComparisonResult,
   type AttackScenarioDefinition,
@@ -143,6 +145,11 @@ function sdkPort(state = "BLOCKED"): AttackSdkPort {
       ok: false as const,
       code: "VALIDATION_FAILED" as const,
       message: "No resolution",
+    })),
+    runDemoScenario: vi.fn(async () => ({
+      ok: false as const,
+      code: "VALIDATION_FAILED" as const,
+      message: "Not exercised by the legacy execution path",
     })),
   };
 }
@@ -489,6 +496,7 @@ function echoingSdkPort(): AttackSdkPort & {
     readOutcome: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
     readResolutionCase: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
     readResolutionByOutcome: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    runDemoScenario: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
   };
 }
 
@@ -546,5 +554,153 @@ describe("Attack Lab control lane", () => {
     expect(html).toContain("Control (unmutated)");
     expect(html).toContain(result.control.workflow!.workflowId);
     expect(html).not.toContain(result.governed.workflow!.workflowId);
+  });
+});
+
+/**
+ * The trusted path makes ONE call to sdk.runDemoScenario and resolves both
+ * lanes from its single response — no client-side submitWorkflow, no
+ * client-side mutation. These mocks fail loudly if submitWorkflow is ever
+ * called, since that would mean the trusted path silently fell back to
+ * constructing its own request.
+ */
+function trustedSdk(overrides: Partial<AttackSdkPort> = {}): AttackSdkPort {
+  const notFound = { ok: false as const, code: "VALIDATION_FAILED" as const, message: "not available" };
+  return {
+    submitWorkflow: vi.fn(async () => {
+      throw new Error("the trusted path must never submit a workflow directly");
+    }),
+    readWorkflow: vi.fn(async (id: string): Promise<Result<SdkWorkflowView>> => ({ ok: true, value: { workflowId: id, state: "BLOCKED" } })),
+    readWorkspace: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    readApproval: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    commitWorkflow: vi.fn(async (id: string) => ({ ok: true as const, value: { status: "SUCCESS" as const, executionId: `exec-${id}` } })),
+    submitEvidence: vi.fn(async () => ({ ok: true as const, value: { envelopeIds: [], claimIds: [] } })),
+    readEvidence: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    readOutcome: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    readResolutionCase: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    readResolutionByOutcome: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    runDemoScenario: vi.fn(async () => notFound),
+    ...overrides,
+  };
+}
+
+function trustedScenario(): AttackScenarioDefinition {
+  const entry = CURATED_ATTACKS.find((item) => item.id === "semantic-procurement-quantity");
+  if (!entry) throw new Error("fixture curated template missing");
+  return entry.scenario;
+}
+
+describe("executeTrustedAttackComparison", () => {
+  it("makes exactly one orchestration call and resolves control/attack from its single response without swapping them", async () => {
+    const runDemoScenario = vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        kind: "attack",
+        intentId: "demo-procurement-run1-intent",
+        controlWorkflowId: "wf-control-1",
+        attackWorkflowId: "wf-attack-1",
+        control: { workflowId: "wf-control-1", state: "AUTHORIZED" },
+        attack: { workflowId: "wf-attack-1", state: "BLOCKED" },
+        boundIntentStateId: "state-1",
+        boundIntentStateHash: "hash-1",
+      },
+    }));
+    const sdk = trustedSdk({ runDemoScenario });
+    const result = await executeTrustedAttackComparison("procurement", "quantity_drift", trustedScenario(), {
+      sdk,
+      runBaseline: async (scenario) => baseline(scenario),
+    });
+
+    expect(runDemoScenario).toHaveBeenCalledTimes(1);
+    expect(runDemoScenario).toHaveBeenCalledWith("procurement", "quantity_drift");
+    expect(result.control.workflow?.workflowId).toBe("wf-control-1");
+    expect(result.governed.workflow?.workflowId).toBe("wf-attack-1");
+
+    // The shared lifecycle resolver (resolveGovernedResult) must have fired
+    // for the control lane, since it came back AUTHORIZED — and only for the
+    // control lane, since the attack came back BLOCKED.
+    expect(sdk.commitWorkflow).toHaveBeenCalledWith("wf-control-1");
+    expect(sdk.commitWorkflow).not.toHaveBeenCalledWith("wf-attack-1");
+  });
+
+  it("fails closed on both lanes when the orchestration call itself fails, but still runs the baseline lane", async () => {
+    const runDemoScenario = vi.fn(async () => ({
+      ok: false as const,
+      code: "INTENT_STATE_NOT_READY" as const,
+      message: "IntentState tip did not finalize within the demo orchestration window",
+    }));
+    const sdk = trustedSdk({ runDemoScenario });
+    const runBaseline = vi.fn(async (scenario: SafeScenario) => baseline(scenario));
+
+    const result = await executeTrustedAttackComparison("procurement", "quantity_drift", trustedScenario(), { sdk, runBaseline });
+
+    expect(runBaseline).toHaveBeenCalledOnce();
+    expect(result.governed.workflow).toBeUndefined();
+    expect(result.control.workflow).toBeUndefined();
+    expect(result.governed.error?.code).toBe("INTENT_STATE_NOT_READY");
+    expect(result.control.error?.code).toBe("INTENT_STATE_NOT_READY");
+    expect(sdk.commitWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed orchestration response instead of guessing at its shape", async () => {
+    const runDemoScenario = vi.fn(async () => ({
+      ok: true as const,
+      // Missing controlWorkflowId/attackWorkflowId/attack — e.g. a stale
+      // client talking to a control-only response shape.
+      value: { kind: "control", intentId: "intent-1", workflowId: "wf-1", workflow: {} },
+    }));
+    const sdk = trustedSdk({ runDemoScenario });
+    const result = await executeTrustedAttackComparison("procurement", "quantity_drift", trustedScenario(), {
+      sdk,
+      runBaseline: async (scenario) => baseline(scenario),
+    });
+
+    expect(result.governed.error?.code).toBe("SCHEMA_PARSE_FAILED");
+    expect(result.control.error?.code).toBe("SCHEMA_PARSE_FAILED");
+    expect(sdk.commitWorkflow).not.toHaveBeenCalled();
+  });
+});
+
+describe("TRUSTED_ATTACK_VARIANTS mapping", () => {
+  it("maps exactly the six approved server-owned variants", () => {
+    expect(TRUSTED_ATTACK_VARIANTS).toEqual({
+      "semantic-procurement-quantity": { scenarioId: "procurement", variantId: "quantity_drift" },
+      "economic-travel-provider-substitution": { scenarioId: "travel", variantId: "provider_substitution" },
+      "authority-logistics-expansion": { scenarioId: "logistics_fulfillment", variantId: "capability_expansion" },
+      "economic-invoice-payee": { scenarioId: "invoice_vendor_payment", variantId: "payee_substitution" },
+      "economic-saas-renewal": { scenarioId: "saas_it_spend", variantId: "renewal_flip" },
+      "economic-logistics-destination": { scenarioId: "logistics_fulfillment", variantId: "destination_substitution" },
+    });
+  });
+
+  it("every trusted key names an actual curated template", () => {
+    for (const id of Object.keys(TRUSTED_ATTACK_VARIANTS)) {
+      expect(CURATED_ATTACKS.some((entry) => entry.id === id), `no curated template named ${id}`).toBe(true);
+    }
+  });
+
+  it("keeps the genuine prompt-injection experiment and the unsupported/outcome templates off the trusted path", () => {
+    expect(TRUSTED_ATTACK_VARIANTS["prompt-injection-travel-provider"]).toBeUndefined();
+    expect(TRUSTED_ATTACK_VARIANTS["execution-toctou-private"]).toBeUndefined();
+    expect(TRUSTED_ATTACK_VARIANTS["resolution-remedy-expansion"]).toBeUndefined();
+    expect(TRUSTED_ATTACK_VARIANTS["outcome-false-success"]).toBeUndefined();
+  });
+
+  it("the new provider-substitution curated template is genuinely distinct from the retained prompt-injection one and validates as supported", () => {
+    const providerSubstitution = CURATED_ATTACKS.find((item) => item.id === "economic-travel-provider-substitution");
+    const promptInjection = CURATED_ATTACKS.find((item) => item.id === "prompt-injection-travel-provider");
+    expect(providerSubstitution).toBeDefined();
+    expect(promptInjection).toBeDefined();
+    expect(providerSubstitution!.family).toBe("economic");
+    expect(providerSubstitution!.scenario.vectors[0]!.mutation).toBe("PROVIDER_SUBSTITUTION");
+    expect(providerSubstitution!.scenario.vectors[0]!.target).toBe("proposed_action");
+    // Distinct mutation/target from the retained genuine injection template —
+    // never conflated as the same attack.
+    expect(promptInjection!.scenario.vectors[0]!.mutation).toBe("PROMPT_OVERRIDE");
+    expect(promptInjection!.scenario.vectors[0]!.target).toBe("external_evidence");
+
+    const validation = validateAttackScenario(providerSubstitution!.scenario);
+    expect(validation.supported).toBe(true);
+    expect(validation.effectiveVectors).toHaveLength(1);
   });
 });

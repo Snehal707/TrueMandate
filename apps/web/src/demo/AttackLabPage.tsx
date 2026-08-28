@@ -6,8 +6,10 @@ import {
   ATTACK_STAGE_LABELS,
   ATTACK_TARGETS,
   CURATED_ATTACKS,
+  TRUSTED_ATTACK_VARIANTS,
   baselineResultState,
   executeAttackComparison,
+  executeTrustedAttackComparison,
   exportAttackScenario,
   firstVisibleRejectingStage,
   generateRandomAttackScenario,
@@ -66,6 +68,18 @@ function scenarioFromCurated(scenario: CuratedAttackScenario): AttackScenarioDef
 export async function runProductionAttack(scenario: AttackScenarioDefinition): Promise<AttackComparisonResult> {
   const runner = new ScenarioRunner();
   return executeAttackComparison(scenario, {
+    sdk,
+    runBaseline: (baselineScenario) => runner.run(baselineScenario, SystemVariant.BASELINE_SINGLE_AGENT),
+  });
+}
+
+export async function runTrustedAttack(
+  scenarioId: string,
+  variantId: string,
+  scenario: AttackScenarioDefinition,
+): Promise<AttackComparisonResult> {
+  const runner = new ScenarioRunner();
+  return executeTrustedAttackComparison(scenarioId, variantId, scenario, {
     sdk,
     runBaseline: (baselineScenario) => runner.run(baselineScenario, SystemVariant.BASELINE_SINGLE_AGENT),
   });
@@ -572,8 +586,10 @@ function ScenarioExportPanel(props: { readonly scenario: AttackScenarioDefinitio
 
 export function AttackLabPage(props: {
   readonly execute?: (scenario: AttackScenarioDefinition) => Promise<AttackComparisonResult>;
+  readonly executeTrusted?: (scenarioId: string, variantId: string, scenario: AttackScenarioDefinition) => Promise<AttackComparisonResult>;
 }) {
   const execute = props.execute ?? runProductionAttack;
+  const executeTrusted = props.executeTrusted ?? runTrustedAttack;
   const [mode, setMode] = useState<AttackLabMode>("curated");
   const [family, setFamily] = useState<AttackFamily>("prompt_injection");
   const familyScenarios = CURATED_ATTACKS.filter((scenario) => scenario.family === family);
@@ -648,12 +664,18 @@ export function AttackLabPage(props: {
   const validation = validateAttackScenario(scenario);
   const scenarioJson = useMemo(() => JSON.stringify(exportAttackScenario(scenario), null, 2), [scenario]);
 
+  const trustedVariant = mode === "curated" && selectedScenario ? TRUSTED_ATTACK_VARIANTS[selectedScenario.id] : undefined;
+
   const runScenario = async () => {
     setRunning(true);
     setResult(undefined);
     setError(undefined);
     try {
-      setResult(await execute(scenario));
+      setResult(
+        trustedVariant
+          ? await executeTrusted(trustedVariant.scenarioId, trustedVariant.variantId, scenario)
+          : await execute(scenario),
+      );
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
     } finally {
@@ -720,6 +742,9 @@ export function AttackLabPage(props: {
                     <span className="fam">{FAMILIES.find((item) => item.id === entry.family)?.label ?? entry.family}</span>
                     <strong>{entry.title}</strong>
                     <small>{LIVE_DEMO_DOMAINS.find((item) => item.id === entry.domainId)?.label}</small>
+                    <em className="tm-attack-evidence-tag" data-trusted={Boolean(TRUSTED_ATTACK_VARIANTS[entry.id])}>
+                      {TRUSTED_ATTACK_VARIANTS[entry.id] ? "Verified evidence" : "Experimental · unevidenced"}
+                    </em>
                   </button>
                 );
               })}
@@ -731,6 +756,14 @@ export function AttackLabPage(props: {
                   <div><span>Domain</span><strong>{LIVE_DEMO_DOMAINS.find((item) => item.id === selectedScenario.domainId)?.label}</strong></div>
                   <div><span>Ordered vectors</span><strong>{selectedScenario.scenario.vectors.map((attack) => `${attack.order}. ${attack.family}`).join(" · ")}</strong></div>
                   <div><span>Attack target</span><strong>{ATTACK_TARGETS.find((item) => item.id === selectedScenario.scenario.vectors[0]?.target)?.label}</strong></div>
+                  <div>
+                    <span>Evidence basis</span>
+                    <strong>
+                      {trustedVariant
+                        ? "Trusted comparison — real verified evidence, one shared IntentState, server-owned control and attack actions"
+                        : "Experimental — not evidence-backed; browser-submitted content stays UNTRUSTED_EXTERNAL"}
+                    </strong>
+                  </div>
                 </div>
               </>
             ) : null}

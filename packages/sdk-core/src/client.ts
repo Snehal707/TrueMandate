@@ -61,6 +61,8 @@ const IdParamSchema = z.string().min(1).max(512);
 const PATHS = {
   intents: "/v1/intents",
   canonicalProjection: "/v1/demo/canonical-phase-c-v5",
+  demoScenarioRun: (scenarioId: string, variantId: string): string =>
+    `/v1/demo/scenarios/${encodeURIComponent(scenarioId)}/variants/${encodeURIComponent(variantId)}/run`,
   workflows: "/v1/workflows",
   workflow: (workflowId: string): string =>
     `/v1/workflows/${encodeURIComponent(workflowId)}`,
@@ -186,6 +188,15 @@ export interface SdkCore {
   recordIntent(input: RecordIntentRequest): Promise<Result<Intent>>;
   readCanonicalProjection(): Promise<Result<CanonicalProjection>>;
   submitWorkflow(input: SdkWorkflowRequest): Promise<Result<SdkWorkflowView>>;
+  /**
+   * Trusted demo-evidence orchestration. `scenarioId`/`variantId` select one
+   * of a small, server-owned set of predefined demos — there is no field
+   * here for an action, evidence, or free-text intent. For `variantId:
+   * "control"` the response is `{intentId, workflowId, workflow}`; for an
+   * attack variant it is `{intentId, controlWorkflowId, attackWorkflowId,
+   * control, attack, boundIntentStateId, boundIntentStateHash}`.
+   */
+  runDemoScenario(scenarioId: string, variantId: string): Promise<Result<unknown>>;
   readWorkflow(workflowId: string): Promise<Result<SdkWorkflowView>>;
   resumeWorkflow(
     workflowId: string,
@@ -265,6 +276,12 @@ export function createSdkCore(config: SdkCoreConfig): SdkCore {
         SdkWorkflowViewSchema.safeParse(res.body),
         "workflow",
       );
+    },
+
+    async runDemoScenario(scenarioId, variantId) {
+      const res = await transport.post(PATHS.demoScenarioRun(scenarioId, variantId), undefined);
+      if (res.status !== 200) return toRemoteError(res);
+      return ok(res.body);
     },
 
     async readWorkflow(workflowId) {

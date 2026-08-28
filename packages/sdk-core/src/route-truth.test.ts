@@ -295,3 +295,20 @@ describe("sdk-core route truth", () => {
     }
   });
 });
+
+describe("runDemoScenario", () => {
+  it("posts to the scenario/variant route with no body — no client field can shape it", async () => {
+    const { transport, calls } = recordingTransport(() => ({ status: 200, body: { intentId: "i-1", workflowId: "wf-1" } }));
+    const sdk = createSdkCore({ baseUrl: "https://tm.example/", transport });
+    const result = await sdk.runDemoScenario("procurement", "control");
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([{ method: "POST", path: "/v1/demo/scenarios/procurement/variants/control/run", body: undefined }]);
+  });
+
+  it("encodes scenarioId/variantId in the path", async () => {
+    const { transport, calls } = recordingTransport(() => ({ status: 200, body: {} }));
+    const sdk = createSdkCore({ baseUrl: "https://tm.example/", transport });
+    await sdk.runDemoScenario("procurement", "quantity_drift");
+    expect(calls[0]!.path).toBe("/v1/demo/scenarios/procurement/variants/quantity_drift/run");
+  });
+});

@@ -11,6 +11,9 @@
 .tm-attack-scenario-card .fam { display: inline-block; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--blue); padding: 3px 8px; border-radius: 999px; background: var(--blue-soft); margin-bottom: 10px; }
 .tm-attack-scenario-card strong { display: block; font-size: 0.95rem; line-height: 1.35; color: var(--text-strong); margin-bottom: 6px; }
 .tm-attack-scenario-card small { color: var(--text-faint); font-size: 0.78rem; }
+.tm-attack-evidence-tag { display: inline-block; margin-top: 8px; font-style: normal; font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 7px; border-radius: 999px; }
+.tm-attack-evidence-tag[data-trusted="true"] { color: var(--emerald); background: var(--emerald-soft); }
+.tm-attack-evidence-tag[data-trusted="false"] { color: var(--amber); background: color-mix(in srgb, var(--amber) 16%, transparent); }
 
 /* Advanced modes — secondary */
 .tm-attack-advanced { margin: 0 0 18px; border-radius: 10px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-soft); }

@@ -98,6 +98,7 @@ variable "image_digests" {
         "analytics-export",
         "analytics-query",
         "learning-service",
+        "demo-evidence-orchestrator",
       ] : contains(keys(var.image_digests), name)
     ])
     error_message = "image_digests must include every Cloud Run image name."
@@ -199,17 +200,28 @@ locals {
       ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
       sa      = "learning-service"
     }
+    # Trusted demo-evidence orchestration for the judge-facing Live Proof /
+    # Attack Lab surfaces. Runs under the EXISTING phase-c-verifier identity
+    # (sa = "phase-c-verifier", not a new service account) — the only
+    # identity TM_EVIDENCE_VERIFY_CALLER_EMAILS allowlists for
+    # /internal/evidence/verifications. That allowlist is unchanged by this
+    # service's addition. Internal-only: reached solely via public-bff.
+    demo-evidence-orchestrator = {
+      image   = "demo-evidence-orchestrator"
+      ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+      sa      = "phase-c-verifier"
+    }
   }
 
   # Split so public-bff/agent-runtime can reference intent-provenance.uri and
   # authority can reference gateway.uri without a cycle.
   owner_runtime_services = {
     for k, v in local.runtime_services : k => v
-    if !contains(["public-bff", "agent-runtime", "authority"], k)
+    if !contains(["public-bff", "agent-runtime", "authority", "demo-evidence-orchestrator"], k)
   }
   s2s_runtime_services = {
     for k, v in local.runtime_services : k => v
-    if contains(["public-bff", "agent-runtime", "authority"], k)
+    if contains(["public-bff", "agent-runtime", "authority", "demo-evidence-orchestrator"], k)
   }
 
   # Exact invoker edges (source SA → target service key)
@@ -262,6 +274,17 @@ locals {
     "evidence-service->intent-provenance"  = { from = "evidence-service", to = "intent-provenance" }
     "evidence-service->outcome-resolution" = { from = "evidence-service", to = "outcome-resolution" }
     "web->public-bff"                      = { from = "web", to = "public-bff" }
+    # Trusted demo-evidence orchestration: public-bff is the ONLY caller
+    # allowed to reach the new internal route (narrow, additive — does not
+    # touch TM_EVIDENCE_VERIFY_CALLER_EMAILS or any other existing
+    # allowlist). The orchestrator's own outbound edges mirror the
+    # phase-c-verifier identity's EXISTING edges above exactly, since it
+    # runs as that same identity. It does not call gateway/authority
+    # directly — commit/authorize happen inside agent-runtime's own
+    # workflow pipeline, reached only via public-bff's public route.
+    "public-bff->demo-evidence-orchestrator"          = { from = "public-bff", to = "demo-evidence-orchestrator" }
+    "demo-evidence-orchestrator->evidence-service"    = { from = "demo-evidence-orchestrator", to = "evidence-service" }
+    "demo-evidence-orchestrator->intent-provenance"   = { from = "demo-evidence-orchestrator", to = "intent-provenance" }
   }
 
   armor_env_services  = toset(["agent-runtime", "gateway", "benchmark-runner"])
