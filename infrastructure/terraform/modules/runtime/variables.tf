@@ -277,14 +277,24 @@ locals {
     # Trusted demo-evidence orchestration: public-bff is the ONLY caller
     # allowed to reach the new internal route (narrow, additive — does not
     # touch TM_EVIDENCE_VERIFY_CALLER_EMAILS or any other existing
-    # allowlist). The orchestrator's own outbound edges mirror the
-    # phase-c-verifier identity's EXISTING edges above exactly, since it
-    # runs as that same identity. It does not call gateway/authority
-    # directly — commit/authorize happen inside agent-runtime's own
-    # workflow pipeline, reached only via public-bff's public route.
-    "public-bff->demo-evidence-orchestrator"          = { from = "public-bff", to = "demo-evidence-orchestrator" }
-    "demo-evidence-orchestrator->evidence-service"    = { from = "demo-evidence-orchestrator", to = "evidence-service" }
-    "demo-evidence-orchestrator->intent-provenance"   = { from = "demo-evidence-orchestrator", to = "intent-provenance" }
+    # allowlist). The orchestrator's own outbound calls to evidence-service
+    # and intent-provenance need NO new edge here: it runs as the SAME
+    # phase-c-verifier identity (see runtime_services["demo-evidence-
+    # orchestrator"].sa above), which already holds
+    # "phase-c-verifier->evidence-service" and
+    # "phase-c-verifier->intent-provenance" invoker grants below — those
+    # already cover it. A prior version of this map added two further edges
+    # keyed "demo-evidence-orchestrator->..." with `from =
+    # "demo-evidence-orchestrator"`; that is a Cloud RUN SERVICE key, not an
+    # IAM identity key, and local.service_account_emails has no such entry
+    # (only "phase-c-verifier" does) — `terraform plan` failed outright with
+    # "Invalid index" on that lookup. Removed as redundant rather than
+    # renamed, to avoid a second Terraform resource binding the exact same
+    # (member, role, resource) tuple as the pre-existing phase-c-verifier
+    # edges. It does not call gateway/authority directly — commit/authorize
+    # happen inside agent-runtime's own workflow pipeline, reached only via
+    # public-bff's public route.
+    "public-bff->demo-evidence-orchestrator" = { from = "public-bff", to = "demo-evidence-orchestrator" }
   }
 
   armor_env_services  = toset(["agent-runtime", "gateway", "benchmark-runner"])
