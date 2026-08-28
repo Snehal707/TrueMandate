@@ -612,7 +612,11 @@ resource "google_cloud_run_v2_service" "s2s" {
       dynamic "env" {
         for_each = each.key == "demo-evidence-orchestrator" ? [1] : []
         content {
-          name  = "WEB_URL"
+          # Named for what it is (the public workflow-submission API), not
+          # "web" (which is the separate apps/web frontend service) — this
+          # orchestrator calls POST /v1/workflows on public-bff exactly as a
+          # browser would, never the frontend.
+          name  = "WORKFLOWS_API_URL"
           value = var.service_urls["public-bff"]
         }
       }

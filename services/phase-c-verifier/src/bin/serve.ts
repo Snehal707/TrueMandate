@@ -27,7 +27,7 @@ function required(name: string): string {
 
 async function main(): Promise<void> {
   const config = loadRuntimeConfig();
-  const webUrl = required("WEB_URL");
+  const webUrl = required("WORKFLOWS_API_URL");
   const evidenceUrl = required("EVIDENCE_URL");
   const intentProvenanceUrl = required("INTENT_PROVENANCE_URL");
   const tokenProvider = process.env.TM_S2S_BEARER
