@@ -53,10 +53,15 @@ describe("the reported Guardian-unavailable run", () => {
     expect(summary.terminal).toBe(true);
   });
 
-  it("states why, from the Guardian artifact", () => {
-    expect(summary.reason).toContain("UNAVAILABLE");
-    expect(summary.reason).toContain("UNCERTAIN");
-    expect(summary.reasonSource).toBe("guardian.aggregator");
+  it("does not confidently blame Guardian for a legacy placeholder without a lifecycle projection", () => {
+    // This input carries no `lifecycle` — a historical or pre-projection
+    // response. "UNAVAILABLE" here is indistinguishable from the legacy
+    // placeholder substituted whenever no workflow artifact was ever
+    // projected for a run, which is exactly the confusion that once presented
+    // every stop, whatever its real cause, as a Guardian failure.
+    expect(summary.reason).toContain("Lifecycle detail unavailable for this historical run");
+    expect(summary.reason).not.toContain("Required Guardian judgment");
+    expect(summary.reasonSource).toBe("legacy-workspace-projection");
   });
 
   it("lists what actually succeeded, with returned values", () => {

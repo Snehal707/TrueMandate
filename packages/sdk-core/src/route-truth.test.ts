@@ -107,6 +107,25 @@ describe("sdk-core route truth", () => {
     }
   });
 
+  it("readWorkspace appends workflowId as an additive query parameter", async () => {
+    const { transport, calls } = recordingTransport(() => ({ status: 200, body: {} }));
+    const sdk = createSdkCore({ baseUrl: "https://tm.example/", transport });
+
+    await sdk.readWorkspace("intent-1", "wf-42");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.path).toBe("/v1/workspace/intent-1?workflowId=wf-42");
+  });
+
+  it("readWorkspace omits the query string entirely when workflowId is not supplied", async () => {
+    const { transport, calls } = recordingTransport(() => ({ status: 200, body: {} }));
+    const sdk = createSdkCore({ baseUrl: "https://tm.example/", transport });
+
+    await sdk.readWorkspace("intent-1");
+
+    expect(calls[0]!.path).toBe("/v1/workspace/intent-1");
+  });
+
   it("recordIntent issues exactly one request and passes the strict wire schema", async () => {
     const { transport, calls } = recordingTransport(() => ({
       status: 200,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createSdkCore, type IntentWorkspaceView, type SdkApprovalView, type SdkEvidenceView, type SdkOutcomeView, type SdkResolutionCaseView, type SdkWorkflowCommitResult, type SdkWorkflowRequest, type SdkWorkflowView } from "@truemandate/sdk-core";
+import { createSdkCore, type IntentWorkspaceView, type Result, type SdkApprovalView, type SdkEvidenceView, type SdkOutcomeView, type SdkResolutionCaseView, type SdkWorkflowCommitResult, type SdkWorkflowRequest, type SdkWorkflowView } from "@truemandate/sdk-core";
 import {
   buildLiveDemoWorkflowRequest,
   buildOutcomeEvidenceSubmission,
@@ -55,7 +55,7 @@ type LiveDemoError = {
   readonly message: string;
 };
 
-type LiveRunState = {
+export type LiveRunState = {
   readonly createdAt: string;
   readonly domainId: LiveDemoDomainId;
   readonly customPackId?: RealPackId;
@@ -174,8 +174,26 @@ function linkedIntentIds(run: LiveRunState): {
   };
 }
 
-async function refreshWorkflowChain(run: LiveRunState): Promise<LiveRunState> {
-  const workflowResult = await sdk.readWorkflow(run.workflow.workflowId);
+/**
+ * Narrow port this refresh needs — the same "inject the exact dependency, not
+ * the whole SDK singleton" pattern `freshWorkflowSubmission.ts` already uses,
+ * so this exact binding logic (which workflowId a workspace read is bound to)
+ * is independently testable without a live transport.
+ */
+export interface RefreshWorkflowSdk {
+  readWorkflow(workflowId: string): Promise<Result<SdkWorkflowView>>;
+  readWorkspace(intentId: string, workflowId?: string): Promise<Result<IntentWorkspaceView>>;
+  readApproval(approvalId: string): Promise<Result<SdkApprovalView>>;
+  readOutcome(outcomeContractId: string): Promise<Result<SdkOutcomeView>>;
+  readResolutionCase(resolutionCaseId: string): Promise<Result<SdkResolutionCaseView>>;
+  readResolutionByOutcome(outcomeContractId: string): Promise<Result<SdkResolutionCaseView>>;
+}
+
+export async function refreshWorkflowChain(
+  workflowSdk: RefreshWorkflowSdk,
+  run: LiveRunState,
+): Promise<LiveRunState> {
+  const workflowResult = await workflowSdk.readWorkflow(run.workflow.workflowId);
   if (!workflowResult.ok) {
     throw workflowResult;
   }
@@ -189,13 +207,13 @@ async function refreshWorkflowChain(run: LiveRunState): Promise<LiveRunState> {
   const outcomeContractId = extractOutcomeContractId(workflow);
 
   const approvalResult =
-    approvalId ? await sdk.readApproval(approvalId) : undefined;
+    approvalId ? await workflowSdk.readApproval(approvalId) : undefined;
   if (approvalResult && !approvalResult.ok) {
     throw approvalResult;
   }
 
   const outcomeResult =
-    outcomeContractId ? await sdk.readOutcome(outcomeContractId) : undefined;
+    outcomeContractId ? await workflowSdk.readOutcome(outcomeContractId) : undefined;
   if (outcomeResult && !outcomeResult.ok) {
     throw outcomeResult;
   }
@@ -203,15 +221,22 @@ async function refreshWorkflowChain(run: LiveRunState): Promise<LiveRunState> {
   let resolution: SdkResolutionCaseView | undefined;
   const resolutionId = outcomeResult?.ok ? outcomeResult.value.resolutionCaseId : undefined;
   if (resolutionId) {
-    const resolutionResult = await sdk.readResolutionCase(resolutionId);
+    const resolutionResult = await workflowSdk.readResolutionCase(resolutionId);
     if (!resolutionResult.ok) throw resolutionResult;
     resolution = resolutionResult.value;
   } else if (outcomeContractId) {
-    const byOutcome = await sdk.readResolutionByOutcome(outcomeContractId);
+    const byOutcome = await workflowSdk.readResolutionByOutcome(outcomeContractId);
     if (byOutcome.ok) resolution = byOutcome.value;
   }
 
-  const workspaceResult = intentId ? await sdk.readWorkspace(intentId) : undefined;
+  // Bound to THIS run's exact intentId + workflowId pair, every refresh. The
+  // backend independently verifies the workflow actually belongs to intentId
+  // before projecting anything from it, but the pair must still always be
+  // read together — never intentId from one run's binding with a workflowId
+  // left over from another.
+  const workspaceResult = intentId
+    ? await workflowSdk.readWorkspace(intentId, workflow.workflowId)
+    : undefined;
 
   return {
     ...run,
@@ -715,7 +740,7 @@ export function LiveDemoPage() {
     const timer = window.setInterval(() => {
       void (async () => {
         try {
-          const refreshed = await refreshWorkflowChain(run);
+          const refreshed = await refreshWorkflowChain(sdk, run);
           setRun(refreshed);
         } catch {
           // Leave the existing run visible; explicit refresh surfaces errors.
@@ -728,6 +753,10 @@ export function LiveDemoPage() {
   const launchFreshWorkflow = async () => {
     setPending("working");
     setError(undefined);
+    // Clear the previous run's intentId/workflowId binding before the new one
+    // is established, so no stale workflow can be polled or displayed while
+    // this submission is in flight.
+    setRun(undefined);
     try {
       const request = buildLiveDemoWorkflowRequest(domainId, {
         rawText: domainId === "custom_intent" ? customRawText : undefined,
@@ -745,7 +774,7 @@ export function LiveDemoPage() {
         workflow: result.value,
         evidenceSubmissions: [],
       };
-      const refreshed = await refreshWorkflowChain(initialRun).catch(() => initialRun);
+      const refreshed = await refreshWorkflowChain(sdk, initialRun).catch(() => initialRun);
       setRun(refreshed);
       setWorkflowView("lifecycle");
     } catch (nextError) {
@@ -761,7 +790,7 @@ export function LiveDemoPage() {
     setRefreshing("working");
     setError(undefined);
     try {
-      setRun(await refreshWorkflowChain(run));
+      setRun(await refreshWorkflowChain(sdk, run));
     } catch (nextError) {
       setError(toError(nextError));
     } finally {
@@ -786,7 +815,7 @@ export function LiveDemoPage() {
       });
       if (!resumed.ok) throw resumed;
       setRun(
-        await refreshWorkflowChain({
+        await refreshWorkflowChain(sdk, {
           ...run,
           workflow: resumed.value,
           approval: decided.value,
@@ -827,7 +856,7 @@ export function LiveDemoPage() {
       const committed = await sdk.commitWorkflow(run.workflow.workflowId);
       if (!committed.ok) throw committed;
       setRun(
-        await refreshWorkflowChain({
+        await refreshWorkflowChain(sdk, {
           ...run,
           commit: committed.value,
         }),
@@ -873,7 +902,7 @@ export function LiveDemoPage() {
         if (read.ok) evidenceReads.push(read.value);
       }
       setRun(
-        await refreshWorkflowChain({
+        await refreshWorkflowChain(sdk, {
           ...run,
           evidenceSubmissions: [
             {
@@ -943,6 +972,7 @@ export function LiveDemoPage() {
     evidenceCount: run?.evidenceSubmissions.length ?? 0,
     requestInFlight: pending === "working" || refreshing === "working",
     ...(error?.code ? { errorCode: error.code } : {}),
+    ...(run?.workspace?.lifecycle ? { lifecycle: run.workspace.lifecycle } : {}),
   });
 
   const runSummary = deriveRunSummary({
@@ -980,6 +1010,7 @@ export function LiveDemoPage() {
     resolutionPresent: Boolean(run?.resolution),
     requestInFlight: pending === "working" || refreshing === "working",
     ...(error?.code ? { errorCode: error.code } : {}),
+    ...(run?.workspace?.lifecycle ? { lifecycle: run.workspace.lifecycle } : {}),
   });
   // Terminal means the run has stopped for good, so downstream detail cards must
   // stop saying "yet". Sourced from the shared truth model, not re-derived.

@@ -67,6 +67,7 @@
 .tm-lane .row.bad dd { color: var(--red); }
 .tm-lane .row.warn dd { color: var(--amber); }
 .tm-lane-detection { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line-soft); font-size: 0.84rem; color: var(--text-dim); line-height: 1.5; }
+.tm-lane .tm-attack-control-note { margin: 0 0 14px; font-size: 0.84rem; color: var(--text-dim); line-height: 1.5; }
 
 @media (max-width: 1100px) {
   .tm-attack-scenario-grid { grid-template-columns: repeat(2, 1fr); }

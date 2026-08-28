@@ -204,6 +204,27 @@ export const ATTACK_STAGE_LABELS: Readonly<Record<AttackStage, string>> = {
   resolution: "Resolution",
 };
 
+/**
+ * Human labels for the backend's own execution-order lifecycle stage ids
+ * (`packages/read-model/src/projectors.ts`). Kept local rather than shared
+ * with `live-stage-rail.ts`'s rail-stage mapping: that map folds these same
+ * ids onto the 7-slot rail, which is a different (coarser) presentation
+ * concern than naming the exact stage that stopped an attack vector here.
+ */
+const LIFECYCLE_STAGE_LABELS: Readonly<Record<string, string>> = {
+  intent: "Intent",
+  verification: "Semantic verification",
+  evidence: "Evidence",
+  plan: "Planning",
+  planVerification: "Plan verification",
+  guardian: "Guardian",
+  authority: "Authority",
+  preparedAction: "Prepared action",
+  execution: "Execution",
+  outcome: "Outcome",
+  provenance: "Provenance",
+};
+
 type AttackSlot =
   | "quantity"
   | "prompt"
@@ -405,6 +426,13 @@ export interface AttackComparisonResult {
   readonly request: SdkWorkflowRequest;
   readonly baseline: ScenarioRunOutput;
   readonly governed: GovernedAttackResult;
+  /**
+   * The identical human intent, submitted unmutated as its own independent
+   * workflow (fresh intentId + workflowId — never shared with `governed`).
+   * Lets a judge see the same request succeed where the attack diverges,
+   * rather than inferring "would have succeeded" from absence.
+   */
+  readonly control: GovernedAttackResult;
   readonly validation: ScenarioValidationResult;
   readonly summary: AttackExecutionSummary;
   readonly vectorStatuses: readonly AttackVectorPresentation[];
@@ -417,7 +445,7 @@ export interface AttackComparisonResult {
 export interface AttackSdkPort {
   submitWorkflow(input: SdkWorkflowRequest): Promise<Result<SdkWorkflowView>>;
   readWorkflow(id: string): Promise<Result<SdkWorkflowView>>;
-  readWorkspace(id: string): Promise<Result<IntentWorkspaceView>>;
+  readWorkspace(id: string, workflowId?: string): Promise<Result<IntentWorkspaceView>>;
   readApproval(id: string): Promise<Result<SdkApprovalView>>;
   commitWorkflow(id: string): Promise<Result<SdkWorkflowCommitResult>>;
   submitEvidence(input: unknown): Promise<Result<unknown>>;
@@ -844,6 +872,72 @@ function sideEffectCount(result: GovernedAttackResult): number {
     (result.commit?.status === "SUCCESS" ? 1 : 0);
 }
 
+/**
+ * Carries one already-submitted request (attack or control) through commit,
+ * workspace/approval/outcome/resolution reads, and outcome-evidence
+ * injection. Shared by both lanes so a control's lifecycle is read exactly
+ * the way the attack's is — same ownership-verified `readWorkspace(intentId,
+ * workflowId)` pair, never a mix of one lane's intentId with the other's
+ * workflowId.
+ */
+async function resolveGovernedResult(
+  sdk: AttackSdkPort,
+  scenario: AttackScenarioDefinition,
+  request: SdkWorkflowRequest,
+  submitted: Result<SdkWorkflowView>,
+  outcomeVectors: readonly AttackVectorDefinition[],
+  evidenceSoFar: readonly AttackEvidenceRecord[],
+): Promise<GovernedAttackResult> {
+  if (!submitted.ok) {
+    return { evidence: evidenceSoFar, error: { code: submitted.code, message: submitted.message } };
+  }
+
+  let workflow = submitted.value;
+  let commit: SdkWorkflowCommitResult | undefined;
+  if (workflow.state === "AUTHORIZED" || workflow.execution?.status === "AUTHORIZED") {
+    const committed = await sdk.commitWorkflow(workflow.workflowId);
+    if (committed.ok) commit = committed.value;
+    const refreshed = await sdk.readWorkflow(workflow.workflowId);
+    if (refreshed.ok) workflow = refreshed.value;
+  }
+
+  const intentId = request.intent.kind === "RAW" ? request.intent.id : request.intent.intentId;
+  const workspaceRead = intentId ? await sdk.readWorkspace(intentId, workflow.workflowId) : undefined;
+  const workspace = workspaceRead?.ok ? workspaceRead.value : undefined;
+  const approvalRead = approvalId(workflow) ? await sdk.readApproval(approvalId(workflow)!) : undefined;
+  const approval = approvalRead?.ok ? approvalRead.value : undefined;
+  let outcomeRead = outcomeId(workflow) ? await sdk.readOutcome(outcomeId(workflow)!) : undefined;
+  let outcome = outcomeRead?.ok ? outcomeRead.value : undefined;
+
+  let evidence = [...evidenceSoFar];
+  if (outcome) {
+    for (const attack of outcomeVectors) {
+      const submittedOutcomeEvidence = await submitAttackEvidence(sdk, scenario, attack, {
+        workflowId: workflow.workflowId,
+        intentId: outcome.intentId,
+        intentStateId: outcome.intentStateId,
+        outcomeContractId: outcome.id,
+      });
+      evidence = [...evidence, ...submittedOutcomeEvidence];
+    }
+    if (outcomeVectors.length) {
+      outcomeRead = await sdk.readOutcome(outcome.id);
+      if (outcomeRead.ok) outcome = outcomeRead.value;
+    }
+  }
+
+  let resolution: SdkResolutionCaseView | undefined;
+  if (outcome?.resolutionCaseId) {
+    const resolutionRead = await sdk.readResolutionCase(outcome.resolutionCaseId);
+    if (resolutionRead.ok) resolution = resolutionRead.value;
+  } else if (outcome) {
+    const byOutcome = await sdk.readResolutionByOutcome(outcome.id);
+    if (byOutcome.ok) resolution = byOutcome.value;
+  }
+
+  return { workflow, workspace, approval, outcome, resolution, commit, evidence };
+}
+
 export async function executeAttackComparison(
   scenario: AttackScenarioDefinition,
   deps: AttackExecutionDeps,
@@ -862,6 +956,18 @@ export async function executeAttackComparison(
     rawText: scenario.humanIntent,
     customPackId: scenario.customPackId,
   });
+
+  // The control: the identical human intent, submitted unmutated as its own
+  // independent workflow. `buildLiveDemoWorkflowRequest` mints fresh UUIDs on
+  // every call, so this naturally gets its own intentId + workflowId — never
+  // shared with the attack request built above. Started now, in parallel
+  // with the attack's evidence/mutation pipeline below, so this lane doesn't
+  // add its own live-workflow latency on top of the attack's.
+  const controlRequest = buildLiveDemoWorkflowRequest(scenario.domainId, {
+    rawText: scenario.humanIntent,
+    customPackId: scenario.customPackId,
+  });
+  const controlSubmittedPromise = submitFreshWorkflowWhenReady(deps.sdk, controlRequest);
 
   const externalVectors = validation.effectiveVectors.filter((attack) => attack.stage === "external_evidence");
   const actionVectors = validation.effectiveVectors.filter((attack) => attack.stage === "proposed_action");
@@ -903,6 +1009,11 @@ export async function executeAttackComparison(
 
   const submitted = await submitFreshWorkflowWhenReady(deps.sdk, request);
   const baseline = await baselinePromise;
+  const controlSubmitted = await controlSubmittedPromise;
+  // Resolved independently of whether the attack was supported/succeeded:
+  // the control is a separate live workflow and its own lifecycle stands on
+  // its own regardless of what happened to the attack lane.
+  const control = await resolveGovernedResult(deps.sdk, scenario, controlRequest, controlSubmitted, [], []);
 
   if (!submitted.ok || !validation.supported) {
     const governed: GovernedAttackResult = submitted.ok
@@ -925,6 +1036,7 @@ export async function executeAttackComparison(
       request,
       baseline,
       governed,
+      control,
       validation,
       summary: {
         vectorsAttempted: scenario.vectors.length,
@@ -942,49 +1054,7 @@ export async function executeAttackComparison(
     };
   }
 
-  let workflow = submitted.value;
-  let commit: SdkWorkflowCommitResult | undefined;
-  if (workflow.state === "AUTHORIZED" || workflow.execution?.status === "AUTHORIZED") {
-    const committed = await deps.sdk.commitWorkflow(workflow.workflowId);
-    if (committed.ok) commit = committed.value;
-    const refreshed = await deps.sdk.readWorkflow(workflow.workflowId);
-    if (refreshed.ok) workflow = refreshed.value;
-  }
-
-  const intentId = request.intent.kind === "RAW" ? request.intent.id : request.intent.intentId;
-  const workspaceRead = intentId ? await deps.sdk.readWorkspace(intentId) : undefined;
-  const workspace = workspaceRead?.ok ? workspaceRead.value : undefined;
-  const approvalRead = approvalId(workflow) ? await deps.sdk.readApproval(approvalId(workflow)!) : undefined;
-  const approval = approvalRead?.ok ? approvalRead.value : undefined;
-  let outcomeRead = outcomeId(workflow) ? await deps.sdk.readOutcome(outcomeId(workflow)!) : undefined;
-  let outcome = outcomeRead?.ok ? outcomeRead.value : undefined;
-
-  if (outcome) {
-    for (const attack of outcomeVectors) {
-      const submittedOutcomeEvidence = await submitAttackEvidence(deps.sdk, scenario, attack, {
-        workflowId: workflow.workflowId,
-        intentId: outcome.intentId,
-        intentStateId: outcome.intentStateId,
-        outcomeContractId: outcome.id,
-      });
-      evidence = [...evidence, ...submittedOutcomeEvidence];
-    }
-    if (outcomeVectors.length) {
-      outcomeRead = await deps.sdk.readOutcome(outcome.id);
-      if (outcomeRead.ok) outcome = outcomeRead.value;
-    }
-  }
-
-  let resolution: SdkResolutionCaseView | undefined;
-  if (outcome?.resolutionCaseId) {
-    const resolutionRead = await deps.sdk.readResolutionCase(outcome.resolutionCaseId);
-    if (resolutionRead.ok) resolution = resolutionRead.value;
-  } else if (outcome) {
-    const byOutcome = await deps.sdk.readResolutionByOutcome(outcome.id);
-    if (byOutcome.ok) resolution = byOutcome.value;
-  }
-
-  const governed: GovernedAttackResult = { workflow, workspace, approval, outcome, resolution, commit, evidence };
+  const governed = await resolveGovernedResult(deps.sdk, scenario, request, submitted, outcomeVectors, evidence);
   const vectorStatuses = [...scenario.vectors].sort(compareVectors).map((attack) => ({
     vectorId: attack.id,
     order: attack.order,
@@ -1003,6 +1073,7 @@ export async function executeAttackComparison(
     request,
     baseline,
     governed,
+    control,
     validation,
     summary: {
       vectorsAttempted: scenario.vectors.length,
@@ -1010,7 +1081,7 @@ export async function executeAttackComparison(
       vectorsReachingGovernedWorkflow: validation.effectiveVectors.filter((attack) => attack.stage !== "outcome_evidence").length,
       vectorsBlockedOrEscalated: vectorStatuses.filter((item) => item.status === "REJECTED" || item.status === "ESCALATED").length,
       economicSideEffectCount: sideEffectCount(governed),
-      finalOutcome: outcome?.state ?? governedResultState(governed),
+      finalOutcome: governed.outcome?.state ?? governedResultState(governed),
     },
     vectorStatuses,
     provenanceOverlays: buildOverlays(governed, scenario.vectors),
@@ -1061,6 +1132,8 @@ export function baselineResultState(result: ScenarioRunOutput): AttackResultStat
 }
 
 export function firstVisibleRejectingStage(result: GovernedAttackResult): string | undefined {
+  const blockingStage = result.workspace?.lifecycle?.blockingStage;
+  if (blockingStage) return LIFECYCLE_STAGE_LABELS[blockingStage] ?? blockingStage;
   if (result.workspace?.guardian.aggregator.decision === "BLOCK") return "Guardian";
   if (result.workspace?.authority.decision === "BLOCK") return "Authority";
   if (result.workflow?.state === "BLOCKED") return "Workflow eligibility";

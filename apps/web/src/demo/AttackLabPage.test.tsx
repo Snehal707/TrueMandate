@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 import { SystemVariant, type SafeScenario } from "@truemandate/safe-benchmark";
 import type { ScenarioRunOutput } from "@truemandate/benchmark-runner";
+import type { IntentWorkspaceView, Result, SdkWorkflowRequest, SdkWorkflowView } from "@truemandate/sdk-core";
 import {
   AttackComparison,
   AttackLabPage,
   AttackTrace,
+  ControlSummary,
   TwoLaneVerdict,
 } from "./AttackLabPage";
 import {
@@ -407,6 +409,7 @@ describe("Attack Lab public truth boundary", () => {
         },
         evidence: [],
       },
+      control: { evidence: [] },
       validation: validateAttackScenario(SCENARIO),
       summary: {
         vectorsAttempted: 2,
@@ -426,5 +429,122 @@ describe("Attack Lab public truth boundary", () => {
     expect(html).not.toContain("secret-commit-token-value");
     expect(html).not.toContain("secret-grant-value");
     expect(html).not.toContain("secret-prepared-action-value");
+  });
+});
+
+/**
+ * The control is the identical human intent submitted unmutated as its own
+ * independent workflow, so a judge can see the same request succeed where
+ * the attack diverges rather than inferring "would have succeeded" from
+ * absence. These tests use a fake backend that echoes back whatever
+ * intentId/workflowId it was actually called with, rather than a fixed
+ * canned response — real submissions get distinct ids because
+ * buildLiveDemoWorkflowRequest mints fresh UUIDs per call, and only an
+ * echoing fake can catch a bug where that distinction is lost, or where one
+ * lane's intentId leaks into a workspace read paired with the other lane's
+ * workflowId.
+ */
+function echoingSdkPort(): AttackSdkPort & {
+  readonly workspaceCalls: readonly { readonly intentId: string; readonly workflowId: string | undefined }[];
+} {
+  const workspaceCalls: { intentId: string; workflowId: string | undefined }[] = [];
+  const notFound = { ok: false as const, code: "VALIDATION_FAILED" as const, message: "not available" };
+  return {
+    workspaceCalls,
+    submitWorkflow: vi.fn(async (request: SdkWorkflowRequest): Promise<Result<SdkWorkflowView>> => ({
+      ok: true,
+      value: { workflowId: request.workflowId!, state: "BLOCKED" },
+    })),
+    readWorkflow: vi.fn(async (id: string): Promise<Result<SdkWorkflowView>> => ({
+      ok: true,
+      value: { workflowId: id, state: "BLOCKED" },
+    })),
+    readWorkspace: vi.fn(async (intentId: string, workflowId?: string): Promise<Result<IntentWorkspaceView>> => {
+      workspaceCalls.push({ intentId, workflowId });
+      return {
+        ok: true,
+        value: {
+          summary: {
+            intentId,
+            rawIntent: "echo",
+            principalId: "live-demo-web",
+            createdAt: "2026-08-24T10:00:00.000Z",
+            intentStateId: `${intentId}-state`,
+            historicalStateIds: [],
+          },
+          semantic: { intentId, rawIntent: "echo", constraints: [] },
+          plan: { planId: `${intentId}-plan`, steps: [] },
+          guardian: { judges: [], aggregator: { decision: "ALLOW", semanticStatus: "VERIFIED", criticalFailure: false } },
+          authority: { decision: "ALLOW" },
+          execution: { phase: "COMMIT", sideEffects: [], unknownPending: false, blockedRetry: false },
+          graph: { nodes: [], edges: [] },
+          timeline: { events: [] },
+        } as unknown as IntentWorkspaceView,
+      };
+    }),
+    readApproval: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    commitWorkflow: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    submitEvidence: vi.fn(async () => ({ ok: true as const, value: { envelopeIds: [], claimIds: [] } })),
+    readEvidence: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    readOutcome: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    readResolutionCase: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+    readResolutionByOutcome: vi.fn(async (): Promise<Result<never>> => notFound as Result<never>),
+  };
+}
+
+describe("Attack Lab control lane", () => {
+  it("control and attack use separate workflowIds", async () => {
+    const sdk = echoingSdkPort();
+    const result = await executeAttackComparison(SCENARIO, {
+      sdk,
+      runBaseline: async (scenario) => baseline(scenario),
+    });
+
+    expect(sdk.submitWorkflow).toHaveBeenCalledTimes(2);
+    expect(result.governed.workflow?.workflowId).toBeTruthy();
+    expect(result.control.workflow?.workflowId).toBeTruthy();
+    expect(result.control.workflow?.workflowId).not.toBe(result.governed.workflow?.workflowId);
+  });
+
+  it("cross mixing control and attack state is impossible", async () => {
+    const sdk = echoingSdkPort();
+    const result = await executeAttackComparison(SCENARIO, {
+      sdk,
+      runBaseline: async (scenario) => baseline(scenario),
+    });
+
+    const attackWorkflowId = result.governed.workflow?.workflowId;
+    const controlWorkflowId = result.control.workflow?.workflowId;
+    expect(attackWorkflowId).toBeTruthy();
+    expect(controlWorkflowId).toBeTruthy();
+
+    // Each lane's workspace read paired its own resolved workflowId with its
+    // own request's intentId — never the other lane's.
+    expect(sdk.workspaceCalls).toHaveLength(2);
+    const attackCall = sdk.workspaceCalls.find((call) => call.workflowId === attackWorkflowId);
+    const controlCall = sdk.workspaceCalls.find((call) => call.workflowId === controlWorkflowId);
+    expect(attackCall).toBeDefined();
+    expect(controlCall).toBeDefined();
+    expect(attackCall!.intentId).not.toBe(controlCall!.intentId);
+
+    // The projected workspace attached to each lane carries only that lane's
+    // own intentId — the attack's workspace never carries the control's
+    // intentId, and vice versa.
+    expect(result.governed.workspace?.summary.intentId).toBe(attackCall!.intentId);
+    expect(result.control.workspace?.summary.intentId).toBe(controlCall!.intentId);
+    expect(result.governed.workspace?.summary.intentId).not.toBe(result.control.workspace?.summary.intentId);
+  });
+
+  it("renders the control lane from the actual returned control result, distinct from the attack lane", async () => {
+    const sdk = echoingSdkPort();
+    const result = await executeAttackComparison(SCENARIO, {
+      sdk,
+      runBaseline: async (scenario) => baseline(scenario),
+    });
+
+    const html = renderToString(<ControlSummary result={result} />);
+    expect(html).toContain("Control (unmutated)");
+    expect(html).toContain(result.control.workflow!.workflowId);
+    expect(html).not.toContain(result.governed.workflow!.workflowId);
   });
 });

@@ -10,6 +10,23 @@
  * claim that the backend reported that stage. It is labelled accordingly.
  */
 
+/**
+ * Structural mirror of the backend's `LifecycleView` (`@truemandate/read-model`).
+ * Kept local rather than imported so this module's tests need no SDK types —
+ * matching the rest of this file's design.
+ */
+export type LifecycleStageStatus = "COMPLETED" | "BLOCKED" | "NOT_REACHED" | "NOT_PRODUCED";
+export interface LifecycleStageView {
+  readonly stage: string;
+  readonly status: LifecycleStageStatus;
+  readonly detail?: string;
+}
+export interface LifecycleView {
+  readonly stages: readonly LifecycleStageView[];
+  readonly blockingStage?: string;
+  readonly blockingReason?: string;
+}
+
 export type RailStatus = "done" | "active" | "waiting" | "blocked" | "not-reached";
 
 export type RailStageId =
@@ -58,6 +75,14 @@ export interface RailInput {
   /** True while this client has a create/refresh request outstanding. */
   readonly requestInFlight: boolean;
   readonly errorCode?: string;
+  /**
+   * `workspace.lifecycle`, when the backend returned one. Authoritative when
+   * present: every stage's done/blocked status is read directly from it, never
+   * guessed from which fields happen to be missing. Absent only for historical
+   * responses that predate this projection, or when no workflowId was bound —
+   * the legacy heuristics below are the fallback for exactly that case.
+   */
+  readonly lifecycle?: LifecycleView;
 }
 
 export type FailureClass = "governance-refusal" | "verification-unavailable" | "request-failure";
@@ -135,6 +160,66 @@ interface StageSeed {
   readonly plain: string;
   readonly done: boolean;
   readonly detail?: string;
+}
+
+/** Static per-stage copy, shared by both the legacy and lifecycle-driven paths. */
+const STAGE_META: Readonly<Record<RailStageId, { readonly label: string; readonly plain: string }>> = {
+  intent: { label: "Intent", plain: "The human request, recorded immutably." },
+  verification: {
+    label: "Verification",
+    plain: "What the request actually means, checked before anything can act on it.",
+  },
+  planning: {
+    label: "Planning",
+    plain: "The proposed steps, checked back against the verified intent.",
+  },
+  guardian: {
+    label: "Guardian",
+    plain: "Five independent judges review the action before authority is considered.",
+  },
+  authority: { label: "Authority", plain: "Was this action actually authorized?" },
+  execution: { label: "Execution", plain: "Whether the governed action ran, and exactly once." },
+  provenance: { label: "Provenance", plain: "What evidence proves what happened?" },
+};
+
+/**
+ * Which lifecycle stage ids resolve each coarse rail stage. The rail has no
+ * separate slot for evidence, plan verification, or action-fidelity — they are
+ * all "is the proposed action checked back against the verified intent", which
+ * is exactly Planning's description — so all four land there. The full
+ * `lifecycle.blockingStage` / `blockingReason` text remains available wherever
+ * a caller wants the precise stage name rather than this coarse grouping.
+ */
+const RAIL_STAGE_LIFECYCLE_STAGES: Readonly<Record<RailStageId, readonly string[]>> = {
+  intent: ["intent"],
+  verification: ["verification"],
+  planning: ["evidence", "plan", "planVerification", "actionFidelity"],
+  guardian: ["guardian"],
+  authority: ["authority", "authorityEligibility", "preparedAction"],
+  execution: ["execution"],
+  provenance: ["outcome", "provenance"],
+};
+
+function lifecycleSeeds(lifecycle: LifecycleView): readonly StageSeed[] {
+  const blockedRailId = lifecycle.blockingStage
+    ? (Object.entries(RAIL_STAGE_LIFECYCLE_STAGES).find(([, ids]) =>
+        ids.includes(lifecycle.blockingStage!),
+      )?.[0] as RailStageId | undefined)
+    : undefined;
+
+  return (Object.keys(STAGE_META) as readonly RailStageId[]).map((id) => {
+    const ids = RAIL_STAGE_LIFECYCLE_STAGES[id];
+    const matched = lifecycle.stages.filter((row) => ids.includes(row.stage));
+    // COMPLETED only when every matched sub-stage completed cleanly. A blocked
+    // or not-reached sub-stage means this coarse stage did not fully resolve,
+    // even if an earlier sub-stage within it did.
+    const done = id === blockedRailId
+      ? false
+      : matched.length > 0 && matched.every((row) => row.status === "COMPLETED");
+    const detail = matched.find((row) => row.detail)?.detail ??
+      (id === blockedRailId ? lifecycle.blockingReason : undefined);
+    return { id, ...STAGE_META[id], done, ...(detail ? { detail } : {}) };
+  });
 }
 
 function seeds(input: RailInput): readonly StageSeed[] {
@@ -220,14 +305,27 @@ function seeds(input: RailInput): readonly StageSeed[] {
 
 /**
  * Derive the rail. Deterministic: identical input always yields identical output.
+ *
+ * When `input.lifecycle` is present it is authoritative: every stage's done and
+ * blocked status is read directly from the backend's own execution-order
+ * derivation, never guessed from "the first stage whose done flag is false".
+ * That guess is exactly what previously mislabelled a completed Guardian
+ * review as the stopping point whenever the run actually stopped earlier, at
+ * plan verification or a missing proof.
  */
 export function deriveStageRail(input: RailInput): readonly RailStage[] {
-  const rows = seeds(input);
-  const blocked = BLOCKED_WORKFLOW_STATES.has(input.workflowState ?? "") ||
-    input.executionPhase === "BLOCKED" ||
-    isBlockingFailure(input.errorCode);
+  const rows = input.lifecycle ? lifecycleSeeds(input.lifecycle) : seeds(input);
+  const blocked = input.lifecycle
+    ? Boolean(input.lifecycle.blockingStage)
+    : BLOCKED_WORKFLOW_STATES.has(input.workflowState ?? "") ||
+      input.executionPhase === "BLOCKED" ||
+      isBlockingFailure(input.errorCode);
 
-  // The first stage without a returned artifact is where the run currently sits.
+  // The first stage without a returned artifact is where the run currently
+  // sits — a legacy-path guess. When lifecycle is present, `rows` already
+  // encodes the true blocked stage as `done: false`, and no OTHER not-done row
+  // precedes it (execution order is enforced upstream), so this expression
+  // still lands on the correct index either way.
   const frontierIndex = rows.findIndex((row) => !row.done);
 
   return rows.map((row, index) => {

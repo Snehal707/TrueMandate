@@ -11,7 +11,7 @@
  * returned `sideEffects` array of length 0 licenses the ZERO claim.
  */
 
-import { classifyFailure, guardianVerdictIsUsable } from "./live-stage-rail";
+import { classifyFailure, guardianVerdictIsUsable, type LifecycleView } from "./live-stage-rail";
 
 export { guardianVerdictIsUsable };
 
@@ -79,6 +79,12 @@ export interface RunSummaryInput {
   readonly resolutionPresent: boolean;
   readonly requestInFlight: boolean;
   readonly errorCode?: string;
+  /**
+   * `workspace.lifecycle`, when the backend returned one. Authoritative when
+   * present, for exactly the same reason as `RailInput.lifecycle`: it is the
+   * backend's own execution-order derivation, not a guess from missing fields.
+   */
+  readonly lifecycle?: LifecycleView;
 }
 
 /** Authority decisions that actually grant. */
@@ -91,6 +97,9 @@ export function authorityGranted(decision?: string): boolean {
 }
 
 function isTerminal(input: RunSummaryInput): boolean {
+  // The backend's own execution-order derivation, when available: a run is
+  // terminal exactly when something actually stopped it.
+  if (input.lifecycle) return Boolean(input.lifecycle.blockingStage);
   if (TERMINAL_WORKFLOW_STATES.has(input.workflowState ?? "")) return true;
   if (input.executionPhase === "BLOCKED") return true;
   const failure = classifyFailure(input.errorCode);
@@ -100,18 +109,35 @@ function isTerminal(input: RunSummaryInput): boolean {
 /**
  * Why the run stopped. Preference order is strictly most-authoritative-first, and
  * every branch is a returned value or a fixed sentence about a returned value.
+ *
+ * `lifecycle.blockingReason` — the backend's own execution-order derivation —
+ * takes precedence over every heuristic below. Without it, a plan-verification
+ * or missing-proof block fell through every branch here (Guardian had a real,
+ * usable verdict; Authority was never reached; there was no error code) and
+ * produced no reason at all, or worse, blamed whatever heuristic fired first.
  */
 function deriveReason(
   input: RunSummaryInput,
 ): { readonly reason: string; readonly reasonSource: string } | undefined {
+  if (input.lifecycle?.blockingStage) {
+    return {
+      reason: input.lifecycle.blockingReason ?? `Blocked at ${input.lifecycle.blockingStage}.`,
+      reasonSource: `lifecycle.${input.lifecycle.blockingStage}`,
+    };
+  }
   if (input.executionStopReason) {
     return { reason: input.executionStopReason, reasonSource: "execution.stopReason" };
   }
   if (input.guardianDecision && !guardianVerdictIsUsable(input.guardianDecision)) {
-    const status = input.guardianSemanticStatus ? ` Semantic status was ${input.guardianSemanticStatus}.` : "";
+    // Without a lifecycle projection this client cannot tell a genuine Guardian
+    // unavailability apart from the legacy placeholder substituted whenever no
+    // workflow artifact was ever projected for this run — the exact confusion
+    // that once presented every stop, whatever its real cause, as a Guardian
+    // failure. A historical or pre-projection response must not be read as a
+    // confident Guardian-caused stop.
     return {
-      reason: `Required Guardian judgment was ${input.guardianDecision}.${status}`,
-      reasonSource: "guardian.aggregator",
+      reason: "Lifecycle detail unavailable for this historical run. The stopping stage cannot be confidently attributed.",
+      reasonSource: "legacy-workspace-projection",
     };
   }
   if (input.guardianCriticalFailure === true) {
@@ -170,9 +196,14 @@ function deriveOutcomeClass(input: RunSummaryInput): RunOutcomeClass {
   if (isTerminal(input)) {
     // A governance refusal requires an actual refusing artifact. Without one,
     // the run stopped because something was unavailable — not because it was judged.
-    const refused =
-      Boolean(input.authorityDecision && !authorityGranted(input.authorityDecision)) ||
-      input.guardianCriticalFailure === true;
+    // Every `lifecycle.blockingStage` value names a governance decision to stop
+    // (plan verification, missing proof, action fidelity, Guardian, authority
+    // eligibility) — never a provider/model unavailability, which surfaces
+    // through `errorCode` instead.
+    const refused = input.lifecycle
+      ? Boolean(input.lifecycle.blockingStage)
+      : Boolean(input.authorityDecision && !authorityGranted(input.authorityDecision)) ||
+        input.guardianCriticalFailure === true;
     return refused ? "blocked-by-governance" : "stopped-unavailable";
   }
   if (authorityGranted(input.authorityDecision) || input.workflowState === "AUTHORIZED") {
@@ -251,7 +282,15 @@ export function deriveRunSummary(input: RunSummaryInput): RunSummary {
   }
 
   if (input.executionStatus) {
-    succeeded.push({ label: "Execution ran", detail: input.executionStatus });
+    // The only executor this system has ever had is a mock economic adapter —
+    // see MockPaymentAdapter in the gateway service. When the backend's own
+    // lifecycle confirms execution completed, say so in terms that cannot be
+    // mistaken for a real payment, booking, purchase, or shipment.
+    const executionLabel =
+      input.lifecycle?.stages.find((stage) => stage.stage === "execution")?.status === "COMPLETED"
+        ? "Governed mock execution completed"
+        : "Execution ran";
+    succeeded.push({ label: executionLabel, detail: input.executionStatus });
   } else {
     didNotHappen.push({ label: "The action was not executed" });
   }

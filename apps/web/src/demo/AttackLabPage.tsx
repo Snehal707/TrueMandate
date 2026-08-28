@@ -297,6 +297,47 @@ export function TwoLaneVerdict(props: { readonly result: AttackComparisonResult 
   );
 }
 
+/**
+ * The control: the identical human intent, submitted unmutated as its own
+ * independent workflow (own intentId + workflowId, never the attack's).
+ * Additive alongside the two-lane verdict above, not a redesign of it — its
+ * own section, reusing the same lane styling. Shows whatever the control
+ * actually returned; makes a divergence claim only when the two lanes'
+ * returned terminal states genuinely differ.
+ */
+export function ControlSummary(props: { readonly result: AttackComparisonResult }) {
+  const { control, governed } = props.result;
+  const controlState = governedResultState(control);
+  const attackState = governedResultState(governed);
+  const controlStage = firstVisibleRejectingStage(control);
+  const attackStage = firstVisibleRejectingStage(governed);
+  const diverges = controlState !== attackState;
+
+  return (
+    <section className="tm-lane" data-side="governed" aria-label="Control: same intent, unmutated">
+      <header>
+        <span className="who tm-identity-tag" data-identity="truemandate">Control (unmutated)</span>
+        <strong className={`state ${stateTone(controlState, "governed")}`}>{display(controlState)}</strong>
+      </header>
+      <p className="tm-attack-control-note">
+        {diverges
+          ? `Diverges from the attack lane: control ${display(controlState)}${controlStage ? ` (enforced at ${controlStage})` : ""}, attack ${display(attackState)}${attackStage ? ` (enforced at ${attackStage})` : ""}.`
+          : `Same terminal state as the attack lane (${display(controlState)}) — this scenario's current blocker is not specific to the injected mutation.`}
+      </p>
+      <dl>
+        <div className="row neutral">
+          <dt>Workflow</dt>
+          <dd>{control.workflow?.workflowId ?? display(control.error?.code)}</dd>
+        </div>
+        <div className="row neutral">
+          <dt>Enforced at</dt>
+          <dd>{controlStage ?? "No rejecting stage"}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 /** Original human intent versus the mutation each vector actually injected. */
 export function MutationPanel(props: { readonly scenario: AttackScenarioDefinition }) {
   return (
@@ -865,7 +906,7 @@ export function AttackLabPage(props: {
 
       {error ? <p className="tm-attack-runtime-error" role="alert">{error}</p> : null}
       <ScenarioExportPanel scenario={scenario} />
-      {result ? <><TwoLaneVerdict result={result} /><AttackComparison result={result} /><AttackTrace result={result} /><WhyDifferent result={result} /></> : (
+      {result ? <><TwoLaneVerdict result={result} /><ControlSummary result={result} /><AttackComparison result={result} /><AttackTrace result={result} /><WhyDifferent result={result} /></> : (
         <section className="tm-attack-export-panel">
           <div className="tm-attack-result-head">
             <div>

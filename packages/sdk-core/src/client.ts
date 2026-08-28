@@ -83,8 +83,17 @@ const PATHS = {
     `/v1/resolutions/cases/${encodeURIComponent(caseId)}/remedies`,
   resolutionMandate: (id: string): string =>
     `/v1/resolutions/mandates/${encodeURIComponent(id)}`,
-  workspace: (intentId: string): string =>
-    `/v1/workspace/${encodeURIComponent(intentId)}`,
+  /**
+   * `workflowId` is additive and optional. Omitting it is byte-identical to the
+   * pre-projection route; supplying it lets the backend bind the response to
+   * that exact workflow's durable artifacts (see `lifecycle` on the result) —
+   * the backend independently verifies the workflow actually belongs to
+   * `intentId` before using anything from it.
+   */
+  workspace: (intentId: string, workflowId?: string): string =>
+    `/v1/workspace/${encodeURIComponent(intentId)}${
+      workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ""
+    }`,
 } as const;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -197,7 +206,14 @@ export interface SdkCore {
   ): Promise<Result<SdkResolutionCaseView>>;
   listResolutionRemedies(caseId: string): Promise<Result<unknown>>;
   readResolutionMandate(id: string): Promise<Result<unknown>>;
-  readWorkspace(intentId: string): Promise<Result<IntentWorkspaceView>>;
+  /**
+   * `workflowId` is additive and optional — see `PATHS.workspace`. Omitting it
+   * preserves the exact legacy response for this intent.
+   */
+  readWorkspace(
+    intentId: string,
+    workflowId?: string,
+  ): Promise<Result<IntentWorkspaceView>>;
 }
 
 export function createSdkCore(config: SdkCoreConfig): SdkCore {
@@ -443,12 +459,18 @@ export function createSdkCore(config: SdkCoreConfig): SdkCore {
       return ok(res.body);
     },
 
-    async readWorkspace(intentId) {
+    async readWorkspace(intentId, workflowId) {
       const idParsed = IdParamSchema.safeParse(intentId);
       if (!idParsed.success) {
         return err(ErrorCode.SCHEMA_PARSE_FAILED, "invalid intent id");
       }
-      const res = await transport.get(PATHS.workspace(idParsed.data));
+      if (workflowId !== undefined) {
+        const workflowIdParsed = IdParamSchema.safeParse(workflowId);
+        if (!workflowIdParsed.success) {
+          return err(ErrorCode.SCHEMA_PARSE_FAILED, "invalid workflow id");
+        }
+      }
+      const res = await transport.get(PATHS.workspace(idParsed.data, workflowId));
       if (res.status !== 200) return toRemoteError(res);
       if (typeof res.body !== "object" || res.body === null) {
         return err(ErrorCode.SCHEMA_PARSE_FAILED, "invalid workspace response");

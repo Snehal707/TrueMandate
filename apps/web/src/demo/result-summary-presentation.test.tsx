@@ -71,9 +71,14 @@ describe("result summary answers the five questions", () => {
     expect(headlineAt).toBeLessThan(idAt);
   });
 
-  it("says why it stopped", () => {
-    expect(html).toContain("Required Guardian judgment was UNAVAILABLE");
-    expect(html).toContain("UNCERTAIN");
+  it("says why it stopped, without confidently blaming Guardian for a legacy placeholder", () => {
+    // GUARDIAN_UNAVAILABLE carries no lifecycle: a historical/pre-projection
+    // response. "UNAVAILABLE" here could be a genuine Guardian failure or the
+    // legacy placeholder substituted whenever no workflow artifact was ever
+    // projected — the client cannot tell which, so it must not assert Guardian
+    // caused the stop.
+    expect(html).toContain("Lifecycle detail unavailable for this historical run");
+    expect(html).not.toContain("Required Guardian judgment was UNAVAILABLE");
   });
 
   it("separates what succeeded from what did not happen", () => {
