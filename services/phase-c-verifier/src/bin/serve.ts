@@ -38,13 +38,22 @@ async function main(): Promise<void> {
   const intents = new IntentProvenanceS2SClient(intentProvenanceUrl, tokenProvider);
 
   const ports: DemoOrchestratorPorts = {
-    // The PUBLIC route — no special auth. Reused exactly as any other
-    // caller (browser included) would use it; this identity's only special
-    // authority is the verification call below.
+    // Application-level, this is the PUBLIC route: no elevated permission is
+    // exercised, the payload shape and authorization outcome are exactly
+    // what any caller (browser included) gets. But public-bff's own Cloud
+    // Run IAM policy requires an authenticated invoker for every route
+    // without exception (confirmed live: `gcloud run services get-iam-policy
+    // tm-dev-public-bff` grants roles/run.invoker to tm-dev-web@ only) — a
+    // browser only ever reaches it indirectly, through web-proxy.mjs
+    // attaching web's own identity token. This identity has no such proxy,
+    // so it must attach its own token the same way, or every call 403s
+    // before reaching public-bff's application code at all.
     submitWorkflow: async (body: unknown): Promise<Result<Record<string, unknown>>> => {
+      const token = await tokenProvider.getIdentityToken(webUrl);
+      if (!token) throw new Error("S2S identity token missing for WORKFLOWS_API_URL");
       const response = await fetch(`${webUrl.replace(/\/$/, "")}/v1/workflows`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       });
       const text = await response.text();

@@ -293,8 +293,16 @@ locals {
     # (member, role, resource) tuple as the pre-existing phase-c-verifier
     # edges. It does not call gateway/authority directly — commit/authorize
     # happen inside agent-runtime's own workflow pipeline, reached only via
-    # public-bff's public route.
+    # public-bff's POST /v1/workflows route.
     "public-bff->demo-evidence-orchestrator" = { from = "public-bff", to = "demo-evidence-orchestrator" }
+    # That route is not actually unauthenticated: public-bff's live IAM
+    # policy (`gcloud run services get-iam-policy tm-dev-public-bff`) grants
+    # roles/run.invoker to tm-dev-web@ only — a browser reaches it solely
+    # through web-proxy.mjs attaching web's own identity token, never
+    # directly. demo-evidence-orchestrator has no such proxy in front of it,
+    # so it needs this edge to call public-bff at all (see the matching
+    # identity-token fix in services/phase-c-verifier/src/bin/serve.ts).
+    "phase-c-verifier->public-bff" = { from = "phase-c-verifier", to = "public-bff" }
   }
 
   armor_env_services  = toset(["agent-runtime", "gateway", "benchmark-runner"])
