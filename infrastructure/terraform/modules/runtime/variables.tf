@@ -336,6 +336,22 @@ locals {
 
   # Callers of INTERNAL_ONLY destinations. web, observability-api, and
   # benchmark-runner do not send S2S to Internal Cloud Run.
+  #
+  # demo-evidence-orchestrator was omitted when added (d143dd3/4485cd1)
+  # despite calling two INTERNAL_ONLY destinations (intent-provenance,
+  # evidence-service) under the same identity as the phase-c-verifier JOB —
+  # which does carry this same network_interfaces/vpc-access-egress config
+  # (unconditionally, since Cloud Run Jobs use a plain vpc_access block here,
+  # not this dynamic/allowlisted one). Confirmed live via
+  # `gcloud run services describe`: every other entry in this set has
+  # run.googleapis.com/network-interfaces set to the tm-dev-s2s VPC/subnet
+  # with vpc-access-egress=all-traffic; demo-evidence-orchestrator alone had
+  # none of that, while its Job-identity twin did. Without it, its outbound
+  # calls to INTERNAL_ONLY destinations route over Cloud Run's default
+  # (non-VPC) egress, which those destinations' ingress does not recognize
+  # as internal — this is what produced the intent-tip poll's repeated
+  # failures traced in the deployment-prep report (one request reaching
+  # intent-provenance, then none, over two separate live incidents).
   vpc_callers = toset([
     "public-bff",
     "agent-runtime",
@@ -344,6 +360,7 @@ locals {
     "gateway",
     "outcome-resolution",
     "evidence-service",
+    "demo-evidence-orchestrator",
   ])
 
   service_env = {
