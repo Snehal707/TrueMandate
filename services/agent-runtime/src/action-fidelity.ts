@@ -3,9 +3,11 @@ import {
   ConstraintOperator,
 } from "@truemandate/protocol";
 import {
+  compareTermMonths,
   evaluateApprovalFactSatisfaction,
   isApprovalFactConcept,
   isRefundabilityFactConcept,
+  isTermFactConcept,
   normalizeRefundabilityFactValue,
   resolveCanonicalConcept,
   resolveCanonicalSemanticFact,
@@ -38,6 +40,24 @@ function constraintStatus(
   actualValue: unknown,
   semanticFactKey?: string,
 ): Pick<ActionFidelityRow, "status" | "reason"> {
+  if (isTermFactConcept(constraint.concept)) {
+    if (actualValue === undefined || actualValue === null) {
+      return {
+        status: "UNKNOWN",
+        reason: "Action is missing a deterministic value for this execution-critical constraint",
+      };
+    }
+    const termStatus = compareTermMonths(constraint.value, actualValue);
+    if (termStatus === "UNKNOWN") {
+      return {
+        status: "UNKNOWN",
+        reason: "Action term duration could not be compared deterministically",
+      };
+    }
+    return termStatus === "SATISFIED"
+      ? { status: "MATCH", reason: "Action preserves the required term duration" }
+      : { status: "MISMATCH", reason: "Action changes the required term duration" };
+  }
   if (
     semanticFactKey?.endsWith(".approval") ||
     isApprovalFactConcept(constraint.concept)

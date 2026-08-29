@@ -140,10 +140,15 @@ async function assertFullyAuthorizedAndReplaySafe(
 
 describe("SaaS, Invoice, Logistics: real demo-fixtures evidence through the full evidence-backed lifecycle", () => {
   it("SaaS reaches AUTHORIZED on the real fixture's evidence, including the fixed subscription_deadline", async () => {
+    // vendor REQUIRE "approved" and term EQ "12 months" are the exact shapes
+    // the live deployed compiler emits for this scenario (confirmed via a
+    // real cloud control run), not the bare `true`/`12` this test used
+    // before that run exposed the term representation gap — see
+    // saas-term-normalization.test.ts for the isolated proof.
     const value = await assertFullyAuthorizedAndReplaySafe("saas_it_spend", "manage_saas_subscription", [
-      explicitConstraint("c-vendor", "vendor", ConstraintOperator.EQ, true, ConstraintKind.HARD, "approved SaaS plan"),
+      explicitConstraint("c-vendor", "vendor", ConstraintOperator.REQUIRE, "approved", ConstraintKind.HARD, "approved SaaS plan"),
       explicitConstraint("c-seat-count", "seat_count", ConstraintOperator.EQ, 10, ConstraintKind.HARD, "10 seats"),
-      explicitConstraint("c-term", "term", ConstraintOperator.EQ, 12, ConstraintKind.HARD, "12 month term"),
+      explicitConstraint("c-term", "term", ConstraintOperator.EQ, "12 months", ConstraintKind.HARD, "12 month term"),
       explicitConstraint("c-renewal", "renewal", ConstraintOperator.EQ, "MANUAL", ConstraintKind.HARD, "manual renewal"),
       explicitConstraint("c-budget", "budget", ConstraintOperator.LT, 12000, ConstraintKind.FINANCIAL, "under USD 12000"),
       strictTemporalDeadline("c-subscription-deadline", "subscription_deadline", "2026-12-31T00:00:00.000Z", "before December 31, 2026"),

@@ -205,6 +205,51 @@ export function normalizeRefundabilityFactValue(value: unknown): boolean | undef
   return undefined;
 }
 
+/**
+ * SaaS's canonical `term` concept is contractually months-denominated — its
+ * evidence/action field names (term_months, termMonths) commit to the unit
+ * directly, so a bare number is never ambiguous. The live compiler has been
+ * observed emitting the same fact as a duration string with the unit
+ * embedded ("12 months") instead of the bare number every other numeric
+ * concept uses. Both are the same semantic fact; this recognizes only the
+ * representations that convert unambiguously and fails closed (UNKNOWN) on
+ * anything else — a different unit, spelled-out numbers, or free text — so
+ * this never becomes a general prose-duration parser.
+ */
+const TERM_MONTHS_PATTERN = /^(\d+)\s*months?$/;
+
+export function isTermFactConcept(concept: string): boolean {
+  return normalizeConceptName(concept) === "term";
+}
+
+export function normalizeTermMonths(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  }
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const months = Number(trimmed);
+    return months > 0 ? months : undefined;
+  }
+  const match = normalizeConceptName(trimmed)
+    .replace(/\s+/g, " ")
+    .match(TERM_MONTHS_PATTERN);
+  if (!match) return undefined;
+  const months = Number(match[1]);
+  return months > 0 ? months : undefined;
+}
+
+export function compareTermMonths(
+  expected: unknown,
+  actual: unknown,
+): "SATISFIED" | "UNSATISFIED" | "UNKNOWN" {
+  const expectedMonths = normalizeTermMonths(expected);
+  const actualMonths = normalizeTermMonths(actual);
+  if (expectedMonths === undefined || actualMonths === undefined) return "UNKNOWN";
+  return expectedMonths === actualMonths ? "SATISFIED" : "UNSATISFIED";
+}
+
 function aliasIndex(
   families: readonly ConceptFamily[],
 ): Result<ReadonlyMap<string, string>> {

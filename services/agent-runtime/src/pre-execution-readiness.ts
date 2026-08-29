@@ -1,11 +1,13 @@
 import { hashCanonical, proofObligationId } from "@truemandate/crypto";
 import {
   classifyRequiredProofCoverage,
+  compareTermMonths,
   evaluateApprovalFactSatisfaction,
   deriveRequiredProofObligations,
   isApprovalFactConcept,
   isRefundabilityFactConcept,
   isPrivilegedSemanticStateConsistent,
+  isTermFactConcept,
   normalizeRefundabilityFactValue,
   reconcileAmbiguitiesWithProofs,
   resolveCanonicalConcept,
@@ -141,6 +143,9 @@ function compareConstraint(
   semanticFactKey?: string,
 ): "SATISFIED" | "UNSATISFIED" | "UNKNOWN" {
   const expected = constraint.value;
+  if (isTermFactConcept(constraint.concept)) {
+    return compareTermMonths(expected, actualValue);
+  }
   if (
     semanticFactKey?.endsWith(".approval") ||
     isApprovalFactConcept(constraint.concept)
