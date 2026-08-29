@@ -30,6 +30,7 @@ export const TravelWorkflowDomainPayloadSchema = z
         checkInDate: z.string().min(1).optional(),
         checkOutDate: z.string().min(1).optional(),
         travelerCount: z.number().positive(),
+        completionDeadline: z.string().min(1).optional(),
       })
       .strict(),
     policy: z
@@ -68,6 +69,7 @@ export const TravelWorkflowRequestSchema = z
         checkInDate: z.string().min(1).optional(),
         checkOutDate: z.string().min(1).optional(),
         travelerCount: z.number().positive(),
+        completionDeadline: z.string().min(1).optional(),
       })
       .strict(),
     totalAmount: z.number().positive(),
@@ -140,6 +142,7 @@ function buildActionProposal(
       providerName: input.provider.name,
       providerApproved: input.provider.approved,
       refundableRequired: input.refundable ?? false,
+      completionDeadline: input.booking.completionDeadline,
       providerApprovalEvidenceId: input.provider.approvalEvidenceId,
       evidenceIds: input.evidenceIds,
       externalOfferNodeId: ctx.offerNodeId,
@@ -198,6 +201,15 @@ function evaluateActionFidelity(
       canonicalConcept: "budget",
       field: "action.amount",
       actualValue: action.amount,
+    },
+    {
+      // Previously missing entirely — completion_deadline had no action-
+      // fidelity check at all. parameters.completionDeadline is the
+      // action's own genuine completion/booking deadline (buildActionProposal
+      // above, sourced from input.booking.completionDeadline).
+      canonicalConcept: "completion_deadline",
+      field: "parameters.completionDeadline",
+      actualValue: actionField<string>(action, "completionDeadline"),
     },
   ]);
 }

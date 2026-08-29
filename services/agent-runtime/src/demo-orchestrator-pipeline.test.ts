@@ -138,7 +138,7 @@ const CASES: readonly DomainCase[] = [
     },
     payload: (evidenceId) => ({
       provider: { id: "Meridian Travel Partners", name: "Meridian Travel Partners", approved: true, approvalEvidenceId: evidenceId },
-      booking: { itineraryId: "it-1", lodgingName: "Seaside Lodge", travelDate: CHECK_IN, checkInDate: CHECK_IN, checkOutDate: CHECK_OUT, travelerCount: 2 },
+      booking: { itineraryId: "it-1", lodgingName: "Seaside Lodge", travelDate: CHECK_IN, checkInDate: CHECK_IN, checkOutDate: CHECK_OUT, travelerCount: 2, completionDeadline: DEADLINE },
       policy: { refundableRequired: true },
       evidenceIds: [evidenceId],
     }),
@@ -168,7 +168,7 @@ const CASES: readonly DomainCase[] = [
     },
     payload: (evidenceId) => ({
       vendor: { id: "approved-vendor", name: "Approved Vendor", approved: true, approvalEvidenceId: evidenceId },
-      subscription: { planId: "plan-business", planName: "Business Plan", termMonths: 12, renewalSetting: "MANUAL", seatCount: 10 },
+      subscription: { planId: "plan-business", planName: "Business Plan", termMonths: 12, renewalSetting: "MANUAL", seatCount: 10, subscriptionDeadline: DEADLINE },
       evidenceIds: [evidenceId],
     }),
   },

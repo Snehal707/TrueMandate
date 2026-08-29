@@ -82,7 +82,7 @@ const CASES: readonly DomainCase[] = [
     },
     payload: {
       provider: { id: "travel-provider", name: "Travel Provider", approved: true, approvalEvidenceId: EVIDENCE_ID },
-      booking: { itineraryId: "it-1", lodgingName: "Seaside Lodge", travelDate: CHECK_IN, checkInDate: CHECK_IN, checkOutDate: CHECK_OUT, travelerCount: 2 },
+      booking: { itineraryId: "it-1", lodgingName: "Seaside Lodge", travelDate: CHECK_IN, checkInDate: CHECK_IN, checkOutDate: CHECK_OUT, travelerCount: 2, completionDeadline: DEADLINE },
       policy: { refundableRequired: true },
       evidenceIds: [EVIDENCE_ID],
     },
@@ -119,7 +119,7 @@ const CASES: readonly DomainCase[] = [
     },
     payload: {
       vendor: { id: "approved-vendor", name: "Approved Vendor", approved: true, approvalEvidenceId: EVIDENCE_ID },
-      subscription: { planId: "plan-business", planName: "Business Plan", termMonths: 12, renewalSetting: "MANUAL", seatCount: 10 },
+      subscription: { planId: "plan-business", planName: "Business Plan", termMonths: 12, renewalSetting: "MANUAL", seatCount: 10, subscriptionDeadline: DEADLINE },
       evidenceIds: [EVIDENCE_ID],
     },
   },

@@ -162,6 +162,15 @@ const PROCUREMENT: DemoScenarioTemplate = {
   },
 };
 
+// The Travel control action's own approved completion/booking deadline —
+// the single source of truth for the domainPayload's booking.completionDeadline
+// and the booking_deadline evidence claim, so the claim actually proves the
+// deadline the action commits to. Strictly before the compiled constraint's
+// LT bound (2026-12-31), mirroring PROCUREMENT_EXECUTION_DEADLINE's exact
+// margin above: a claim sitting exactly on a strict inequality's boundary
+// does not satisfy it.
+const TRAVEL_COMPLETION_DEADLINE = "2026-12-30T23:59:59.000Z";
+
 const TRAVEL: DemoScenarioTemplate = {
   scenarioId: "travel",
   packId: "travel",
@@ -171,13 +180,22 @@ const TRAVEL: DemoScenarioTemplate = {
   evidenceCaptureTime: "2026-06-01T00:00:00.000Z",
   evidenceClaims: [
     { concept: "approved_provider", value: true },
+    // Provider IDENTITY, distinct from the approval claim above: proves
+    // WHICH provider, not merely that some provider is approved.
+    // "booking_provider" is an existing Travel ontology alias for the
+    // canonical "provider" concept with no approval-family membership, so
+    // it resolves to provider.identity — matched against a company-name
+    // value, never provider.approval. Same alias the "booking_provider
+    // identity constraint" test in generic-workflow.e2e.test.ts already
+    // exercises by hand.
+    { concept: "booking_provider", value: "Meridian Travel Partners" },
     { concept: "hotel_name", value: "Seaside Lodge" },
     { concept: "refundable", value: true },
     { concept: "traveler_count", value: 2 },
     { concept: "travel_budget", value: 3200 },
     { concept: "check_in_date", value: "2026-12-20T00:00:00.000Z" },
     { concept: "check_out_date", value: "2026-12-22T00:00:00.000Z" },
-    { concept: "booking_deadline", value: "2026-12-31T00:00:00.000Z" },
+    { concept: "booking_deadline", value: TRAVEL_COMPLETION_DEADLINE },
   ],
   domainPayload: (evidenceIds, action) => ({
     provider: {
@@ -200,6 +218,7 @@ const TRAVEL: DemoScenarioTemplate = {
       checkInDate: "2026-12-20T00:00:00.000Z",
       checkOutDate: "2026-12-22T00:00:00.000Z",
       travelerCount: 2,
+      completionDeadline: TRAVEL_COMPLETION_DEADLINE,
     },
     policy: { refundableRequired: true },
     evidenceIds,
@@ -251,6 +270,14 @@ const TRAVEL: DemoScenarioTemplate = {
   },
 };
 
+// The SaaS control action's own approved subscription-activation deadline —
+// the single source of truth for the domainPayload's
+// subscription.subscriptionDeadline and the subscription_deadline evidence
+// claim. Strictly before the compiled constraint's LT bound (2026-12-31),
+// mirroring TRAVEL_COMPLETION_DEADLINE's exact margin above: a claim sitting
+// exactly on a strict inequality's boundary does not satisfy it.
+const SAAS_SUBSCRIPTION_DEADLINE = "2026-12-30T23:59:59.000Z";
+
 const SAAS: DemoScenarioTemplate = {
   scenarioId: "saas_it_spend",
   packId: "saas_it_spend",
@@ -265,7 +292,7 @@ const SAAS: DemoScenarioTemplate = {
     { concept: "term_months", value: 12 },
     { concept: "renewal_setting", value: "MANUAL" },
     { concept: "saas_budget", value: 9000 },
-    { concept: "subscription_deadline", value: "2026-12-31T00:00:00.000Z" },
+    { concept: "subscription_deadline", value: SAAS_SUBSCRIPTION_DEADLINE },
   ],
   domainPayload: (evidenceIds, action) => ({
     vendor: {
@@ -287,6 +314,7 @@ const SAAS: DemoScenarioTemplate = {
       // meant to exercise.
       renewalSetting: typeof action.parameters.renewalSetting === "string" ? action.parameters.renewalSetting : "MANUAL",
       seatCount: 10,
+      subscriptionDeadline: SAAS_SUBSCRIPTION_DEADLINE,
     },
     evidenceIds,
   }),
@@ -316,6 +344,16 @@ const SAAS: DemoScenarioTemplate = {
   },
 };
 
+// The Invoice control action's own approved payment due date — the single
+// source of truth for the domainPayload's invoice.dueDate and the
+// invoice_due_date evidence claim. Both previously used dates that did not
+// genuinely precede rawText's stated "before November 30, 2026" bound
+// (invoice_due_date was 2026-12-31, a month AFTER the bound; domainPayload's
+// dueDate was 2026-11-20, an unrelated arbitrary value never tied to the
+// evidence claim). Strictly before 2026-11-30, mirroring
+// TRAVEL_COMPLETION_DEADLINE's exact margin.
+const INVOICE_DUE_DATE = "2026-11-29T23:59:59.000Z";
+
 const INVOICE: DemoScenarioTemplate = {
   scenarioId: "invoice_vendor_payment",
   packId: "invoice_vendor_payment",
@@ -328,7 +366,7 @@ const INVOICE: DemoScenarioTemplate = {
     { concept: "invoice_id", value: "INV-2026-001" },
     { concept: "duplicate_payment", value: "dup-1" },
     { concept: "invoice_amount", value: 24000 },
-    { concept: "invoice_due_date", value: "2026-12-31T00:00:00.000Z" },
+    { concept: "invoice_due_date", value: INVOICE_DUE_DATE },
   ],
   domainPayload: (evidenceIds, action) => ({
     payee: {
@@ -343,7 +381,7 @@ const INVOICE: DemoScenarioTemplate = {
     invoice: {
       invoiceId: action.product,
       poReference: "PO-77",
-      dueDate: "2026-11-20T00:00:00.000Z",
+      dueDate: INVOICE_DUE_DATE,
       duplicateCheckKey: "dup-1",
       remittanceReference: "remit-1",
     },
@@ -375,6 +413,16 @@ const INVOICE: DemoScenarioTemplate = {
   },
 };
 
+// The Logistics control action's own approved ship-by deadline — the single
+// source of truth for the domainPayload's shipment.shipBy and the
+// shipment_deadline evidence claim. Both previously used dates that did not
+// genuinely precede rawText's stated "before October 1, 2026" bound
+// (shipment_deadline was 2026-12-31, three months AFTER the bound;
+// domainPayload's shipBy was 2026-09-20, an unrelated arbitrary value never
+// tied to the evidence claim). Strictly before 2026-10-01, mirroring
+// TRAVEL_COMPLETION_DEADLINE's exact margin.
+const LOGISTICS_SHIPMENT_DEADLINE = "2026-09-30T23:59:59.000Z";
+
 const LOGISTICS: DemoScenarioTemplate = {
   scenarioId: "logistics_fulfillment",
   packId: "logistics_fulfillment",
@@ -388,7 +436,7 @@ const LOGISTICS: DemoScenarioTemplate = {
     { concept: "service_level", value: "EXPRESS" },
     { concept: "fulfill_count", value: 12 },
     { concept: "budget", value: 3500 },
-    { concept: "shipment_deadline", value: "2026-12-31T00:00:00.000Z" },
+    { concept: "shipment_deadline", value: LOGISTICS_SHIPMENT_DEADLINE },
   ],
   domainPayload: (evidenceIds, action) => ({
     provider: {
@@ -407,7 +455,7 @@ const LOGISTICS: DemoScenarioTemplate = {
       // mirrored here, exactly like merchant/product above, or the attack
       // never reaches the actionFidelity check it's meant to exercise.
       destination: typeof action.parameters.destination === "string" ? action.parameters.destination : "Mumbai Warehouse",
-      shipBy: "2026-09-20T00:00:00.000Z",
+      shipBy: LOGISTICS_SHIPMENT_DEADLINE,
       fulfillCount: 12,
     },
     evidenceIds,

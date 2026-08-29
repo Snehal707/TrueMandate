@@ -29,6 +29,7 @@ export const SaasItSpendWorkflowDomainPayloadSchema = z
         termMonths: z.number().positive(),
         renewalSetting: z.string().min(1),
         seatCount: z.number().positive(),
+        subscriptionDeadline: z.string().min(1).optional(),
       })
       .strict(),
     evidenceIds: z.array(z.string().min(1)).default([]),
@@ -59,6 +60,7 @@ export const SaasItSpendWorkflowRequestSchema = z
         termMonths: z.number().positive(),
         renewalSetting: z.string().min(1),
         seatCount: z.number().positive(),
+        subscriptionDeadline: z.string().min(1).optional(),
       })
       .strict(),
     totalAmount: z.number().positive(),
@@ -121,6 +123,7 @@ function buildActionProposal(
       seatCount: input.subscription.seatCount,
       termMonths: input.subscription.termMonths,
       renewalSetting: input.subscription.renewalSetting,
+      subscriptionDeadline: input.subscription.subscriptionDeadline,
       vendorApproved: input.vendor.approved,
       vendorApprovalEvidenceId: input.vendor.approvalEvidenceId,
       evidenceIds: input.evidenceIds,
@@ -175,6 +178,15 @@ function evaluateActionFidelity(
       canonicalConcept: "budget",
       field: "action.amount",
       actualValue: action.amount,
+    },
+    {
+      // Previously missing entirely — subscription_deadline had no action-
+      // fidelity check at all. parameters.subscriptionDeadline is the
+      // action's own genuine activation deadline (buildActionProposal
+      // above, sourced from input.subscription.subscriptionDeadline).
+      canonicalConcept: "subscription_deadline",
+      field: "parameters.subscriptionDeadline",
+      actualValue: actionField<string>(action, "subscriptionDeadline"),
     },
   ]);
 }

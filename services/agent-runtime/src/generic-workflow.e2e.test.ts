@@ -1942,7 +1942,7 @@ describe("Wave 4.6 multi-domain packs on the shared workflow runtime", () => {
         packId: "travel",
         payload: {
           provider: { id: "travel-provider", name: "Travel Provider", approved: true, approvalEvidenceId: "approval-evidence" },
-          booking: { itineraryId: "it-live-shape", lodgingName: "Seaside Lodge", travelDate: "2026-12-20T00:00:00.000Z", travelerCount: 2 },
+          booking: { itineraryId: "it-live-shape", lodgingName: "Seaside Lodge", travelDate: "2026-12-20T00:00:00.000Z", travelerCount: 2, completionDeadline: "2026-12-31T00:00:00.000Z" },
           policy: { refundableRequired: true },
           evidenceIds: ["approval-evidence", "traveler-count-evidence", "refund-evidence", "hotel-offer-evidence"],
         },
@@ -2302,7 +2302,7 @@ describe("Wave 4.6 multi-domain packs on the shared workflow runtime", () => {
         packId: "saas_it_spend",
         payload: {
           vendor: { id: "approved-vendor", name: "Approved Vendor", approved: true, approvalEvidenceId: "approval-evidence" },
-          subscription: { planId: "plan-business", planName: "Business Plan", termMonths: 12, renewalSetting: "MANUAL", seatCount: 10 },
+          subscription: { planId: "plan-business", planName: "Business Plan", termMonths: 12, renewalSetting: "MANUAL", seatCount: 10, subscriptionDeadline: "2026-12-31T00:00:00.000Z" },
           evidenceIds: ["approval-evidence", "seat-count-evidence", "term-renewal-evidence"],
         },
       },
@@ -2575,6 +2575,7 @@ describe("Repair 18 authoritative proof handoff", () => {
             checkInDate: "2026-12-20T00:00:00.000Z",
             checkOutDate: "2026-12-22T00:00:00.000Z",
             travelerCount: 2,
+            completionDeadline: "2026-12-31T00:00:00.000Z",
           },
           policy: { refundableRequired: true },
           evidenceIds,
