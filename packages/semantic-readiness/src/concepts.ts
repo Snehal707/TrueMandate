@@ -250,6 +250,39 @@ export function compareTermMonths(
   return expectedMonths === actualMonths ? "SATISFIED" : "UNSATISFIED";
 }
 
+function comparableScalarForOperator(value: unknown): string | number | boolean | undefined {
+  if (typeof value === "string") {
+    const date = Date.parse(value);
+    return Number.isNaN(date) ? value.trim().toLowerCase() : date;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  return undefined;
+}
+
+/**
+ * FORBID is REQUIRE's logical inverse: the expected value must NOT occur.
+ * Naively inverting REQUIRE's existing comparison (actual !== expected =>
+ * satisfied) is unsafe here specifically: REQUIRE's own `===` between two
+ * incomparable types (e.g. boolean vs string) is always false, which
+ * happens to land on REQUIRE's safe outcome (MISMATCH) without needing a
+ * type check — but the same `!==` would land on FORBID's UNSAFE outcome
+ * (SATISFIED) for the identical incomparable-types case. So FORBID needs
+ * an explicit type-compatibility gate REQUIRE doesn't: an actual value of
+ * a different underlying type than the forbidden value is never proof the
+ * forbidden condition is absent, and must fail closed to UNKNOWN rather
+ * than being treated as satisfying the prohibition.
+ */
+export function evaluateForbidSatisfaction(
+  expected: unknown,
+  actual: unknown,
+): "SATISFIED" | "UNSATISFIED" | "UNKNOWN" {
+  const expectedComparable = comparableScalarForOperator(expected);
+  const actualComparable = comparableScalarForOperator(actual);
+  if (expectedComparable === undefined || actualComparable === undefined) return "UNKNOWN";
+  if (typeof expectedComparable !== typeof actualComparable) return "UNKNOWN";
+  return actualComparable === expectedComparable ? "UNSATISFIED" : "SATISFIED";
+}
+
 function aliasIndex(
   families: readonly ConceptFamily[],
 ): Result<ReadonlyMap<string, string>> {

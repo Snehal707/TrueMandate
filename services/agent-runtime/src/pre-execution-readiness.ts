@@ -3,6 +3,7 @@ import {
   classifyRequiredProofCoverage,
   compareTermMonths,
   evaluateApprovalFactSatisfaction,
+  evaluateForbidSatisfaction,
   deriveRequiredProofObligations,
   isApprovalFactConcept,
   isRefundabilityFactConcept,
@@ -145,6 +146,9 @@ function compareConstraint(
   const expected = constraint.value;
   if (isTermFactConcept(constraint.concept)) {
     return compareTermMonths(expected, actualValue);
+  }
+  if (constraint.operator === "FORBID") {
+    return evaluateForbidSatisfaction(expected, actualValue);
   }
   if (
     semanticFactKey?.endsWith(".approval") ||

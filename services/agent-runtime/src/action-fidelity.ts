@@ -5,6 +5,7 @@ import {
 import {
   compareTermMonths,
   evaluateApprovalFactSatisfaction,
+  evaluateForbidSatisfaction,
   isApprovalFactConcept,
   isRefundabilityFactConcept,
   isTermFactConcept,
@@ -57,6 +58,24 @@ function constraintStatus(
     return termStatus === "SATISFIED"
       ? { status: "MATCH", reason: "Action preserves the required term duration" }
       : { status: "MISMATCH", reason: "Action changes the required term duration" };
+  }
+  if (constraint.operator === ConstraintOperator.FORBID) {
+    if (actualValue === undefined || actualValue === null) {
+      return {
+        status: "UNKNOWN",
+        reason: "Action is missing a deterministic value for this execution-critical constraint",
+      };
+    }
+    const forbidStatus = evaluateForbidSatisfaction(constraint.value, actualValue);
+    if (forbidStatus === "UNKNOWN") {
+      return {
+        status: "UNKNOWN",
+        reason: "Action value could not be compared deterministically against the forbidden value",
+      };
+    }
+    return forbidStatus === "SATISFIED"
+      ? { status: "MATCH", reason: "Action avoids the forbidden constraint value" }
+      : { status: "MISMATCH", reason: "Action matches a forbidden constraint value" };
   }
   if (
     semanticFactKey?.endsWith(".approval") ||
