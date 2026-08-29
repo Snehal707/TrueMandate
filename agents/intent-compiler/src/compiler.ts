@@ -2,6 +2,8 @@ import { hashCanonical } from "@truemandate/crypto";
 import type { ModelPort } from "@truemandate/model";
 import { PROTOCOL_VERSION } from "@truemandate/model";
 import {
+  ConstraintKind,
+  ConstraintMutability,
   ErrorCode,
   ProvenanceNodeKind,
   SemanticLifecycle,
@@ -72,6 +74,11 @@ const CANONICAL_NUMERIC_FINANCIAL_CONCEPTS = new Set([
   "total_price",
 ]);
 
+const EXECUTION_BOUND_TEMPORAL_OPERATORS = new Set(["LT", "LTE", "REQUIRE"]);
+const ABSOLUTE_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const ABSOLUTE_TIMESTAMP =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
 function requiresFiniteNumericFinancialValue(
   constraint: CandidateInterpretation["constraints"][number],
 ): boolean {
@@ -83,6 +90,43 @@ function requiresFiniteNumericFinancialValue(
   // Keep amount-style financial ceilings/floors canonicalized without
   // catching categorical financial constraints like payment_frequency.
   return /(amount|budget|cost|fee|limit|price|spend)$/.test(concept);
+}
+
+function isAbsoluteResolvedTemporalValue(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!ABSOLUTE_DATE_ONLY.test(trimmed) && !ABSOLUTE_TIMESTAMP.test(trimmed)) {
+    return false;
+  }
+  const parsed = Date.parse(trimmed);
+  if (Number.isNaN(parsed)) return false;
+  if (ABSOLUTE_DATE_ONLY.test(trimmed)) {
+    return new Date(parsed).toISOString().slice(0, 10) === trimmed;
+  }
+  return true;
+}
+
+function normalizeConstraintKind(
+  constraint: (typeof CompilerModelOutputSchema._type.constraints)[number],
+): typeof constraint.kind {
+  if (constraint.kind !== ConstraintKind.HARD) return constraint.kind;
+  if (constraint.sourceType !== "HUMAN" || constraint.meaningClass !== "EXPLICIT") {
+    return constraint.kind;
+  }
+  if (constraint.mutability === ConstraintMutability.SYSTEM_DERIVED) {
+    return constraint.kind;
+  }
+  if (!EXECUTION_BOUND_TEMPORAL_OPERATORS.has(constraint.operator)) {
+    return constraint.kind;
+  }
+  if (!isAbsoluteResolvedTemporalValue(constraint.temporalResolution?.resolvedValue)) {
+    return constraint.kind;
+  }
+  // Live Logistics proved the model can emit an execution-bound human
+  // deadline with valid temporal resolution but the wrong kind. Promote only
+  // that narrow shape so owner finalization can derive temporalAuthority
+  // without weakening its existing explicit-human gates.
+  return ConstraintKind.TEMPORAL;
 }
 
 export async function compileIntent(
@@ -170,7 +214,7 @@ export async function compileIntent(
     concept: c.concept,
     operator: c.operator,
     value: c.value ?? null,
-    kind: c.kind,
+    kind: normalizeConstraintKind(c),
     importance: c.importance,
     confidence: c.confidence,
     sourceType: c.sourceType,

@@ -18,6 +18,15 @@ function strictTemporalDeadline(id: string, concept: string, resolvedValue: stri
   return { ...temporalConstraint(id, concept, resolvedValue, originalExpression), operator: ConstraintOperator.LT };
 }
 
+function liveCompilerTemporalDeadline(
+  id: string,
+  concept: string,
+  resolvedValue: string,
+  originalExpression: string,
+) {
+  return { ...strictTemporalDeadline(id, concept, resolvedValue, originalExpression), kind: ConstraintKind.HARD };
+}
+
 /**
  * SaaS, Invoice, and Logistics carried through the real evidence-backed
  * lifecycle using the REAL, shipped @truemandate/demo-fixtures data (the
@@ -172,7 +181,11 @@ describe("SaaS, Invoice, Logistics: real demo-fixtures evidence through the full
       explicitConstraint("c-destination", "destination", ConstraintOperator.EQ, "Mumbai Warehouse", ConstraintKind.HARD, "Mumbai Warehouse"),
       explicitConstraint("c-service-level", "service_level", ConstraintOperator.EQ, "EXPRESS", ConstraintKind.HARD, "EXPRESS"),
       explicitConstraint("c-fulfillment-count", "fulfillment_count", ConstraintOperator.EQ, 12, ConstraintKind.HARD, "12"),
-      strictTemporalDeadline("c-shipment-deadline", "shipment_deadline", "2026-10-01T00:00:00.000Z", "before October 1, 2026"),
+      // Mirrors the live Logistics compiler defect that reached production:
+      // a fully grounded/resolved execution deadline mislabeled as HARD.
+      // This regression now proves compiler normalization, rather than hiding
+      // the bug behind a pre-normalized TEMPORAL helper shape.
+      liveCompilerTemporalDeadline("c-shipment-deadline", "shipment_deadline", "2026-10-01T00:00:00.000Z", "before October 1, 2026"),
     ]);
     expect(value.state).toBe("AUTHORIZED");
   });

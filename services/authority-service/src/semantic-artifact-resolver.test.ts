@@ -144,6 +144,30 @@ describe("semantic artifact resolver", () => {
         sourceRef: "deadline",
       },
     }],
+    ["unsupported temporal operator", {
+      constraints: [{ ...temporalConstraint, operator: "EQ" }],
+      temporalAuthority: {
+        executionNotAfter: "2026-12-31T00:00:00.000Z",
+        source: "EXPLICIT_HUMAN" as const,
+        sourceRef: "deadline",
+      },
+    }],
+    ["preference-kind source", {
+      constraints: [{ ...temporalConstraint, kind: "PREFERENCE" }],
+      temporalAuthority: {
+        executionNotAfter: "2026-12-31T00:00:00.000Z",
+        source: "EXPLICIT_HUMAN" as const,
+        sourceRef: "deadline",
+      },
+    }],
+    ["non-human source type", {
+      constraints: [{ ...temporalConstraint, sourceType: "SYSTEM" }],
+      temporalAuthority: {
+        executionNotAfter: "2026-12-31T00:00:00.000Z",
+        source: "EXPLICIT_HUMAN" as const,
+        sourceRef: "deadline",
+      },
+    }],
   ])("denies materialization for %s", (_name, state) => {
     expect(resolveTemporalExecutionBound(state, "2026-08-22T00:00:00.000Z").ok).toBe(false);
   });

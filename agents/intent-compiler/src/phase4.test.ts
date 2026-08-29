@@ -454,6 +454,196 @@ describe("Phase 4 Intent Compiler + Verifier", () => {
     }
   });
 
+  it("promotes the live Logistics shipment_deadline shape into temporal authority", async () => {
+    const rawText =
+      "Arrange 12 approved carrier EXPRESS fulfillment shipments to Mumbai Warehouse before October 1, 2026.";
+    const intents = new TestIntentOwner();
+    const provenance = new ProvenanceService();
+    const compilerModel = new FakeModel({
+      handlers: {
+        [COMPILER_SCHEMA_ID]: async () => ({
+          goal: "arrange fulfillment",
+          constraints: [
+            {
+              id: "c-provider",
+              concept: "provider",
+              operator: "REQUIRE",
+              value: "approved carrier",
+              kind: "HARD",
+              importance: 1,
+              confidence: 1,
+              sourceType: "HUMAN",
+              mutability: "IMMUTABLE",
+              meaningClass: "EXPLICIT",
+              grounding: { sourceText: "approved carrier", quoteExact: true },
+            },
+            {
+              id: "c-deadline",
+              concept: "shipment_deadline",
+              operator: "LT",
+              value: "2026-10-01T00:00:00Z",
+              kind: "HARD",
+              importance: 1,
+              confidence: 1,
+              sourceType: "HUMAN",
+              mutability: "IMMUTABLE",
+              meaningClass: "EXPLICIT",
+              grounding: {
+                sourceText: "before October 1, 2026",
+                quoteExact: true,
+              },
+              temporalResolution: {
+                originalExpression: "before October 1, 2026",
+                resolvedValue: "2026-10-01T00:00:00Z",
+                resolutionTimestamp: "2026-08-29T00:00:00.000Z",
+                timezone: "UTC",
+              },
+            },
+          ],
+          preferences: [],
+          assumptions: [],
+          ambiguities: [],
+          readiness: "EXECUTABLE",
+        }),
+      },
+    });
+    const verifierModel = new FakeModel({
+      handlers: {
+        [VERIFIER_SCHEMA_ID]: async () => ({
+          findings: [],
+          transformations: [],
+          criticalFailure: false,
+          readiness: "EXECUTABLE",
+          ambiguityClass: "A0",
+        }),
+      },
+    });
+    const result = await compileAndVerify(
+      {
+        principalId: "p",
+        rawText,
+        intentId: "intent-logistics-live-shape",
+        createdAt: "2026-08-29T00:00:00.000Z",
+      },
+      { intents, provenance, compilerModel, verifierModel },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const value = asCompleted(result);
+    const deadline = value.candidate.constraints.find((constraint) => constraint.id === "c-deadline");
+    expect(deadline?.kind).toBe(ConstraintKind.TEMPORAL);
+    expect(value.intentState?.temporalAuthority).toMatchObject({
+      source: "EXPLICIT_HUMAN",
+      sourceRef: "c-deadline",
+      executionNotAfter: "2026-10-01T00:00:00Z",
+    });
+  });
+
+  it.each([
+    [
+      "system-derived deadline",
+      {
+        mutability: "SYSTEM_DERIVED",
+      },
+    ],
+    [
+      "soft preference semantics",
+      {
+        kind: "SOFT",
+      },
+    ],
+    [
+      "unsupported operator",
+      {
+        operator: "EQ",
+      },
+    ],
+    [
+      "malformed resolved date",
+      {
+        temporalResolution: {
+          originalExpression: "before October 1, 2026",
+          resolvedValue: "not-a-date",
+          resolutionTimestamp: "2026-08-29T00:00:00.000Z",
+          timezone: "UTC",
+        },
+      },
+    ],
+  ] as const)(
+    "does not promote %s into materializable temporal authority",
+    async (_name, override) => {
+      const intents = new TestIntentOwner();
+      const provenance = new ProvenanceService();
+      const compilerModel = new FakeModel({
+        handlers: {
+          [COMPILER_SCHEMA_ID]: async () => ({
+            goal: "arrange fulfillment",
+            constraints: [
+              {
+                id: "c-deadline",
+                concept: "shipment_deadline",
+                operator: "LT",
+                value: "2026-10-01T00:00:00Z",
+                kind: "HARD",
+                importance: 1,
+                confidence: 1,
+                sourceType: "HUMAN",
+                mutability: "IMMUTABLE",
+                meaningClass: "EXPLICIT",
+                grounding: {
+                  sourceText: "before October 1, 2026",
+                  quoteExact: true,
+                },
+                temporalResolution: {
+                  originalExpression: "before October 1, 2026",
+                  resolvedValue: "2026-10-01T00:00:00Z",
+                  resolutionTimestamp: "2026-08-29T00:00:00.000Z",
+                  timezone: "UTC",
+                },
+                ...override,
+              },
+            ],
+            preferences: [],
+            assumptions: [],
+            ambiguities: [],
+            readiness: "EXECUTABLE",
+          }),
+        },
+      });
+      const verifierModel = new FakeModel({
+        handlers: {
+          [VERIFIER_SCHEMA_ID]: async () => ({
+            findings: [],
+            transformations: [],
+            criticalFailure: false,
+            readiness: "EXECUTABLE",
+            ambiguityClass: "A0",
+          }),
+        },
+      });
+      const result = await compileAndVerify(
+        {
+          principalId: "p",
+          rawText:
+            "Arrange 12 approved carrier EXPRESS fulfillment shipments to Mumbai Warehouse before October 1, 2026.",
+          intentId: `intent-logistics-negative-${_name.replaceAll(" ", "-")}`,
+          createdAt: "2026-08-29T00:00:00.000Z",
+        },
+        { intents, provenance, compilerModel, verifierModel },
+      );
+      if (_name === "unsupported operator") {
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.code).toBe(ErrorCode.TEMPORAL_MISMATCH);
+        return;
+      }
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const value = asCompleted(result);
+      expect(value.candidate.constraints[0]?.kind).not.toBe(ConstraintKind.TEMPORAL);
+      expect(value.intentState?.temporalAuthority).toBeUndefined();
+    },
+  );
+
   it("defective food_grade → industrial_grade is rejected; no privileged IntentState", async () => {
     const intents = new TestIntentOwner();
     const provenance = new ProvenanceService();
