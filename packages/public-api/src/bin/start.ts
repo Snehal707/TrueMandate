@@ -102,6 +102,7 @@ async function main(): Promise<void> {
     },
     approvalRead: {
       getApproval: (id) => authority.getApproval(id),
+      getEvaluation: (id) => authority.getEvaluation(id),
     },
     approvalDecide: {
       decideApproval: (id, body) => authority.decideApproval(id, body),

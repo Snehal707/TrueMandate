@@ -121,6 +121,7 @@ export function createLivePublicBffPorts(input: {
   /** Wave 1: durable approval lifecycle ports (owner reads/decisions only). */
   readonly approvalRead?: {
     getApproval(id: string): Promise<Result<unknown>> | Result<unknown>;
+    getEvaluation?(id: string): Promise<Result<unknown>> | Result<unknown>;
   };
   readonly approvalDecide?: {
     decideApproval(id: string, body: unknown): Promise<Result<unknown>> | Result<unknown>;
@@ -203,8 +204,46 @@ export function createLivePublicBffPorts(input: {
   const workflowSubmitPort: WorkflowSubmitPort | undefined = workflow
     ? { submitWorkflow: (raw) => Promise.resolve(workflow.submitWorkflow(raw)) }
     : undefined;
+  const enrichWorkflowRead = async (workflowId: string): Promise<Result<unknown>> => {
+    if (!workflow) {
+      return err(ErrorCode.VALIDATION_FAILED, "Workflow read is unavailable", {});
+    }
+    const resolved = await Promise.resolve(workflow.getWorkflow(workflowId));
+    if (!resolved.ok) return resolved;
+    if (!approvalRead) return resolved;
+
+    const body =
+      resolved.value && typeof resolved.value === "object" && !Array.isArray(resolved.value)
+        ? { ...(resolved.value as Record<string, unknown>) }
+        : undefined;
+    if (!body) return resolved;
+
+    const evaluationId = `evaluation-${workflowId}-authority-${workflowId}`;
+    const approvalId = `approval-${workflowId}`;
+    const [evaluation, approval] = await Promise.all([
+      approvalRead.getEvaluation
+        ? Promise.resolve(approvalRead.getEvaluation(evaluationId))
+        : Promise.resolve(undefined),
+      Promise.resolve(approvalRead.getApproval(approvalId)),
+    ]);
+
+    if (evaluation?.ok) {
+      body.evaluation = evaluation.value;
+    }
+    if (approval.ok) {
+      body.approval = toPublicApprovalView(approval.value as Record<string, unknown>);
+      if (
+        body.state === "AUTHORITY_EVALUATION" &&
+        (body.approval as { status?: unknown }).status === "PENDING"
+      ) {
+        body.state = "AWAITING_APPROVAL";
+      }
+    }
+
+    return ok(body);
+  };
   const workflowReadPort: WorkflowReadPort | undefined = workflow
-    ? { getWorkflow: (workflowId) => Promise.resolve(workflow.getWorkflow(workflowId)) }
+    ? { getWorkflow: (workflowId) => enrichWorkflowRead(workflowId) }
     : undefined;
   const workflowResumePort: WorkflowResumePort | undefined = workflow
     ? {

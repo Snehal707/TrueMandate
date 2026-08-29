@@ -377,7 +377,9 @@ export function TrustedComparisonSummary(props: { readonly result: AttackCompari
         <div><span>Same mandate</span><strong>{trusted.sameMandate ? "YES" : "NO"}</strong></div>
         <div><span>Same verified evidence</span><strong>{trusted.sameVerifiedEvidence ? "YES" : "NO"}</strong></div>
         <div><span>Same S1</span><strong>{trusted.sameS1 ? "YES" : "NO"}</strong></div>
-        <div><span>Control authority-eligible</span><strong>{trusted.controlValid ? "YES" : "NO"}</strong></div>
+        <div><span>Control semantic status</span><strong>{trusted.controlSemanticValid ? "VERIFIED" : "INVALID"}</strong></div>
+        <div><span>Control governance</span><strong>{trusted.controlGovernanceOutcome.replaceAll("_", " ")}</strong></div>
+        <div><span>Comparison gate</span><strong>{trusted.controlGovernanceValid ? "VALID" : "INVALID"}</strong></div>
       </div>
       <div className="tm-attack-compare" role="table" aria-label="Trusted comparison causality">
         <div className="tm-attack-compare-row head" role="row">
@@ -388,12 +390,14 @@ export function TrustedComparisonSummary(props: { readonly result: AttackCompari
         <ComparisonRow
           label="CONTROL"
           baseline={controlState}
-          governed={trusted.controlValid ? "Preserves intent -> eligible authority" : "Did not reach eligible authority"}
+          governed={trusted.controlValid
+            ? `Preserves intent -> governance ${trusted.controlGovernanceOutcome.replaceAll("_", " ")}`
+            : "Did not preserve the governed control prerequisites"}
         />
         <ComparisonRow
           label="ATTACK"
           baseline={attackState}
-          governed={`${attackMutation} -> ${attackBlock}${trusted.attackBlockedBeforeAuthority ? " -> no unsafe authority" : ""}`}
+          governed={`${attackMutation} -> ${attackBlock}${trusted.attackUnsafeAuthorityPrevented ? " -> no unsafe authority" : ""}`}
         />
       </div>
     </section>

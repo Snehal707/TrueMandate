@@ -184,6 +184,32 @@ describe("public-bff live adapters", () => {
         resumeWorkflow: async (workflowId, body) => ok({ workflowId, body }),
         commitWorkflow: async (workflowId) => ok({ workflowId, status: "SUCCESS" }),
       },
+      approvalRead: {
+        getApproval: async (id) =>
+          ok({
+            id,
+            workflowId: "wf-approval-1",
+            intentId: "intent-1",
+            intentStateId: "state-1",
+            status: "APPROVED",
+            requestedCapability: "execute_payment",
+            requestedScope: { amount: 1, currency: "USD", merchant: "supplier-1" },
+            requestedAt: "2026-08-21T00:00:00.000Z",
+            expiresAt: "2026-08-22T00:00:00.000Z",
+          }),
+        getEvaluation: async (id) =>
+          ok({
+            id,
+            decision: "ALLOW_WITH_MONITORING",
+            evaluation: {
+              id,
+              hash: "h",
+              materializationEligible: true,
+              materializationReason: "PENDING_MONITORING",
+              expiresAt: "2026-08-22T00:00:00.000Z",
+            },
+          }),
+      },
       outcomeRead: {
         getOutcomeContract: async (id) =>
           ok({
@@ -241,7 +267,14 @@ describe("public-bff live adapters", () => {
     const read = await Promise.resolve(
       ports.workflowRead?.getWorkflow("wf-2") ?? err(ErrorCode.VALIDATION_FAILED, "missing"),
     );
-    expect(read).toMatchObject({ ok: true, value: { workflowId: "wf-2", state: "AUTHORIZED" } });
+    expect(read).toMatchObject({
+      ok: true,
+      value: {
+        workflowId: "wf-2",
+        state: "AUTHORIZED",
+        evaluation: { decision: "ALLOW_WITH_MONITORING" },
+      },
+    });
 
     const committed = await Promise.resolve(
       ports.workflowCommit?.commitWorkflow("wf-3") ?? err(ErrorCode.VALIDATION_FAILED, "missing"),
@@ -257,5 +290,68 @@ describe("public-bff live adapters", () => {
       ports.resolutionRead?.getResolutionCaseByOutcome("outcome-1") ?? err(ErrorCode.VALIDATION_FAILED, "missing"),
     );
     expect(resolution).toMatchObject({ ok: true, value: { id: "rc-1", state: "OPEN" } });
+  });
+
+  it("reconstructs AWAITING_APPROVAL from durable approval state", async () => {
+    const ports = createLivePublicBffPorts({
+      intentCreate: stubIntentCreate(),
+      workspaceSource: {
+        getIntent: async () =>
+          ok({
+            id: "intent-stub-1",
+            principalId: "principal-1" as Intent["principalId"],
+            rawText: "Pay invoice",
+            createdAt: "2026-08-21T12:00:00.000Z",
+            contentHash: "hash-stub",
+          }),
+        getTip: async () => err(ErrorCode.VALIDATION_FAILED, "No IntentState tip for intent"),
+      },
+      evidence: new EvidenceService(),
+      workflow: {
+        submitWorkflow: async (raw) => ok({ echoed: raw }),
+        getWorkflow: async (workflowId) => ok({ workflowId, state: "AUTHORITY_EVALUATION" }),
+        resumeWorkflow: async (workflowId, body) => ok({ workflowId, body }),
+        commitWorkflow: async (workflowId) => ok({ workflowId, status: "SUCCESS" }),
+      },
+      approvalRead: {
+        getApproval: async () =>
+          ok({
+            id: "approval-wf-awaiting-1",
+            workflowId: "wf-awaiting-1",
+            intentId: "intent-1",
+            intentStateId: "state-1",
+            status: "PENDING",
+            requestedCapability: "pay_invoice",
+            requestedScope: { amount: 24000, currency: "USD", merchant: "approved-payee" },
+            requestedAt: "2026-08-29T19:57:32.461Z",
+            expiresAt: "2026-11-30T00:00:00Z",
+          }),
+        getEvaluation: async () =>
+          ok({
+            decision: "REQUIRE_APPROVAL",
+            evaluation: {
+              id: "evaluation-wf-awaiting-1-authority-wf-awaiting-1",
+              hash: "h",
+              materializationEligible: false,
+              materializationReason: "PENDING_APPROVAL",
+              expiresAt: "2026-11-30T00:00:00Z",
+            },
+          }),
+      },
+    });
+
+    const read = await Promise.resolve(
+      ports.workflowRead?.getWorkflow("wf-awaiting-1") ?? err(ErrorCode.VALIDATION_FAILED, "missing"),
+    );
+
+    expect(read).toMatchObject({
+      ok: true,
+      value: {
+        workflowId: "wf-awaiting-1",
+        state: "AWAITING_APPROVAL",
+        approval: { status: "PENDING" },
+        evaluation: { decision: "REQUIRE_APPROVAL" },
+      },
+    });
   });
 });

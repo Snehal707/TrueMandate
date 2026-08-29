@@ -493,7 +493,16 @@ export interface TrustedComparisonStatus {
   readonly sameMandate: boolean;
   readonly sameVerifiedEvidence: boolean;
   readonly sameS1: boolean;
+  readonly controlSemanticValid: boolean;
+  readonly controlGovernanceOutcome:
+    | "AUTHORIZED"
+    | "MONITORED"
+    | "REQUIRES_APPROVAL"
+    | "BLOCKED"
+    | "NOT_REACHED";
+  readonly controlGovernanceValid: boolean;
   readonly controlValid: boolean;
+  readonly attackUnsafeAuthorityPrevented: boolean;
   readonly attackBlockedBeforeAuthority: boolean;
 }
 
@@ -1325,6 +1334,92 @@ function authorityDecision(result: GovernedAttackResult): string | undefined {
       : undefined);
 }
 
+function evaluationReference(result: GovernedAttackResult): Record<string, unknown> | undefined {
+  if (!result.workflow?.evaluation || typeof result.workflow.evaluation !== "object" || Array.isArray(result.workflow.evaluation)) {
+    return undefined;
+  }
+  const evaluation = result.workflow.evaluation as Record<string, unknown>;
+  if (evaluation.evaluation && typeof evaluation.evaluation === "object" && !Array.isArray(evaluation.evaluation)) {
+    return evaluation.evaluation as Record<string, unknown>;
+  }
+  return evaluation;
+}
+
+function approvalView(result: GovernedAttackResult): Record<string, unknown> | undefined {
+  if (result.approval && typeof result.approval === "object" && !Array.isArray(result.approval)) {
+    return result.approval as Record<string, unknown>;
+  }
+  if (result.workflow?.approval && typeof result.workflow.approval === "object" && !Array.isArray(result.workflow.approval)) {
+    return result.workflow.approval as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+function stageDetail(
+  result: GovernedAttackResult,
+  stage: string,
+): string | undefined {
+  return result.workspace?.lifecycle?.stages.find((row) => row.stage === stage)?.detail;
+}
+
+function controlGovernanceOutcome(result: GovernedAttackResult):
+  | "AUTHORIZED"
+  | "MONITORED"
+  | "REQUIRES_APPROVAL"
+  | "BLOCKED"
+  | "NOT_REACHED" {
+  const decision = authorityDecision(result);
+  if (decision === "BLOCK" || result.workflow?.state === "BLOCKED") return "BLOCKED";
+  if (decision === "REQUIRE_APPROVAL" || result.workflow?.state === "AWAITING_APPROVAL") return "REQUIRES_APPROVAL";
+  if (decision === "ALLOW_WITH_MONITORING") return "MONITORED";
+  if (decision === "ALLOW" || result.workflow?.state === "AUTHORIZED" || result.commit?.status === "SUCCESS") return "AUTHORIZED";
+  return "NOT_REACHED";
+}
+
+function controlSemanticValid(result: GovernedAttackResult): boolean {
+  const blockingStage = result.workspace?.lifecycle?.blockingStage;
+  if (["evidence", "planVerification", "actionFidelity", "capabilityFidelity", "guardian", "authorityEligibility"].includes(blockingStage ?? "")) {
+    return false;
+  }
+  if (stageDetail(result, "planVerification") && stageDetail(result, "planVerification") !== "VERIFIED") return false;
+  if (result.workspace?.guardian.aggregator.criticalFailure) return false;
+  if (result.workspace?.guardian.aggregator.decision === "BLOCK") return false;
+  return true;
+}
+
+function approvalBindingValid(
+  result: GovernedAttackResult,
+  trusted: TrustedComparisonView,
+): boolean {
+  const approval = approvalView(result);
+  const evaluation = evaluationReference(result);
+  if (!approval || !evaluation) return false;
+  const expiresAt = typeof evaluation.expiresAt === "string" ? evaluation.expiresAt : undefined;
+  return approval.status === "PENDING" &&
+    approval.workflowId === result.workflow?.workflowId &&
+    approval.intentId === trusted.intentId &&
+    approval.intentStateId === trusted.boundIntentStateId &&
+    approval.authorityEvaluationId === evaluation.id &&
+    typeof expiresAt === "string" &&
+    Date.parse(expiresAt) > Date.now();
+}
+
+function controlGovernanceValid(
+  result: GovernedAttackResult,
+  trusted: TrustedComparisonView,
+): boolean {
+  const outcome = controlGovernanceOutcome(result);
+  if (outcome === "BLOCKED" || outcome === "NOT_REACHED") return false;
+  if (outcome === "REQUIRES_APPROVAL") {
+    const evaluation = evaluationReference(result);
+    return result.workflow?.state === "AWAITING_APPROVAL" &&
+      typeof evaluation?.id === "string" &&
+      evaluation.materializationReason === "PENDING_APPROVAL" &&
+      approvalBindingValid(result, trusted);
+  }
+  return true;
+}
+
 export function governedResultState(result: GovernedAttackResult): AttackResultState {
   if (result.error) return "FAILED";
   if (result.resolution) return "RESOLUTION_OPENED";
@@ -1371,23 +1466,32 @@ export function trustedComparisonStatus(result: AttackComparisonResult): Trusted
   const sameS1 =
     resultIntentStateId(result.control) === trusted.boundIntentStateId &&
     resultIntentStateId(result.governed) === trusted.boundIntentStateId;
-  const controlState = governedResultState(result.control);
-  const controlValid = controlState === "ALLOWED" || controlState === "EXECUTED";
+  const controlSemantic = controlSemanticValid(result.control);
+  const controlGovernance = controlGovernanceValid(result.control, trusted);
+  const controlValid = controlSemantic && controlGovernance;
   const attackBlockedBeforeAuthority =
     governedResultState(result.governed) === "BLOCKED" &&
     !result.governed.workflow?.execution?.status &&
     !result.governed.commit &&
     result.summary.economicSideEffectCount === 0;
+  const attackUnsafeAuthorityPrevented = sameMandate &&
+    sameVerifiedEvidence &&
+    sameS1 &&
+    attackBlockedBeforeAuthority;
 
   return {
     available: true,
-    verdict: sameMandate && sameVerifiedEvidence && sameS1 && controlValid
+    verdict: sameMandate && sameVerifiedEvidence && sameS1 && controlValid && attackUnsafeAuthorityPrevented
       ? "VERIFIED_COMPARISON"
       : "INCOMPLETE_COMPARISON",
     sameMandate,
     sameVerifiedEvidence,
     sameS1,
+    controlSemanticValid: controlSemantic,
+    controlGovernanceOutcome: controlGovernanceOutcome(result.control),
+    controlGovernanceValid: controlGovernance,
     controlValid,
+    attackUnsafeAuthorityPrevented,
     attackBlockedBeforeAuthority,
   };
 }
