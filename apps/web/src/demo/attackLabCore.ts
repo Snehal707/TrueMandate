@@ -472,8 +472,29 @@ export interface AttackComparisonResult {
   readonly vectorStatuses: readonly AttackVectorPresentation[];
   readonly provenanceOverlays: readonly AttackProvenanceOverlay[];
   readonly scenarioExport: AttackScenarioExportV1;
+  readonly trustedComparison?: TrustedComparisonView;
   readonly startedAt: string;
   readonly completedAt: string;
+}
+
+export interface TrustedComparisonView {
+  readonly scenarioId: string;
+  readonly variantId: string;
+  readonly intentId: string;
+  readonly boundIntentStateId: string;
+  readonly boundIntentStateHash: string;
+  readonly verifiedEvidenceIds: readonly string[];
+  readonly verifiedClaimIds: readonly string[];
+}
+
+export interface TrustedComparisonStatus {
+  readonly available: boolean;
+  readonly verdict: "VERIFIED_COMPARISON" | "INCOMPLETE_COMPARISON";
+  readonly sameMandate: boolean;
+  readonly sameVerifiedEvidence: boolean;
+  readonly sameS1: boolean;
+  readonly controlValid: boolean;
+  readonly attackBlockedBeforeAuthority: boolean;
 }
 
 export interface AttackSdkPort {
@@ -1182,6 +1203,7 @@ export async function executeTrustedAttackComparison(
     governed: GovernedAttackResult,
     control: GovernedAttackResult,
     request: SdkWorkflowRequest,
+    trustedComparison?: TrustedComparisonView,
   ): AttackComparisonResult => {
     const vectorStatuses = [...scenario.vectors].sort(compareVectors).map((attack) => ({
       vectorId: attack.id,
@@ -1211,6 +1233,7 @@ export async function executeTrustedAttackComparison(
       vectorStatuses,
       provenanceOverlays: governed.workflow ? buildOverlays(governed, scenario.vectors) : [],
       scenarioExport,
+      trustedComparison,
       startedAt,
       completedAt: now(),
     };
@@ -1228,12 +1251,22 @@ export async function executeTrustedAttackComparison(
     readonly attackWorkflowId?: unknown;
     readonly control?: unknown;
     readonly attack?: unknown;
+    readonly boundIntentStateId?: unknown;
+    readonly boundIntentStateHash?: unknown;
+    readonly verifiedEvidenceIds?: unknown;
+    readonly verifiedClaimIds?: unknown;
   };
   if (
     value.kind !== "attack" ||
     typeof value.intentId !== "string" ||
     typeof value.controlWorkflowId !== "string" ||
     typeof value.attackWorkflowId !== "string" ||
+    typeof value.boundIntentStateId !== "string" ||
+    typeof value.boundIntentStateHash !== "string" ||
+    !Array.isArray(value.verifiedEvidenceIds) ||
+    value.verifiedEvidenceIds.some((id) => typeof id !== "string") ||
+    !Array.isArray(value.verifiedClaimIds) ||
+    value.verifiedClaimIds.some((id) => typeof id !== "string") ||
     !value.control ||
     !value.attack
   ) {
@@ -1262,7 +1295,15 @@ export async function executeTrustedAttackComparison(
     [],
   );
 
-  return closeOut(governed, control, requestFor(intentId, value.attackWorkflowId));
+  return closeOut(governed, control, requestFor(intentId, value.attackWorkflowId), {
+    scenarioId,
+    variantId,
+    intentId,
+    boundIntentStateId: value.boundIntentStateId,
+    boundIntentStateHash: value.boundIntentStateHash,
+    verifiedEvidenceIds: [...value.verifiedEvidenceIds],
+    verifiedClaimIds: [...value.verifiedClaimIds],
+  });
 }
 
 export type AttackResultState =
@@ -1313,4 +1354,40 @@ export function firstVisibleRejectingStage(result: GovernedAttackResult): string
   if (result.workflow?.state === "BLOCKED") return "Workflow eligibility";
   if (result.error) return `Public request (${result.error.code})`;
   return undefined;
+}
+
+function resultIntentStateId(result: GovernedAttackResult): string | undefined {
+  return result.outcome?.intentStateId ??
+    result.resolution?.intentStateId ??
+    result.workspace?.summary.intentStateId;
+}
+
+export function trustedComparisonStatus(result: AttackComparisonResult): TrustedComparisonStatus | undefined {
+  const trusted = result.trustedComparison;
+  if (!trusted) return undefined;
+
+  const sameMandate = trusted.intentId.length > 0;
+  const sameVerifiedEvidence = trusted.verifiedEvidenceIds.length > 0 && trusted.verifiedClaimIds.length > 0;
+  const sameS1 =
+    resultIntentStateId(result.control) === trusted.boundIntentStateId &&
+    resultIntentStateId(result.governed) === trusted.boundIntentStateId;
+  const controlState = governedResultState(result.control);
+  const controlValid = controlState === "ALLOWED" || controlState === "EXECUTED";
+  const attackBlockedBeforeAuthority =
+    governedResultState(result.governed) === "BLOCKED" &&
+    !result.governed.workflow?.execution?.status &&
+    !result.governed.commit &&
+    result.summary.economicSideEffectCount === 0;
+
+  return {
+    available: true,
+    verdict: sameMandate && sameVerifiedEvidence && sameS1 && controlValid
+      ? "VERIFIED_COMPARISON"
+      : "INCOMPLETE_COMPARISON",
+    sameMandate,
+    sameVerifiedEvidence,
+    sameS1,
+    controlValid,
+    attackBlockedBeforeAuthority,
+  };
 }

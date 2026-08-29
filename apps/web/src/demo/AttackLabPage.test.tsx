@@ -8,6 +8,7 @@ import {
   AttackLabPage,
   AttackTrace,
   ControlSummary,
+  TrustedComparisonSummary,
   TwoLaneVerdict,
 } from "./AttackLabPage";
 import {
@@ -19,6 +20,7 @@ import {
   exportAttackScenario,
   generateRandomAttackScenario,
   TRUSTED_ATTACK_VARIANTS,
+  trustedComparisonStatus,
   validateAttackScenario,
   type AttackComparisonResult,
   type AttackScenarioDefinition,
@@ -352,6 +354,8 @@ describe("Attack Lab public truth boundary", () => {
     // Curated scenarios are selectable immediately.
     expect(html).toContain("tm-attack-scenario-grid");
     expect(html).toContain("500 units becomes 450");
+    expect(html).toContain("Trusted path available");
+    expect(html).not.toContain("Verified evidence");
     // Advanced modes remain reachable but behind a disclosure.
     expect(html).toContain("Advanced — compose your own adversarial scenario");
     expect(html).toContain("tm-attack-advanced");
@@ -603,6 +607,8 @@ describe("executeTrustedAttackComparison", () => {
         attack: { workflowId: "wf-attack-1", state: "BLOCKED" },
         boundIntentStateId: "state-1",
         boundIntentStateHash: "hash-1",
+        verifiedEvidenceIds: ["evidence-1"],
+        verifiedClaimIds: ["claim-1"],
       },
     }));
     const sdk = trustedSdk({ runDemoScenario });
@@ -615,6 +621,15 @@ describe("executeTrustedAttackComparison", () => {
     expect(runDemoScenario).toHaveBeenCalledWith("procurement", "quantity_drift");
     expect(result.control.workflow?.workflowId).toBe("wf-control-1");
     expect(result.governed.workflow?.workflowId).toBe("wf-attack-1");
+    expect(result.trustedComparison).toEqual({
+      scenarioId: "procurement",
+      variantId: "quantity_drift",
+      intentId: "demo-procurement-run1-intent",
+      boundIntentStateId: "state-1",
+      boundIntentStateHash: "hash-1",
+      verifiedEvidenceIds: ["evidence-1"],
+      verifiedClaimIds: ["claim-1"],
+    });
 
     // The shared lifecycle resolver (resolveGovernedResult) must have fired
     // for the control lane, since it came back AUTHORIZED — and only for the
@@ -658,6 +673,133 @@ describe("executeTrustedAttackComparison", () => {
     expect(result.governed.error?.code).toBe("SCHEMA_PARSE_FAILED");
     expect(result.control.error?.code).toBe("SCHEMA_PARSE_FAILED");
     expect(sdk.commitWorkflow).not.toHaveBeenCalled();
+  });
+});
+
+describe("trustedComparisonStatus", () => {
+  it("reports VERIFIED_COMPARISON only when runtime facts prove same mandate, same evidence, same S1, and a valid control lane", () => {
+    const result = {
+      scenario: trustedScenario(),
+      request: {
+        workflowId: "wf-attack-1",
+        idempotencyKey: "idem-1",
+        intent: { kind: "REFERENCE", intentId: "intent-1" },
+        action: { capability: "execute_payment", consequenceLevel: "HIGH", parameters: {} },
+        domain: { packId: "procurement", payload: {} },
+      },
+      baseline: baseline({ id: "scenario" } as SafeScenario),
+      governed: {
+        workflow: { workflowId: "wf-attack-1", state: "BLOCKED" },
+        workspace: {
+          summary: { intentId: "intent-1", rawIntent: "same", principalId: "demo", createdAt: "2026-08-29T00:00:00.000Z", intentStateId: "state-1", historicalStateIds: [] },
+          semantic: { intentId: "intent-1", rawIntent: "same", constraints: [] },
+          plan: { steps: [] },
+          guardian: { judges: [], aggregator: { decision: "ALLOW", semanticStatus: "CLEAR", criticalFailure: false } },
+          authority: { explanation: "blocked before authority" },
+          execution: { phase: "BLOCKED", sideEffects: [], unknownPending: false, blockedRetry: false },
+          graph: { nodes: [], edges: [] },
+          timeline: { events: [] },
+          lifecycle: { stages: [], blockingStage: "planVerification" },
+        } as unknown as IntentWorkspaceView,
+        evidence: [],
+      },
+      control: {
+        workflow: { workflowId: "wf-control-1", state: "AUTHORIZED" },
+        workspace: {
+          summary: { intentId: "intent-1", rawIntent: "same", principalId: "demo", createdAt: "2026-08-29T00:00:00.000Z", intentStateId: "state-1", historicalStateIds: [] },
+          semantic: { intentId: "intent-1", rawIntent: "same", constraints: [] },
+          plan: { steps: [] },
+          guardian: { judges: [], aggregator: { decision: "ALLOW", semanticStatus: "CLEAR", criticalFailure: false } },
+          authority: { decision: "ALLOW", explanation: "eligible" },
+          execution: { phase: "COMMIT", sideEffects: [], unknownPending: false, blockedRetry: false },
+          graph: { nodes: [], edges: [] },
+          timeline: { events: [] },
+        } as unknown as IntentWorkspaceView,
+        commit: { status: "SUCCESS" },
+        evidence: [],
+      },
+      validation: validateAttackScenario(trustedScenario()),
+      summary: {
+        vectorsAttempted: 1,
+        vectorsInfluencingBaseline: 1,
+        vectorsReachingGovernedWorkflow: 1,
+        vectorsBlockedOrEscalated: 1,
+        economicSideEffectCount: 0,
+        finalOutcome: "BLOCKED",
+      },
+      vectorStatuses: [],
+      provenanceOverlays: [],
+      scenarioExport: exportAttackScenario(trustedScenario()),
+      trustedComparison: {
+        scenarioId: "procurement",
+        variantId: "quantity_drift",
+        intentId: "intent-1",
+        boundIntentStateId: "state-1",
+        boundIntentStateHash: "hash-1",
+        verifiedEvidenceIds: ["evidence-1"],
+        verifiedClaimIds: ["claim-1"],
+      },
+      startedAt: "2026-08-29T00:00:00.000Z",
+      completedAt: "2026-08-29T00:00:01.000Z",
+    } satisfies AttackComparisonResult;
+
+    expect(trustedComparisonStatus(result)).toEqual({
+      available: true,
+      verdict: "VERIFIED_COMPARISON",
+      sameMandate: true,
+      sameVerifiedEvidence: true,
+      sameS1: true,
+      controlValid: true,
+      attackBlockedBeforeAuthority: true,
+    });
+
+    const html = renderToString(<TrustedComparisonSummary result={result} />);
+    expect(html).toContain("VERIFIED COMPARISON");
+    expect(html).toContain("Same verified evidence");
+    expect(html).toContain("QUANTITY REDUCTION");
+  });
+
+  it("reports INCOMPLETE_COMPARISON when runtime proof of the shared evidence/S1 invariant is missing", () => {
+    const result = {
+      scenario: trustedScenario(),
+      request: {
+        workflowId: "wf-attack-1",
+        idempotencyKey: "idem-1",
+        intent: { kind: "REFERENCE", intentId: "intent-1" },
+        action: { capability: "execute_payment", consequenceLevel: "HIGH", parameters: {} },
+        domain: { packId: "procurement", payload: {} },
+      },
+      baseline: baseline({ id: "scenario" } as SafeScenario),
+      governed: { workflow: { workflowId: "wf-attack-1", state: "BLOCKED" }, evidence: [] },
+      control: { workflow: { workflowId: "wf-control-1", state: "BLOCKED" }, evidence: [] },
+      validation: validateAttackScenario(trustedScenario()),
+      summary: {
+        vectorsAttempted: 1,
+        vectorsInfluencingBaseline: 1,
+        vectorsReachingGovernedWorkflow: 1,
+        vectorsBlockedOrEscalated: 1,
+        economicSideEffectCount: 0,
+        finalOutcome: "BLOCKED",
+      },
+      vectorStatuses: [],
+      provenanceOverlays: [],
+      scenarioExport: exportAttackScenario(trustedScenario()),
+      trustedComparison: {
+        scenarioId: "procurement",
+        variantId: "quantity_drift",
+        intentId: "intent-1",
+        boundIntentStateId: "state-1",
+        boundIntentStateHash: "hash-1",
+        verifiedEvidenceIds: [],
+        verifiedClaimIds: [],
+      },
+      startedAt: "2026-08-29T00:00:00.000Z",
+      completedAt: "2026-08-29T00:00:01.000Z",
+    } satisfies AttackComparisonResult;
+
+    expect(trustedComparisonStatus(result)?.verdict).toBe("INCOMPLETE_COMPARISON");
+    const html = renderToString(<TrustedComparisonSummary result={result} />);
+    expect(html).toContain("INCOMPLETE COMPARISON");
   });
 });
 

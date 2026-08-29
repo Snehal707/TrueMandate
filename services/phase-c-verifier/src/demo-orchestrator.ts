@@ -76,6 +76,8 @@ export interface DemoControlOrchestrationResult {
   readonly intentId: string;
   readonly workflowId: string;
   readonly workflow: Record<string, unknown>;
+  readonly verifiedEvidenceIds: readonly string[];
+  readonly verifiedClaimIds: readonly string[];
 }
 
 export interface DemoAttackOrchestrationResult {
@@ -86,6 +88,8 @@ export interface DemoAttackOrchestrationResult {
   readonly attack: Record<string, unknown>;
   readonly boundIntentStateId: string;
   readonly boundIntentStateHash: string;
+  readonly verifiedEvidenceIds: readonly string[];
+  readonly verifiedClaimIds: readonly string[];
 }
 
 export type DemoOrchestrationResult =
@@ -318,7 +322,14 @@ export async function runDemoOrchestration(
     );
     if (!submitted.ok) return submitted as Result<never>;
     const workflowId = String(submitted.value.workflowId ?? "");
-    return ok({ kind: "control", intentId, workflowId, workflow: submitted.value });
+    return ok({
+      kind: "control",
+      intentId,
+      workflowId,
+      workflow: submitted.value,
+      verifiedEvidenceIds: [...evidenceIds],
+      verifiedClaimIds: [...provisioned.value.claimIds],
+    });
   }
 
   // Attack variant: control leg 2 first, unpinned — the only call in this
@@ -369,5 +380,7 @@ export async function runDemoOrchestration(
     attack: attackSubmitted.value,
     boundIntentStateId,
     boundIntentStateHash,
+    verifiedEvidenceIds: [...evidenceIds],
+    verifiedClaimIds: [...provisioned.value.claimIds],
   });
 }

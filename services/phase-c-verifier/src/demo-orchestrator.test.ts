@@ -100,6 +100,8 @@ describe("control-only orchestration", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.kind).toBe("control");
+    expect(result.value.verifiedEvidenceIds).toEqual(["env-1-verified"]);
+    expect(result.value.verifiedClaimIds).toEqual(["claim-1-verified", "claim-2-verified"]);
     expect(ports.submitEvidenceCalls).toHaveLength(1);
     expect(ports.verifyEvidenceCalls).toHaveLength(1);
     // Leg 1 (RAW) + leg 2 (control) — exactly two workflow submissions.
@@ -193,6 +195,8 @@ describe("attack variant orchestration — single request, S1 sequencing", () =>
     expect(result.value.controlWorkflowId).not.toBe(result.value.attackWorkflowId);
     expect(result.value.boundIntentStateId).toBe("S1");
     expect(result.value.boundIntentStateHash).toBe("hash-s1");
+    expect(result.value.verifiedEvidenceIds).toEqual(["env-1-verified"]);
+    expect(result.value.verifiedClaimIds).toEqual(["claim-1-verified", "claim-2-verified"]);
   });
 });
 

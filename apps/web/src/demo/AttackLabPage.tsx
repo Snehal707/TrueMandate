@@ -14,6 +14,7 @@ import {
   firstVisibleRejectingStage,
   generateRandomAttackScenario,
   governedResultState,
+  trustedComparisonStatus,
   validateAttackScenario,
   type AttackComparisonResult,
   type AttackFamily,
@@ -348,6 +349,53 @@ export function ControlSummary(props: { readonly result: AttackComparisonResult 
           <dd>{controlStage ?? "No rejecting stage"}</dd>
         </div>
       </dl>
+    </section>
+  );
+}
+
+export function TrustedComparisonSummary(props: { readonly result: AttackComparisonResult }) {
+  const trusted = trustedComparisonStatus(props.result);
+  if (!trusted) return null;
+
+  const controlState = governedResultState(props.result.control);
+  const attackState = governedResultState(props.result.governed);
+  const attackMutation = props.result.scenario.vectors[0]?.mutation.replaceAll("_", " ") ?? "ATTACK";
+  const attackBlock = firstVisibleRejectingStage(props.result.governed) ?? "No rejecting stage publicly observed";
+
+  return (
+    <section className="tm-attack-results" aria-label="Trusted comparison status">
+      <div className="tm-attack-result-head">
+        <div>
+          <p className="tm-live-kicker">Trusted comparison status</p>
+          <h3>{trusted.verdict === "VERIFIED_COMPARISON" ? "VERIFIED COMPARISON" : "INCOMPLETE COMPARISON"}</h3>
+        </div>
+        <div className="tm-truth-cluster">
+          <ProductTruthBadge truthClass="LIVE" detail="RUNTIME-PROVEN" />
+        </div>
+      </div>
+      <div className="tm-attack-summary-strip">
+        <div><span>Same mandate</span><strong>{trusted.sameMandate ? "YES" : "NO"}</strong></div>
+        <div><span>Same verified evidence</span><strong>{trusted.sameVerifiedEvidence ? "YES" : "NO"}</strong></div>
+        <div><span>Same S1</span><strong>{trusted.sameS1 ? "YES" : "NO"}</strong></div>
+        <div><span>Control authority-eligible</span><strong>{trusted.controlValid ? "YES" : "NO"}</strong></div>
+      </div>
+      <div className="tm-attack-compare" role="table" aria-label="Trusted comparison causality">
+        <div className="tm-attack-compare-row head" role="row">
+          <span role="columnheader">Lane</span>
+          <strong role="columnheader">Observation</strong>
+          <strong role="columnheader">Causal summary</strong>
+        </div>
+        <ComparisonRow
+          label="CONTROL"
+          baseline={controlState}
+          governed={trusted.controlValid ? "Preserves intent -> eligible authority" : "Did not reach eligible authority"}
+        />
+        <ComparisonRow
+          label="ATTACK"
+          baseline={attackState}
+          governed={`${attackMutation} -> ${attackBlock}${trusted.attackBlockedBeforeAuthority ? " -> no unsafe authority" : ""}`}
+        />
+      </div>
     </section>
   );
 }
@@ -743,7 +791,7 @@ export function AttackLabPage(props: {
                     <strong>{entry.title}</strong>
                     <small>{LIVE_DEMO_DOMAINS.find((item) => item.id === entry.domainId)?.label}</small>
                     <em className="tm-attack-evidence-tag" data-trusted={Boolean(TRUSTED_ATTACK_VARIANTS[entry.id])}>
-                      {TRUSTED_ATTACK_VARIANTS[entry.id] ? "Verified evidence" : "Experimental · unevidenced"}
+                      {TRUSTED_ATTACK_VARIANTS[entry.id] ? "Trusted path available" : "Experimental · unevidenced"}
                     </em>
                   </button>
                 );
@@ -760,7 +808,7 @@ export function AttackLabPage(props: {
                     <span>Evidence basis</span>
                     <strong>
                       {trustedVariant
-                        ? "Trusted comparison — real verified evidence, one shared IntentState, server-owned control and attack actions"
+                        ? "Server-owned trusted path — runtime must still prove one shared verified evidence basis and one shared IntentState"
                         : "Experimental — not evidence-backed; browser-submitted content stays UNTRUSTED_EXTERNAL"}
                     </strong>
                   </div>
@@ -939,7 +987,7 @@ export function AttackLabPage(props: {
 
       {error ? <p className="tm-attack-runtime-error" role="alert">{error}</p> : null}
       <ScenarioExportPanel scenario={scenario} />
-      {result ? <><TwoLaneVerdict result={result} /><ControlSummary result={result} /><AttackComparison result={result} /><AttackTrace result={result} /><WhyDifferent result={result} /></> : (
+      {result ? <><TwoLaneVerdict result={result} /><TrustedComparisonSummary result={result} /><ControlSummary result={result} /><AttackComparison result={result} /><AttackTrace result={result} /><WhyDifferent result={result} /></> : (
         <section className="tm-attack-export-panel">
           <div className="tm-attack-result-head">
             <div>
