@@ -31,7 +31,7 @@ const CONTROL_EVIDENCE = [
     },
     claims: [
       { id: `${EVIDENCE_ID}-quantity`, evidenceId: EVIDENCE_ID, concept: "quantity", value: 500, confidence: 1 },
-      { id: `${EVIDENCE_ID}-material`, evidenceId: EVIDENCE_ID, concept: "food_grade", value: true, confidence: 1 },
+      { id: `${EVIDENCE_ID}-material`, evidenceId: EVIDENCE_ID, concept: "food_grade", value: "food-grade containers", confidence: 1 },
       { id: `${EVIDENCE_ID}-budget`, evidenceId: EVIDENCE_ID, concept: "budget", value: 742000, confidence: 1 },
       { id: `${EVIDENCE_ID}-supplier`, evidenceId: EVIDENCE_ID, concept: "approved_supplier", value: true, confidence: 1 },
       { id: `${EVIDENCE_ID}-deadline`, evidenceId: EVIDENCE_ID, concept: "execution_deadline", value: EXPIRY, confidence: 1 },

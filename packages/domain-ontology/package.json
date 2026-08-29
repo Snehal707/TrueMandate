@@ -1,0 +1,24 @@
+{
+  "name": "@truemandate/domain-ontology",
+  "version": "0.1.0",
+  "description": "Server-owned canonical concept vocabulary per domain pack — the single source of truth for constraint concept names, consumed by both the domain-agnostic intent-compiler (to constrain Gemini structured output) and agent-runtime (proof matching, action fidelity). Depends on nothing else in the workspace, so intent-compiler never depends on agent-runtime.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}

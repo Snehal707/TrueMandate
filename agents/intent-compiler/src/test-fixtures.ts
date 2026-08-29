@@ -14,6 +14,16 @@ export function cleanCompilerOutput(rawText: string) {
     : /food\s+grade/i.test(rawText)
       ? rawText.match(/food\s+grade/i)![0]!
       : "food grade";
+  // The genuine specification phrase (e.g. "food-grade containers"), not
+  // just the "food-grade" adjective — matches how the real compiler now
+  // extracts a material/specification constraint's value as the actual
+  // specification string, not a boolean flag. Falls back to a boolean when
+  // no following noun is present in the raw text, preserving old behavior
+  // for rawText that only asserts the adjective in isolation.
+  const foodGradeSpecMatch = rawText.match(/food[\s-]?grade\s+(\S+?)[.,;:!?]?(?=\s|$)/i);
+  const foodGradeValue: string | boolean = foodGradeSpecMatch
+    ? foodGradeSpecMatch[0]!
+    : true;
   const qtyMatch = rawText.match(/\b(500)\b/);
   const budgetMatch = rawText.match(/under\s+INR\s*800,?000/i);
 
@@ -46,7 +56,7 @@ export function cleanCompilerOutput(rawText: string) {
         id: "c-food",
         concept: "food_grade",
         operator: ConstraintOperator.REQUIRE,
-        value: true,
+        value: foodGradeValue,
         kind: ConstraintKind.HARD,
         importance: 1,
         confidence: 1,

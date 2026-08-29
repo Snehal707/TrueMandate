@@ -15,6 +15,12 @@ import type { WeakenedConstraint } from "@truemandate/authority";
 export function publishIntentRecordedEvent(
   publisher: PubSubPublisherPort | undefined,
   intent: Intent,
+  /**
+   * Compilation domain context — not a persisted Intent field, forwarded
+   * only into this event so the async compile-event handler can constrain
+   * concept vocabulary. See CreateIntentRequestSchema.packId.
+   */
+  packId?: string,
 ): void {
   const idempotencyKey = `intent-recorded:${intent.id}:${intent.contentHash}`;
   const envelope = createEnvelope({
@@ -34,6 +40,7 @@ export function publishIntentRecordedEvent(
       rawText: intent.rawText,
       createdAt: intent.createdAt,
       contentHash: intent.contentHash,
+      ...(packId ? { packId } : {}),
     },
     occurredAt: intent.createdAt,
   });

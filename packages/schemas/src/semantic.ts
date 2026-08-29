@@ -82,30 +82,41 @@ export const ModelConstraintValueSchema = z.union([
   z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])),
 ]);
 
-export const CandidateConstraintSchema = z
-  .object({
-    id: z.string().min(1),
-    concept: z.string().min(1),
-    operator: ConstraintOperatorSchema,
-    value: ModelConstraintValueSchema,
-    kind: ConstraintKindSchema,
-    importance: z.number().min(0).max(1),
-    confidence: z.number().min(0).max(1),
-    sourceType: SourceTypeSchema,
-    mutability: ConstraintMutabilitySchema,
-    meaningClass: MeaningClassSchema,
-    grounding: ConstraintGroundingSchema,
-    temporalResolution: TemporalResolutionSchema.optional(),
-    proofObligation: z
-      .object({
-        verificationStep: z.string().min(1),
-        requiredEvidence: z.string().min(1),
-        enforcingService: z.string().min(1),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
+/**
+ * `conceptSchema` defaults to a free-form string (unchanged historical
+ * behavior). A domain-aware compilation passes a closed `z.enum(...)`
+ * instead, so Gemini's structured output can only select one of the
+ * calling domain's canonical concepts — see buildCompilerModelOutputSchema.
+ */
+export function buildCandidateConstraintSchema(
+  conceptSchema: z.ZodType<string> = z.string().min(1),
+) {
+  return z
+    .object({
+      id: z.string().min(1),
+      concept: conceptSchema,
+      operator: ConstraintOperatorSchema,
+      value: ModelConstraintValueSchema,
+      kind: ConstraintKindSchema,
+      importance: z.number().min(0).max(1),
+      confidence: z.number().min(0).max(1),
+      sourceType: SourceTypeSchema,
+      mutability: ConstraintMutabilitySchema,
+      meaningClass: MeaningClassSchema,
+      grounding: ConstraintGroundingSchema,
+      temporalResolution: TemporalResolutionSchema.optional(),
+      proofObligation: z
+        .object({
+          verificationStep: z.string().min(1),
+          requiredEvidence: z.string().min(1),
+          enforcingService: z.string().min(1),
+        })
+        .strict()
+        .optional(),
+    })
+    .strict();
+}
+export const CandidateConstraintSchema = buildCandidateConstraintSchema();
 
 export const AmbiguityRecordSchema = z
   .object({
@@ -117,17 +128,36 @@ export const AmbiguityRecordSchema = z
   })
   .strict();
 
-/** Model-facing compiler output before hashing/lifecycle stamps. */
-export const CompilerModelOutputSchema = z
-  .object({
-    goal: z.string().min(1),
-    constraints: z.array(CandidateConstraintSchema),
-    preferences: z.array(CandidateConstraintSchema),
-    assumptions: z.array(AssumptionSchema),
-    ambiguities: z.array(AmbiguityRecordSchema),
-    readiness: IntentReadinessSchema,
-  })
-  .strict();
+/**
+ * Model-facing compiler output before hashing/lifecycle stamps.
+ *
+ * `canonicalConcepts`, when supplied, restricts `constraints[].concept` to
+ * that closed enum — Vertex's responseSchema conversion preserves string
+ * enums (see @truemandate/model's sanitizeForVertexResponseSchema), so this
+ * is a real, enforced constraint on what Gemini can emit, not documentation.
+ * `preferences[].concept` is deliberately NEVER constrained: preferences are
+ * soft, non-execution-critical, and legitimately open-ended (e.g.
+ * "prefer_morning") — they are never matched against a domain's canonical
+ * concept set downstream.
+ */
+export function buildCompilerModelOutputSchema(
+  canonicalConcepts?: readonly [string, ...string[]],
+) {
+  const constraintConceptSchema = canonicalConcepts
+    ? z.enum(canonicalConcepts)
+    : z.string().min(1);
+  return z
+    .object({
+      goal: z.string().min(1),
+      constraints: z.array(buildCandidateConstraintSchema(constraintConceptSchema)),
+      preferences: z.array(CandidateConstraintSchema),
+      assumptions: z.array(AssumptionSchema),
+      ambiguities: z.array(AmbiguityRecordSchema),
+      readiness: IntentReadinessSchema,
+    })
+    .strict();
+}
+export const CompilerModelOutputSchema = buildCompilerModelOutputSchema();
 
 export const CandidateInterpretationSchema = z
   .object({

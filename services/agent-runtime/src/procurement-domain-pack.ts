@@ -10,6 +10,7 @@ import type {
   OutcomeContractContext,
 } from "./domain-pack.js";
 import { actionField, evaluateActionChecks } from "./action-fidelity.js";
+import { conceptFamiliesFor } from "./ontology.js";
 
 export const ProcurementWorkflowDomainPayloadSchema = z.object({
   supplier: z.object({
@@ -134,9 +135,15 @@ function evaluateActionFidelity(
       },
     },
     {
+      // The constraint's own value is now the specification string itself
+      // (e.g. "food-grade containers"), not a yes/no flag — compare against
+      // the action's own specification string (parameters.itemSpecification,
+      // the same value as action.product), not the derived boolean
+      // foodGradeOffered. The generic comparator is unchanged; only the
+      // action-side field this Procurement-specific row reads from moved.
       canonicalConcept: "material",
-      field: "parameters.foodGradeOffered",
-      actualValue: actionField<boolean>(action, "foodGradeOffered"),
+      field: "parameters.itemSpecification",
+      actualValue: actionField<string>(action, "itemSpecification"),
     },
     {
       canonicalConcept: "quantity",
@@ -147,6 +154,15 @@ function evaluateActionFidelity(
       canonicalConcept: "budget",
       field: "action.amount",
       actualValue: action.amount,
+    },
+    {
+      // Previously missing entirely — delivery_deadline had no action-
+      // fidelity check at all. parameters.deliveryDeadline is the action's
+      // own genuine execution/delivery deadline (buildActionProposal above,
+      // sourced from input.delivery?.deadline — not a demo-only value).
+      canonicalConcept: "delivery_deadline",
+      field: "parameters.deliveryDeadline",
+      actualValue: actionField<string>(action, "deliveryDeadline"),
     },
   ]);
 }
@@ -203,19 +219,7 @@ export const ProcurementDomainPack: DomainPack<ProcurementInput> = {
     executionCapability: "execute_payment",
     executionLabel: "procurement purchase",
     requiredPhases: ["VERIFY_OFFER", "BIND_EVIDENCE", "EXECUTE", "VERIFY_OUTCOME"],
-    conceptFamilies: [
-      {
-        canonicalConcept: "supplier",
-        aliases: ["supplier", "approved_supplier", "supplier_approved", "supplier_status"],
-        factFamilies: [
-          { factType: "approval", aliases: ["approved_supplier", "supplier_approved"] },
-        ],
-      },
-      { canonicalConcept: "material", aliases: ["material", "food_grade", "food_grade_certificate", "food_grade_certified", "item_specification"] },
-      { canonicalConcept: "quantity", aliases: ["quantity", "quantity_min"] },
-      { canonicalConcept: "budget", aliases: ["budget", "budget_max", "budget_per_kg", "max_total_budget", "total_cost", "total_price", "price", "amount", "budget_limit"] },
-      { canonicalConcept: "delivery_deadline", aliases: ["delivery_deadline", "execution_deadline", "delivery_before", "arrive_before", "deadline"] },
-    ],
+    conceptFamilies: conceptFamiliesFor("procurement"),
     executionCriticalConceptRules: ["supplier", "material", "quantity", "budget", "delivery_deadline"]
       .map((canonicalConcept) => ({ canonicalConcept, proofMechanism: { kind: "EVIDENCE_OBLIGATION" as const } })),
     offerBackedCanonicalConcepts: ["budget", "delivery_deadline"],

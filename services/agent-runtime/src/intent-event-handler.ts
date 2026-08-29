@@ -34,6 +34,11 @@ export async function handleIntentCompileEvent(
       rawText: payload.rawText,
       intentId: typeof payload.intentId === "string" ? payload.intentId : undefined,
       taint: payload.taint,
+      // Present only when IntentService.createIntent was called with a
+      // domain context (RAW workflow submissions forward
+      // request.domain.packId — see workflow-dispatcher.ts). Absent for the
+      // standalone POST /v1/intents route, which stays free-form.
+      packId: typeof payload.packId === "string" ? payload.packId : undefined,
     },
     {
       ...deps,

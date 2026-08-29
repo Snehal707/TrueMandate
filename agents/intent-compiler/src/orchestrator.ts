@@ -97,6 +97,13 @@ export interface CompileAndVerifyInput {
   readonly createdAt?: string;
   /** External taint supplied with the event. Default human intent is NONE. */
   readonly taint?: unknown;
+  /**
+   * Domain selected by the caller at RAW workflow-submission time (see
+   * CompileOptions.packId in compiler.ts). Forwarded from the compile-event
+   * payload — see handleIntentCompileEvent. Absent for domain-agnostic /
+   * legacy compilation, which keeps free-form concept extraction unchanged.
+   */
+  readonly packId?: string;
 }
 
 export type CompileAndVerifyResult =
@@ -358,6 +365,7 @@ export async function compileAndVerify(
       timezone: input.timezone,
       requestId: `compile-${intent.id}-attempt-${attempt}`,
       inputTaint: taint,
+      packId: input.packId,
     });
     if (candidateResult.ok || !retryableStageAttempt(candidateResult) || attempt === compilationAttempts) {
       break;
@@ -502,6 +510,10 @@ export async function compileAndVerify(
           candidateHash: candidate.candidateHash,
           provenanceNodeIds: candidate.constraints.map((constraint) => candidateConstraintProvenanceNodeId(candidate.candidateHash, constraint.id)),
           createdAt: candidate.compiledAt,
+          // Inspectable, durable record of which domain (if any) constrained
+          // this compilation's concept vocabulary — distinct from whether a
+          // workflow later selects a domain, and never mutated afterward.
+          compilationDomain: input.packId ?? null,
         },
         predecessors: [],
         createdAt: candidate.compiledAt,

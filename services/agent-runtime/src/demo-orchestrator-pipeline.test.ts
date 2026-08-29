@@ -86,14 +86,14 @@ const CASES: readonly DomainCase[] = [
     capability: "execute_payment",
     constraints: [
       explicitConstraint("p-supplier", "approved_supplier", ConstraintOperator.EQ, true, ConstraintKind.HARD, "approved supplier"),
-      explicitConstraint("p-grade", "food_grade", ConstraintOperator.EQ, true, ConstraintKind.HARD, "food-grade"),
+      explicitConstraint("p-grade", "food_grade", ConstraintOperator.REQUIRE, "food-grade containers", ConstraintKind.HARD, "food-grade containers"),
       explicitConstraint("p-quantity", "quantity", ConstraintOperator.EQ, 500, ConstraintKind.HARD, "500"),
       explicitConstraint("p-budget", "budget", ConstraintOperator.LTE, 800000, ConstraintKind.FINANCIAL, "under INR 800000"),
       temporalConstraint("p-deadline", "execution_deadline", PROCUREMENT_DEADLINE, "before December 31, 2026"),
     ],
     facts: [
       ["approved_supplier", true],
-      ["food_grade", true],
+      ["food_grade", "food-grade containers"],
       ["quantity", 500],
       ["budget", 742000],
       ["execution_deadline", PROCUREMENT_DEADLINE],

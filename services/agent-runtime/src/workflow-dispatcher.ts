@@ -253,6 +253,13 @@ export class GenericWorkflowDispatcher {
       ...(request.intent.createdAt
         ? { createdAt: request.intent.createdAt }
         : {}),
+      // request.domain is required on every GenericWorkflowRequest (RAW or
+      // REFERENCE) — this is the one authoritative domain selection for the
+      // workflow, already present on this same request; a RAW submission
+      // can never disagree with itself about which domain it targets.
+      // Forwarded so compilation can constrain concept vocabulary to this
+      // domain's canonical set instead of compiling free-form.
+      packId: request.domain.packId,
     });
     if (!created.ok) return created as Result<GenericWorkflowRequest>;
     return ok({

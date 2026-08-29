@@ -20,16 +20,18 @@ import {
 } from "@truemandate/protocol";
 import type { ProvenanceService } from "@truemandate/provenance-service";
 import { candidateAssumptionProvenanceNodeId, candidateConstraintProvenanceNodeId } from "@truemandate/provenance";
-import { CompilerModelOutputSchema } from "@truemandate/schemas";
+import { buildCompilerModelOutputSchema, CompilerModelOutputSchema } from "@truemandate/schemas";
 import {
   reconcileUniqueExactSourceSpans,
   validateCandidateGrounding,
 } from "@truemandate/semantic-grounding";
+import { domainOntology } from "@truemandate/domain-ontology";
 import {
   COMPILER_PROMPT_VERSION,
   COMPILER_SCHEMA_ID,
   COMPILER_SCHEMA_VERSION,
   COMPILER_SYSTEM_INSTRUCTION,
+  compilerSystemInstructionFor,
 } from "./prompts/v1.js";
 
 export interface CompileOptions {
@@ -42,6 +44,18 @@ export interface CompileOptions {
   readonly requestId?: string;
   /** Survives CLEAN inspection. Defaults to NONE. */
   readonly inputTaint?: TaintMetadata;
+  /**
+   * The domain selected by the caller at workflow-submission time (RAW
+   * requests only forward this from request.domain.packId — see
+   * workflow-dispatcher.ts's toReferenceRequest). When it resolves to a
+   * known ontology, Gemini's structured-output schema is constrained to
+   * that domain's closed canonical concept vocabulary, and the parsed
+   * result is deterministically re-validated against it before hashing —
+   * no post-verifier rewrite, no alias normalization. Absent for
+   * domain-agnostic/legacy compilation (e.g. the standalone POST
+   * /v1/intents route), which keeps today's free-form behavior unchanged.
+   */
+  readonly packId?: string;
 }
 
 const CANONICAL_NUMERIC_FINANCIAL_CONCEPTS = new Set([
@@ -80,13 +94,33 @@ export async function compileIntent(
     classes: ["NONE"],
     origins: [],
   };
+
+  // Domain-aware compilation: when the caller resolved a packId (RAW
+  // workflow submissions only — see CompileOptions.packId), constrain
+  // Gemini's structured output to that domain's closed canonical concept
+  // vocabulary instead of the free-form default. Absent packId, or an
+  // unrecognized one, falls back to today's unrestricted behavior — this is
+  // the intentional backward-compatible path for the standalone
+  // POST /v1/intents route and any other legacy caller.
+  const ontology = options.packId ? domainOntology(options.packId) : undefined;
+  const canonicalConcepts =
+    ontology && ontology.concepts.length > 0
+      ? (ontology.concepts.map((concept) => concept.canonicalConcept) as [string, ...string[]])
+      : undefined;
+  const schema = canonicalConcepts
+    ? buildCompilerModelOutputSchema(canonicalConcepts)
+    : CompilerModelOutputSchema;
+  const systemInstruction = ontology
+    ? compilerSystemInstructionFor(ontology)
+    : COMPILER_SYSTEM_INSTRUCTION;
+
   const generated = await options.model.generateStructured({
     modelId: options.modelId ?? "intent-compiler",
     promptVersion: COMPILER_PROMPT_VERSION,
     schemaId: COMPILER_SCHEMA_ID,
     schemaVersion: COMPILER_SCHEMA_VERSION,
-    schema: CompilerModelOutputSchema,
-    systemInstruction: COMPILER_SYSTEM_INSTRUCTION,
+    schema,
+    systemInstruction,
     userPayload: {
       rawText: intent.rawText,
       intentId: intent.id,
@@ -102,6 +136,33 @@ export async function compileIntent(
   }
 
   const output = generated.value.value;
+
+  // Fail-closed double check: even though responseSchema already constrains
+  // Gemini to the enum above, deterministically re-validate every returned
+  // constraint concept against the same canonical set before this candidate
+  // is hashed, verified, or persisted. No guessing, no alias-normalization —
+  // an out-of-ontology concept rejects the whole compilation attempt through
+  // the existing retryable-then-terminal MODEL_OUTPUT_INVALID lifecycle
+  // (see MODEL_OUTPUT_RETRY_CODES / terminalModelOutputFailure in
+  // orchestrator.ts), the same path already used for grounding/negation/
+  // temporal-mismatch failures. Preferences are never checked — they are
+  // never restricted to the canonical vocabulary in the first place.
+  if (canonicalConcepts) {
+    const canonicalSet = new Set<string>(canonicalConcepts);
+    const offending = output.constraints.filter((c) => !canonicalSet.has(c.concept));
+    if (offending.length > 0) {
+      return err(
+        ErrorCode.MODEL_OUTPUT_INVALID,
+        `Constraint concept(s) outside the '${options.packId}' canonical ontology: ${offending.map((c) => c.concept).join(", ")}`,
+        {
+          packId: options.packId,
+          offendingConcepts: offending.map((c) => c.concept),
+          canonicalConcepts,
+        },
+      );
+    }
+  }
+
   const toCandidateConstraint = (
     c: (typeof output.constraints)[number],
   ): CandidateInterpretation["constraints"][number] => ({

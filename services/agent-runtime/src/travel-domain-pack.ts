@@ -10,6 +10,7 @@ import type {
   OutcomeContractContext,
 } from "./domain-pack.js";
 import { actionField, evaluateActionChecks } from "./action-fidelity.js";
+import { conceptFamiliesFor } from "./ontology.js";
 
 export const TravelWorkflowDomainPayloadSchema = z
   .object({
@@ -244,109 +245,7 @@ export const TravelDomainPack: DomainPack<TravelInput> = {
     executionCapability: "book_travel",
     executionLabel: "travel booking",
     requiredPhases: ["VERIFY_OFFER", "BIND_EVIDENCE", "EXECUTE", "VERIFY_OUTCOME"],
-    conceptFamilies: [
-      {
-        canonicalConcept: "provider",
-        aliases: [
-          "provider",
-          "approved_provider",
-          "provider_approval",
-          "provider_approval_status",
-          "booking_provider",
-          "booking_channel",
-          "booking_provider_approval",
-          "service_provider",
-          "travel_provider",
-          "travel_provider_approval",
-        ],
-        factFamilies: [
-          {
-            factType: "approval",
-            aliases: [
-              "approved_provider",
-              "provider_approval",
-              "provider_approval_status",
-              "booking_provider_approval",
-              "travel_provider_approval",
-            ],
-          },
-        ],
-      },
-      {
-        canonicalConcept: "property",
-        aliases: [
-          "property",
-          "property_name",
-          "accommodation_vendor",
-          "lodging_facility",
-          "lodging_name",
-          "lodging_property",
-          "lodging_property_name",
-          "hotel",
-          "hotel_name",
-          "lodging",
-          "hotel_property",
-          "accommodation_name",
-        ],
-      },
-      {
-        canonicalConcept: "refundability",
-        aliases: [
-          "refund",
-          "refundable",
-          "refundability",
-          "refundable_policy",
-          "refundable_rate",
-          "cancellation_policy",
-        ],
-      },
-      {
-        canonicalConcept: "stay_count",
-        aliases: [
-          "booking_count",
-          "booking_quantity",
-          "stay_count",
-          "hotel_stay_count",
-          "stay_quantity",
-          "hotel_booking_quantity",
-          "hotel_stay_quantity",
-          "traveler_count",
-          "room_quantity",
-        ],
-      },
-      {
-        canonicalConcept: "stay_start",
-        aliases: ["stay_date", "stay_start_date", "travel_date", "check_in", "check_in_date", "checkin_date"],
-      },
-      {
-        canonicalConcept: "stay_end",
-        aliases: ["stay_end_date", "check_out", "check_out_date", "checkout_date"],
-      },
-      {
-        canonicalConcept: "completion_deadline",
-        aliases: [
-          "completion_deadline",
-          "booking_completion_deadline",
-          "booking_execution_deadline",
-          "booking_deadline",
-          "execution_deadline",
-          "deadline",
-        ],
-      },
-      {
-        canonicalConcept: "budget",
-        aliases: [
-          "budget",
-          "travel_budget",
-          "total_budget",
-          "total_cost_budget",
-          "total_cost",
-          "total_cost_usd",
-          "total_price",
-          "price",
-        ],
-      },
-    ],
+    conceptFamilies: conceptFamiliesFor("travel"),
     executionCriticalConceptRules: [
       "provider", "property", "refundability", "stay_count", "stay_start", "stay_end", "completion_deadline", "budget",
     ].map((canonicalConcept) => ({ canonicalConcept, proofMechanism: { kind: "EVIDENCE_OBLIGATION" as const } })),

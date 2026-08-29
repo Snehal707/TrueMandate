@@ -37,7 +37,7 @@ const PROCUREMENT_EVIDENCE = [
     },
     claims: [
       { id: "demo-procurement-quantity", evidenceId: "demo-procurement-offer", concept: "quantity", value: 500, confidence: 1 },
-      { id: "demo-procurement-material", evidenceId: "demo-procurement-offer", concept: "food_grade", value: true, confidence: 1 },
+      { id: "demo-procurement-material", evidenceId: "demo-procurement-offer", concept: "food_grade", value: "food-grade containers", confidence: 1 },
       { id: "demo-procurement-budget", evidenceId: "demo-procurement-offer", concept: "budget", value: 742000, confidence: 1 },
       { id: "demo-procurement-supplier", evidenceId: "demo-procurement-offer", concept: "approved_supplier", value: true, confidence: 1 },
       { id: "demo-procurement-deadline", evidenceId: "demo-procurement-offer", concept: "execution_deadline", value: EXPIRY, confidence: 1 },

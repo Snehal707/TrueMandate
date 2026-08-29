@@ -40,6 +40,12 @@ const CreateIntentRequestSchema = z
     rawText: z.string().min(1),
     id: z.string().min(1).optional(),
     createdAt: z.string().min(1).optional(),
+    // Domain context for compilation, not a persisted Intent field — RAW
+    // workflow submissions forward request.domain.packId (see
+    // workflow-dispatcher.ts's toReferenceRequest); direct callers of this
+    // route (e.g. the standalone POST /v1/intents path) legitimately have
+    // none, and compilation stays free-form for them.
+    packId: z.string().min(1).optional(),
   })
   .strict();
 
@@ -113,7 +119,7 @@ export class IntentService {
       if (existing.contentHash === contentHash && existing.rawText === parsed.value.rawText) {
         const tip = await this.repo.getTip(id);
         if (!tip) {
-          publishIntentRecordedEvent(this.publisher, existing);
+          publishIntentRecordedEvent(this.publisher, existing, parsed.value.packId);
         }
         return ok(existing);
       }
@@ -132,7 +138,7 @@ export class IntentService {
     if (!validated.ok) return validated;
 
     await this.repo.putIntent(intent);
-    publishIntentRecordedEvent(this.publisher, intent);
+    publishIntentRecordedEvent(this.publisher, intent, parsed.value.packId);
     return ok(intent);
   }
 

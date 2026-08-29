@@ -88,7 +88,12 @@ export interface DomainPlanningDescriptor {
 }
 
 export interface ActionFidelityRow {
-  readonly constraintId: string;
+  /**
+   * Absent only for a fail-closed UNKNOWN row produced when no compiled
+   * constraint resolves to this check's canonicalConcept at all — there is
+   * no constraint to attribute the row to. See action-fidelity.ts.
+   */
+  readonly constraintId?: string;
   readonly canonicalConcept: string;
   readonly field: string;
   readonly expectedValue: unknown;

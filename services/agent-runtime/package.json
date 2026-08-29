@@ -14,6 +14,7 @@
     "@truemandate/cloud-runtime": "workspace:*",
     "@truemandate/cloud-security": "workspace:*",
     "@truemandate/crypto": "workspace:*",
+    "@truemandate/domain-ontology": "workspace:*",
     "@truemandate/guardian": "workspace:*",
     "@truemandate/guardian-core": "workspace:*",
     "@truemandate/intent-compiler": "workspace:*",

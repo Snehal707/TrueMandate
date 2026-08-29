@@ -177,6 +177,7 @@ export function evaluateActionChecks(
   checks: readonly ActionFidelityCheck[],
 ): ActionFidelityEvaluation {
   const rows: ActionFidelityRow[] = [];
+  const resolvedConstraintIds = new Set<string>();
   for (const check of checks) {
     const canonicalConcept = check.canonicalConcept.trim().toLowerCase();
     const expectedFactKey = check.factType?.trim()
@@ -198,6 +199,7 @@ export function evaluateActionChecks(
       return resolved === canonicalConcept;
     });
     for (const constraint of matchingConstraints) {
+      resolvedConstraintIds.add(constraint.id);
       const factKey = expectedFactKey ?? resolveCanonicalSemanticFact(
         constraint.concept,
         planning.conceptFamilies,
@@ -214,6 +216,32 @@ export function evaluateActionChecks(
         reason: status.reason,
       });
     }
+    // A compiled state legitimately omits many canonical concepts a domain
+    // pack's check list enumerates (not every intent asserts every possible
+    // dimension) — that alone is not suspicious and must not fail closed.
+  }
+  // Fail-closed, not silent: separately from per-check coverage above, any
+  // compiled constraint that resolves to NO canonical concept in this
+  // domain's ontology at all — not merely "this one check had no hit" — is
+  // the actual silent-drop danger (a real, execution-relevant requirement
+  // that vanished from fidelity evaluation because its concept string never
+  // matched anything). state.constraints never contains PREFERENCE-kind
+  // items (those live in CandidateInterpretation.preferences and are never
+  // copied onto IntentState.constraints — see finalizeVerifiedCompilation),
+  // so nothing here needs excluding by kind. The comparator in
+  // constraintStatus() above is unchanged either way.
+  for (const constraint of state.constraints) {
+    if (resolvedConstraintIds.has(constraint.id)) continue;
+    if (resolveCanonicalConcept(constraint.concept, planning.conceptFamilies) !== undefined) continue;
+    rows.push({
+      constraintId: constraint.id,
+      canonicalConcept: constraint.concept,
+      field: "(unresolved)",
+      expectedValue: constraint.value,
+      actualValue: undefined,
+      status: "UNKNOWN",
+      reason: "Constraint concept does not resolve to any canonical concept in this domain's ontology",
+    });
   }
   return {
     rows,

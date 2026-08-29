@@ -10,6 +10,7 @@ import type {
   OutcomeContractContext,
 } from "./domain-pack.js";
 import { actionField, evaluateActionChecks } from "./action-fidelity.js";
+import { conceptFamiliesFor } from "./ontology.js";
 
 export const SaasItSpendWorkflowDomainPayloadSchema = z
   .object({
@@ -219,21 +220,7 @@ export const SaasItSpendDomainPack: DomainPack<SaasItSpendInput> = {
     executionCapability: "manage_saas_subscription",
     executionLabel: "SaaS subscription provisioning",
     requiredPhases: ["VERIFY_OFFER", "BIND_EVIDENCE", "EXECUTE", "VERIFY_OUTCOME"],
-    conceptFamilies: [
-      {
-        canonicalConcept: "vendor",
-        aliases: ["vendor", "approved_vendor", "preferred_vendor", "vendor_identity"],
-        factFamilies: [
-          { factType: "approval", aliases: ["approved_vendor", "preferred_vendor"] },
-        ],
-      },
-      { canonicalConcept: "plan", aliases: ["plan", "plan_name", "subscription", "subscription_plan"] },
-      { canonicalConcept: "seat_count", aliases: ["seat_count", "license", "license_count"] },
-      { canonicalConcept: "term", aliases: ["term", "term_months", "subscription_term"] },
-      { canonicalConcept: "renewal", aliases: ["renewal", "renewal_setting"] },
-      { canonicalConcept: "budget", aliases: ["budget", "saas_budget", "total_cost", "total_price", "price", "amount"] },
-      { canonicalConcept: "subscription_deadline", aliases: ["subscription_deadline", "completion_deadline", "deadline"] },
-    ],
+    conceptFamilies: conceptFamiliesFor("saas_it_spend"),
     executionCriticalConceptRules: ["vendor", "plan", "seat_count", "term", "renewal", "budget", "subscription_deadline"]
       .map((canonicalConcept) => ({ canonicalConcept, proofMechanism: { kind: "EVIDENCE_OBLIGATION" as const } })),
     offerBackedCanonicalConcepts: ["term", "renewal", "budget"],

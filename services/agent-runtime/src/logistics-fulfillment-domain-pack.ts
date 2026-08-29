@@ -10,6 +10,7 @@ import type {
   OutcomeContractContext,
 } from "./domain-pack.js";
 import { actionField, evaluateActionChecks } from "./action-fidelity.js";
+import { conceptFamiliesFor } from "./ontology.js";
 
 export const LogisticsFulfillmentWorkflowDomainPayloadSchema = z
   .object({
@@ -217,20 +218,7 @@ export const LogisticsFulfillmentDomainPack: DomainPack<LogisticsFulfillmentInpu
     executionCapability: "arrange_fulfillment",
     executionLabel: "logistics fulfillment",
     requiredPhases: ["VERIFY_OFFER", "BIND_EVIDENCE", "EXECUTE", "VERIFY_OUTCOME"],
-    conceptFamilies: [
-      {
-        canonicalConcept: "provider",
-        aliases: ["provider", "approved_carrier", "carrier"],
-        factFamilies: [
-          { factType: "approval", aliases: ["approved_carrier"] },
-        ],
-      },
-      { canonicalConcept: "destination", aliases: ["destination", "delivery_destination"] },
-      { canonicalConcept: "service_level", aliases: ["service_level", "delivery_service_level"] },
-      { canonicalConcept: "shipment_deadline", aliases: ["shipment_deadline", "ship_by", "delivery_deadline"] },
-      { canonicalConcept: "fulfillment_count", aliases: ["fulfill_count", "fulfillment_count", "shipment_quantity", "quantity"] },
-      { canonicalConcept: "budget", aliases: ["budget", "total_cost", "total_price", "price", "amount"] },
-    ],
+    conceptFamilies: conceptFamiliesFor("logistics_fulfillment"),
     executionCriticalConceptRules: ["provider", "destination", "service_level", "shipment_deadline", "fulfillment_count", "budget"]
       .map((canonicalConcept) => ({ canonicalConcept, proofMechanism: { kind: "EVIDENCE_OBLIGATION" as const } })),
     offerBackedCanonicalConcepts: ["destination", "service_level", "shipment_deadline", "budget"],

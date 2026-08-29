@@ -17,6 +17,7 @@
   "dependencies": {
     "@truemandate/cloud-security": "workspace:*",
     "@truemandate/crypto": "workspace:*",
+    "@truemandate/domain-ontology": "workspace:*",
     "@truemandate/intent-service": "workspace:*",
     "@truemandate/intent-verifier": "workspace:*",
     "@truemandate/model": "workspace:*",

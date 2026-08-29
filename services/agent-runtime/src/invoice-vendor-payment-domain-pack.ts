@@ -10,6 +10,7 @@ import type {
   OutcomeContractContext,
 } from "./domain-pack.js";
 import { actionField, evaluateActionChecks } from "./action-fidelity.js";
+import { conceptFamiliesFor } from "./ontology.js";
 
 export const InvoiceVendorPaymentWorkflowDomainPayloadSchema = z
   .object({
@@ -212,19 +213,7 @@ export const InvoiceVendorPaymentDomainPack: DomainPack<InvoiceVendorPaymentInpu
     executionCapability: "pay_invoice",
     executionLabel: "invoice payment",
     requiredPhases: ["VERIFY_OFFER", "BIND_EVIDENCE", "EXECUTE", "VERIFY_OUTCOME"],
-    conceptFamilies: [
-      {
-        canonicalConcept: "payee",
-        aliases: ["payee", "approved_payee", "vendor", "vendor_identity"],
-        factFamilies: [
-          { factType: "approval", aliases: ["approved_payee"] },
-        ],
-      },
-      { canonicalConcept: "invoice_identity", aliases: ["invoice_identity", "invoice_id", "invoice"] },
-      { canonicalConcept: "duplicate_payment", aliases: ["duplicate", "duplicate_payment"] },
-      { canonicalConcept: "due_date", aliases: ["due_date", "invoice_due_date"] },
-      { canonicalConcept: "amount", aliases: ["amount", "invoice_amount", "invoice_budget", "budget", "total_cost", "price"] },
-    ],
+    conceptFamilies: conceptFamiliesFor("invoice_vendor_payment"),
     executionCriticalConceptRules: ["payee", "invoice_identity", "duplicate_payment", "due_date", "amount"]
       .map((canonicalConcept) => ({ canonicalConcept, proofMechanism: { kind: "EVIDENCE_OBLIGATION" as const } })),
     offerBackedCanonicalConcepts: ["due_date", "amount"],

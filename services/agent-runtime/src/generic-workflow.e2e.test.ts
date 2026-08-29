@@ -1191,10 +1191,43 @@ describe("GenericWorkflowEngine pre-execution E2E", () => {
     expect(published).toBeDefined();
     if (!published) return;
 
+    // The RAW submission's request.domain.packId ("procurement", via
+    // genericRequest() above) now flows through createIntent into the
+    // published event and into compilation — see workflow-dispatcher.ts's
+    // toReferenceRequest. That correctly constrains this call to
+    // Procurement's canonical concept vocabulary, so — unlike the shared
+    // r.compiler (which still emits the deterministic free-form vocabulary
+    // other tests in this file rely on) — this compile needs its own model
+    // emitting canonical concepts. This test is about RAW-submission retry
+    // plumbing, not vocabulary; only enough shape to finalize is needed.
+    const canonicalCompiler = new FakeModel({
+      handlers: {
+        // replaceConstraints recomputes grounding from each constraint's own
+        // sourceText/temporalResolution.originalExpression against this
+        // exact rawText — required here because, unlike explicitConstraint's
+        // default (sourceText defaults to the concept name), a canonical
+        // concept like "delivery_deadline" never appears verbatim in the raw
+        // text and would otherwise fail assertNoInventedConcepts.
+        "compiler.candidate.v1": async () =>
+          replaceConstraints(body.intent.rawText, [
+            explicitConstraint("c-quantity", "quantity", ConstraintOperator.EQ, 500, ConstraintKind.HARD, "500"),
+            explicitConstraint("c-material", "material", ConstraintOperator.REQUIRE, "food-grade containers", ConstraintKind.HARD, "food-grade containers"),
+            explicitConstraint("c-supplier", "supplier", ConstraintOperator.REQUIRE, true, ConstraintKind.HARD, "approved supplier"),
+            explicitConstraint("c-budget", "budget", ConstraintOperator.LTE, 800000, ConstraintKind.FINANCIAL, "under INR 800000"),
+            temporalConstraint("c-deadline", "delivery_deadline", EXPIRY, "before 2026-12-31T17:00:00.000Z"),
+          ])({
+            goal: "Procure food-grade containers",
+            preferences: [],
+            assumptions: [],
+            ambiguities: [],
+            readiness: "PLANNABLE",
+          }),
+      },
+    });
     const compiled = await handleIntentCompileEvent(published.envelope, {
       intents: r.owner as never,
       provenance: r.provenance,
-      compilerModel: r.compiler,
+      compilerModel: canonicalCompiler,
       verifierModel: r.verifier,
       modelSecurity: new FakeModelArmor({
         defaultStatus: ModelInspectionStatus.CLEAN,
@@ -1213,6 +1246,92 @@ describe("GenericWorkflowEngine pre-execution E2E", () => {
       authorize: 0,
       commit: 0,
     });
+  });
+
+  it("canonicalizes before hashing, hands the verifier canonical concepts, and never rewrites concepts after verification", async () => {
+    const r = await runtime();
+    const body = {
+      ...genericRequest(),
+      intent: {
+        kind: "RAW",
+        principalId: "principal-e2e",
+        rawText:
+          "Buy 500 food-grade containers from an approved supplier for under INR 800000 before 2026-12-31T17:00:00.000Z",
+      },
+      idempotencyKey: "generic-raw-intent-hash-ordering-e2e",
+    };
+    const submitted = await r.dispatcher.submitWorkflow(body);
+    expect(submitted.ok).toBe(false);
+    if (submitted.ok) return;
+
+    const published = r.intentPublisher.published.find(
+      (entry) => entry.topic === "intent.events" && entry.envelope.type === "INTENT_RECORDED",
+    );
+    expect(published).toBeDefined();
+    if (!published) return;
+
+    const CANONICAL_CONCEPTS = ["quantity", "material", "supplier", "budget", "delivery_deadline"];
+    const canonicalCompiler = new FakeModel({
+      handlers: {
+        "compiler.candidate.v1": async () =>
+          replaceConstraints(body.intent.rawText, [
+            explicitConstraint("c-quantity", "quantity", ConstraintOperator.EQ, 500, ConstraintKind.HARD, "500"),
+            explicitConstraint("c-material", "material", ConstraintOperator.REQUIRE, "food-grade containers", ConstraintKind.HARD, "food-grade containers"),
+            explicitConstraint("c-supplier", "supplier", ConstraintOperator.REQUIRE, true, ConstraintKind.HARD, "approved supplier"),
+            explicitConstraint("c-budget", "budget", ConstraintOperator.LTE, 800000, ConstraintKind.FINANCIAL, "under INR 800000"),
+            temporalConstraint("c-deadline", "delivery_deadline", EXPIRY, "before 2026-12-31T17:00:00.000Z"),
+          ])({
+            goal: "Procure food-grade containers",
+            preferences: [],
+            assumptions: [],
+            ambiguities: [],
+            readiness: "PLANNABLE",
+          }),
+      },
+    });
+
+    const compiled = await handleIntentCompileEvent(published.envelope, {
+      intents: r.owner as never,
+      provenance: r.provenance,
+      compilerModel: canonicalCompiler,
+      verifierModel: r.verifier,
+      modelSecurity: new FakeModelArmor({ defaultStatus: ModelInspectionStatus.CLEAN }),
+    });
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    const result = compiled.value as {
+      status: string;
+      candidate: { constraints: readonly { concept: string }[]; candidateHash: string };
+      verification: { lifecycle: string; criticalFailure: boolean };
+      intentState?: { constraints: readonly { concept: string }[] };
+    };
+    expect(result.status).toBe("COMPLETED");
+
+    // Canonicalization happens inside compileIntent, strictly before
+    // candidateWithoutHash/hashCanonical — compilation could not have
+    // succeeded at all (see the compiler nondeterminism regression tests)
+    // if any constraint's concept were outside the canonical set. This
+    // asserts the positive side directly against the persisted candidate.
+    const candidateConcepts = result.candidate.constraints.map((c) => c.concept).sort();
+    expect(candidateConcepts).toEqual([...CANONICAL_CONCEPTS].sort());
+
+    // The hash is a hash of exactly the (already-canonical) candidate
+    // fields — reconstructing candidateWithoutHash from the returned
+    // candidate and rehashing it must reproduce the same candidateHash.
+    const { candidateHash, ...withoutHash } = result.candidate as unknown as Record<string, unknown>;
+    expect(hashCanonical(withoutHash)).toBe(candidateHash);
+
+    // The verifier accepted the canonical candidate outright — it never
+    // needed to relabel or reinterpret any concept to reach VERIFIED.
+    expect(result.verification.lifecycle).toBe("VERIFIED");
+    expect(result.verification.criticalFailure).toBe(false);
+
+    // No post-verifier semantic mutation: the finalized, persisted
+    // IntentState carries the exact same concept set the compiler produced
+    // and the verifier examined — nothing renamed or rewritten downstream.
+    expect(result.intentState).toBeDefined();
+    const stateConcepts = (result.intentState?.constraints ?? []).map((c) => c.concept).sort();
+    expect(stateConcepts).toEqual(candidateConcepts);
   });
 
   it("commits by workflowId through the generic dispatcher without exposing the commit token", async () => {
