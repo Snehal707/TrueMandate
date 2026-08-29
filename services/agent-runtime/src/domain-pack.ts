@@ -132,6 +132,30 @@ export interface DomainPack<TInput extends WorkflowRequestBase> {
    */
   resolveExecutionIdempotencyKey?(input: TInput): string;
 
+  /**
+   * Server-owned inputs for this pack's DETERMINISTIC_RULE-mechanism
+   * constraints (see ExecutionCriticalConceptRule), keyed by ruleId. Computed
+   * ONLY from the already-parsed, server-validated workflow input -- MUST
+   * NEVER echo or forward a caller-supplied "satisfied"/boolean claim. Only
+   * raw identity/binding data that evaluateDeterministicRule will
+   * independently re-derive and check belongs here. Absent for packs with no
+   * DETERMINISTIC_RULE constraints.
+   */
+  buildDeterministicRuleInputs?(input: TInput): Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+  /**
+   * Server-side evaluator for one of this pack's DETERMINISTIC_RULE-mechanism
+   * constraints, called by PreExecutionReadinessService -- never by a
+   * caller-facing route directly. Must fail closed to UNKNOWN on a missing,
+   * malformed, or unrecognized ruleId/inputs, and must never return SATISFIED
+   * merely because some input value is present -- it must independently
+   * derive the canonical identity itself and compare.
+   */
+  evaluateDeterministicRule?(
+    ruleId: string,
+    inputs: Readonly<Record<string, unknown>> | undefined,
+  ): { readonly status: "SATISFIED" | "UNSATISFIED" | "UNKNOWN"; readonly reason: string };
+
   buildActionProposal(input: TInput, ctx: ActionProposalContext): DomainActionFields;
 
   /**

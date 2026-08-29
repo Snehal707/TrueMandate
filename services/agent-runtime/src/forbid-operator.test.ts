@@ -161,24 +161,33 @@ describe("FORBID operator: readiness comparison uses the same shared semantics",
   it("boolean vs boolean (synthetic, not the real Invoice gap): FORBID true / claim false -> SATISFIED", async () => {
     const template = demoScenarioTemplate("invoice_vendor_payment")!;
     const evidenceId = "forbid-readiness-boolean-offer";
+    // Deliberately NOT named "duplicate_payment": that concept is now Invoice's
+    // own DETERMINISTIC_RULE-mechanism constraint (see the Invoice structural
+    // duplicate-payment repair), so it no longer routes through the generic
+    // EVIDENCE_OBLIGATION/compareConstraint path this test exists to prove.
+    // A synthetic concept name that resolves to no canonical concept in
+    // Invoice's ontology falls back to the domain-agnostic HARD-kind
+    // obligation path (constraintRequiresProofObligation), keeping this test
+    // decoupled from Invoice's specific business semantics, exactly as its
+    // own name says ("synthetic, not the real Invoice gap").
     const rt = await runtime({
       rawText: template.rawText,
       omitProofSummary: true,
       compilerTransform: replaceConstraints(template.rawText, [
-        explicitConstraint("c-duplicate-payment", "duplicate_payment", ConstraintOperator.FORBID, true, ConstraintKind.HARD, "one time"),
+        explicitConstraint("c-forbid-boolean", "synthetic_forbid_check", ConstraintOperator.FORBID, true, ConstraintKind.HARD, "one time"),
       ]),
-      demoEvidence: [{ envelope: envelope(evidenceId), claims: claims(evidenceId, [{ concept: "duplicate_payment", value: false }]) }],
+      demoEvidence: [{ envelope: envelope(evidenceId), claims: claims(evidenceId, [{ concept: "synthetic_forbid_check", value: false }]) }],
     });
     const result = await rt.preExecutionReadiness!.evaluate({
       packId: "invoice_vendor_payment",
       intentId: "intent-e2e",
       intentStateId: rt.state.id,
       verifiedEvidenceIds: [evidenceId],
-      verifiedClaimIds: [`${evidenceId}-duplicate_payment`],
+      verifiedClaimIds: [`${evidenceId}-synthetic_forbid_check`],
     });
     expect(result.ok).toBe(true);
     const row = result.ok
-      ? (result.value as { proofRows: readonly { constraintId?: string; status: string }[] }).proofRows.find((r) => r.constraintId === "c-duplicate-payment")
+      ? (result.value as { proofRows: readonly { constraintId?: string; status: string }[] }).proofRows.find((r) => r.constraintId === "c-forbid-boolean")
       : undefined;
     expect(row?.status).toBe("SATISFIED");
   });

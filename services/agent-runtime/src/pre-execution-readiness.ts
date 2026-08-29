@@ -33,6 +33,18 @@ const PreExecutionReadinessRequestSchema = z
     expectedIntentStateHash: z.string().min(1).optional(),
     verifiedEvidenceIds: z.array(z.string().min(1)).default([]),
     verifiedClaimIds: z.array(z.string().min(1)).default([]),
+    /**
+     * Server-owned inputs for the calling pack's DETERMINISTIC_RULE-mechanism
+     * constraints, keyed by ruleId (see DomainPack.buildDeterministicRuleInputs
+     * / evaluateDeterministicRule). This request is invoked both in-process by
+     * GenericWorkflowEngine (which builds this field itself, from
+     * already-schema-validated workflow input) and by the standalone
+     * verifier-identity-gated route -- in neither case is it a browser-facing
+     * "satisfied" claim; the pack's own evaluator independently re-derives and
+     * checks the claimed binding below. Absent when the calling pack has no
+     * DETERMINISTIC_RULE constraints.
+     */
+    deterministicRuleInputs: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   })
   .strict();
 
@@ -454,7 +466,7 @@ export class PreExecutionReadinessService {
       temporalAuthority: state.value.temporalAuthority,
       conceptContract: pack.planning,
     });
-    const proofRows: ProofRow[] = obligations.map((obligation) => {
+    const evidenceObligationRows: ProofRow[] = obligations.map((obligation) => {
       const constraint = obligation.constraintId
         ? state.value.constraints.find((item) => item.id === obligation.constraintId)
         : undefined;
@@ -498,6 +510,42 @@ export class PreExecutionReadinessService {
         proofMechanism: "EVIDENCE_OBLIGATION",
       };
     });
+    // DETERMINISTIC_RULE constraints never enter `obligations` above
+    // (deriveRequiredProofObligations excludes them deliberately -- there is
+    // no evidence obligation to derive), so they need their own row-
+    // production path here. No EvidenceEnvelope/EvidenceClaim is fabricated
+    // for these; evaluation is delegated entirely to the OWNING pack's own
+    // server-side evaluator, using ONLY the server-computed
+    // deterministicRuleInputs this request carries -- never a caller-supplied
+    // "satisfied" claim (see DomainPack.evaluateDeterministicRule's
+    // docstring). A pack that declares a DETERMINISTIC_RULE requirement but
+    // implements no evaluator fails closed to UNKNOWN, never silently drops
+    // the requirement or marks it SATISFIED.
+    const deterministicRuleRows: ProofRow[] = requiredCoverage
+      .filter((requirement) => requirement.proofMechanism.kind === "DETERMINISTIC_RULE")
+      .map((requirement) => {
+        const ruleId =
+          requirement.proofMechanism.kind === "DETERMINISTIC_RULE" ? requirement.proofMechanism.ruleId : "";
+        const inputs = parsed.value.deterministicRuleInputs?.[ruleId];
+        const evaluated = pack.evaluateDeterministicRule?.(ruleId, inputs);
+        const status = evaluated?.status ?? "UNKNOWN";
+        const reason =
+          evaluated?.reason ??
+          `Domain pack '${pack.id}' declares deterministic rule '${ruleId}' but implements no evaluator for it`;
+        return {
+          obligationId: proofObligationId({ deterministicRuleId: ruleId, constraintId: requirement.constraintId }),
+          constraintId: requirement.constraintId,
+          concept: requirement.originalConcept,
+          evidenceId: undefined,
+          claimId: undefined,
+          evidenceTrustClass: undefined,
+          status,
+          reason,
+          proofMechanism: "DETERMINISTIC_RULE",
+          deterministicRuleId: ruleId,
+        };
+      });
+    const proofRows: ProofRow[] = [...evidenceObligationRows, ...deterministicRuleRows];
     const coverage = assessProofCoverage(requiredCoverage, obligations, proofRows);
     const requiredConstraints = state.value.constraints.filter((constraint) =>
       coverage.requiredConstraintIds.includes(constraint.id),

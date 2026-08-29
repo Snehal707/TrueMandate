@@ -188,6 +188,7 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
     readonly packId: string;
     readonly state: IntentState;
     readonly evidenceIds: readonly string[];
+    readonly deterministicRuleInputs?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   }): Promise<boolean> {
     if (!this.deps.preExecutionReadiness || input.evidenceIds.length === 0) return false;
 
@@ -212,6 +213,7 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       expectedIntentStateHash: input.state.stateHash,
       verifiedEvidenceIds,
       verifiedClaimIds,
+      ...(input.deterministicRuleInputs ? { deterministicRuleInputs: input.deterministicRuleInputs } : {}),
     });
     // Fail closed without failing the workflow: an unsatisfied obligation must still
     // reach the ordinary BLOCKED path with its artifacts, not surface as an error.
@@ -234,11 +236,17 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
     input: TInput,
     current: IntentState,
   ): Promise<Result<IntentState>> {
+    // Server-side only: computed from the already-parsed, schema-validated
+    // workflow `input`, never from a caller-supplied "satisfied" claim (see
+    // DomainPack.buildDeterministicRuleInputs's docstring). Absent for packs
+    // with no DETERMINISTIC_RULE constraints.
+    const deterministicRuleInputs = this.deps.pack.buildDeterministicRuleInputs?.(input);
     const superseded = await this.supersedeWithVerifiedEvidence({
       intentId: input.intentId,
       packId: this.deps.pack.id,
       state: current,
       evidenceIds: input.evidenceIds ?? [],
+      ...(deterministicRuleInputs ? { deterministicRuleInputs } : {}),
     });
     if (!superseded) return ok(current);
 
@@ -441,7 +449,26 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
         };
       }),
     );
-
+    // Reverted attempt: materializing an extra durable proof-row artifact for
+    // DETERMINISTIC_RULE constraints here (beyond input.requiredObligations)
+    // was tried and found UNSAFE, not merely incomplete -- Authority's own
+    // independent re-validation (semantic-artifact-resolver.ts) treats the
+    // durable proof-artifact set as CLOSED: it computes `expected` from the
+    // PLAN's own proofObligations (itself deriveRequiredProofObligations-
+    // shaped, throughout the entire pipeline -- planner payload, plan,
+    // action.requiredProofObligationIds), and REJECTS any proof artifact
+    // whose obligationId isn't in that expected set with VALIDATION_FAILED.
+    // An extra row here doesn't get ignored; it breaks the workflow. Safely
+    // closing this gap would require touching the planner's obligation
+    // derivation and Authority's own validation -- explicitly out of scope
+    // ("Do not change Authority") and not attempted. duplicate_payment's
+    // satisfaction is still genuinely required for this workflow to proceed
+    // at all (summaryValid, above, examines the FULL stored proofSummary --
+    // including the deterministic-rule row -- and fails closed if it isn't
+    // SATISFIED); what's missing is only a DEDICATED per-workflow durable
+    // artifact naming it, a real but unresolved observability gap, reported
+    // rather than half-fixed in a way that breaks a different governance
+    // layer.
     const completeProofs =
       summaryValid &&
       proofRows.length > 0 &&

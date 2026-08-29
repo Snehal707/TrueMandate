@@ -463,16 +463,32 @@ describe("travel: control executes, then provider_substitution against the exact
 describe("invoice: control executes, then payee_substitution against the exact same S1", () => {
   /**
    * Invoice is explicitly required to get its own real-engine proof (not
-   * just procurement's) because its `duplicate_payment` constraint
-   * ("dup-1") could be misread as an EXECUTION-HISTORY check — "has a
-   * payment already gone out for this invoice?" — rather than what it
-   * actually is: an ordinary HARD constraint evaluated once against the
-   * evidence claim, exactly like `approved_payee` or `invoice_id`. This
-   * test proves that reading is correct: after control's REAL commit
-   * (a genuine side effect), the attack leg's own duplicate_payment proof
-   * is still independently SATISFIED from the same evidence claim.
+   * just procurement's) because its `duplicate_payment` constraint could be
+   * misread as an EXECUTION-HISTORY check — "has a payment already gone out
+   * for this invoice?" — rather than what it actually is now: a
+   * DETERMINISTIC_RULE proving the action is bound to the canonical
+   * one-time-execution identity derived from ITS OWN payee + invoice
+   * identity (see the Invoice structural duplicate-payment repair). This
+   * test proves that reading is correct: after control's REAL commit (a
+   * genuine side effect), the attack leg's own duplicate-payment binding is
+   * still independently and correctly evaluated from its OWN economic
+   * identity (shadow-payee / INV-ATTACK-999), not contaminated by control's
+   * prior commit.
+   *
+   * duplicate_payment no longer appears in the durable per-workflow PROOF
+   * artifact list at all (deriveRequiredProofObligations, used to build that
+   * list, deliberately excludes DETERMINISTIC_RULE constraints throughout
+   * the pipeline -- including Authority's own re-validation, which treats
+   * that list as closed; see generic-workflow-engine.ts's
+   * resolveAuthoritativeProofRows for the precise, deliberate reason an
+   * extra row was tried and reverted). Its readiness-level SATISFACTION is
+   * still a genuine precondition for reaching AUTHORIZED at all -- proven by
+   * expectFidelityBlockedAttack's own requirement that control reaches
+   * AUTHORIZED and commits (below) -- and its ACTION-FIDELITY row (which
+   * DOES still exist) is the correct place to check the attack leg's own
+   * binding independently.
    */
-  it("shares S1, control executes, attack's duplicate_payment proof stays SATISFIED, first causal blocker is actionFidelity, zero attack side effects", async () => {
+  it("shares S1, control executes, attack's duplicate_payment action-fidelity binding stays independently MATCH, first causal blocker is actionFidelity, zero attack side effects", async () => {
     const invoice = CASES.find((item) => item.packId === "invoice_vendor_payment")!;
     const controlPayload = invoice.payload(EVIDENCE_ID) as { payee: Record<string, unknown>; invoice: Record<string, unknown> };
     const attackAction = { ...invoice.controlAction, merchant: "shadow-payee", product: "INV-ATTACK-999", parameters: { invoiceId: "INV-ATTACK-999", remittanceReference: "remit-1" } };
@@ -484,9 +500,12 @@ describe("invoice: control executes, then payee_substitution against the exact s
     const trace = await runCausalityTrace(invoice, "invoice-payee-substitution", attackAction, attackPayload);
     expectFidelityBlockedAttack(trace);
 
-    const attackProofs = trace.attackRows.filter((row) => row.kind === "PROOF").map((row) => row.payload);
-    const duplicatePaymentProof = attackProofs.find((proof) => proof.constraintId === "i-duplicate");
-    expect(duplicatePaymentProof?.status).toBe("SATISFIED");
+    const attackAction_ = trace.attackRows.find((row) => row.kind === "ACTION");
+    const attackFidelity = attackAction_?.payload.deterministicActionFidelity as
+      | { rows: { canonicalConcept: string; status: string }[] }
+      | undefined;
+    const duplicatePaymentRow = attackFidelity?.rows.find((row) => row.canonicalConcept === "duplicate_payment");
+    expect(duplicatePaymentRow?.status).toBe("MATCH");
   });
 });
 
