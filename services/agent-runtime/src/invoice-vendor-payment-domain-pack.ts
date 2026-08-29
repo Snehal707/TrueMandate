@@ -1,9 +1,11 @@
 import { hashCanonical } from "@truemandate/crypto";
-import { ErrorCode, err, ok, type Result } from "@truemandate/protocol";
+import { ErrorCode, err, ok, type IntentState, type ActionProposal, type Result } from "@truemandate/protocol";
+import { resolveCanonicalConcept } from "@truemandate/semantic-readiness";
 import { z } from "zod";
 import type {
   ActionProposalContext,
   ActionFidelityEvaluation,
+  ActionFidelityRow,
   DomainActionFields,
   DomainPack,
   OfferNodeContext,
@@ -73,6 +75,38 @@ export type InvoiceVendorPaymentInput = z.infer<
   typeof InvoiceVendorPaymentWorkflowRequestSchema
 >;
 
+/**
+ * Canonical, deterministic Invoice execution-binding identity. Namespaced by
+ * the invoice's actual economic identity (payee + invoice + the business
+ * duplicate-check key) rather than any per-submission value, so two
+ * independent workflow attempts for the SAME underlying economic payment
+ * converge on the SAME key -- and any attempt for a genuinely different
+ * payee or invoice diverges. This is deliberately NOT the raw
+ * duplicateCheckKey used as-is (that would let a caller widen or narrow the
+ * binding by controlling one field in isolation); the hash binds all three
+ * together.
+ */
+export function invoiceDuplicateExecutionKey(input: {
+  readonly payeeId: string;
+  readonly invoiceId: string;
+  readonly duplicateCheckKey: string;
+}): string {
+  return `invoice-dup:${hashCanonical({
+    domain: "invoice_vendor_payment",
+    payeeId: input.payeeId,
+    invoiceId: input.invoiceId,
+    duplicateCheckKey: input.duplicateCheckKey,
+  })}`;
+}
+
+function resolveExecutionIdempotencyKey(input: InvoiceVendorPaymentInput): string {
+  return invoiceDuplicateExecutionKey({
+    payeeId: input.payee.id,
+    invoiceId: input.invoice.invoiceId,
+    duplicateCheckKey: input.invoice.duplicateCheckKey,
+  });
+}
+
 export function workflowIdFor(
   input: InvoiceVendorPaymentInput,
   intentStateHash: string,
@@ -118,6 +152,15 @@ function buildActionProposal(
       poReference: input.invoice.poReference,
       dueDate: input.invoice.dueDate,
       duplicateCheckKey: input.invoice.duplicateCheckKey,
+      // The canonical execution-binding identity this action's OWN payee/
+      // invoice/duplicateCheckKey data derives to -- carried on the action so
+      // action-fidelity can independently re-derive and cross-check it,
+      // rather than trusting it silently. This is also the exact value
+      // resolveExecutionIdempotencyKey binds the gateway/ledger execution key
+      // to (see InvoiceVendorPaymentDomainPack.resolveExecutionIdempotencyKey
+      // below) -- both read the same input, so a legitimate, untampered
+      // action always has these two derivations agree.
+      executionIdempotencyBinding: resolveExecutionIdempotencyKey(input),
       remittanceReference: input.invoice.remittanceReference,
       payeeApproved: input.payee.approved,
       payeeApprovalEvidenceId: input.payee.approvalEvidenceId,
@@ -128,12 +171,69 @@ function buildActionProposal(
   };
 }
 
+/**
+ * duplicate_payment FORBID true cannot be honestly evaluated as a
+ * FORBID-true-vs-value comparison against parameters.duplicateCheckKey (a
+ * business dedup string, not a boolean) -- see forbid-operator.test.ts's
+ * permanent proof that comparison is UNKNOWN, not a bug to paper over.
+ * What CAN be honestly proven from the action alone is a deterministic
+ * binding check: does this action's OWN payee/invoice/duplicateCheckKey data
+ * derive the SAME canonical execution identity as the one it carries (and
+ * that resolveExecutionIdempotencyKey binds the real gateway/ledger
+ * execution key to)? Independently re-deriving from the action's observable
+ * fields -- rather than trusting the carried value -- is what makes this
+ * fail closed against a stale or tampered binding instead of merely
+ * checking a key is present.
+ */
+export function evaluateInvoiceDuplicatePaymentBinding(
+  state: IntentState,
+  action: ActionProposal,
+): ActionFidelityRow | undefined {
+  const constraint = state.constraints.find(
+    (item) =>
+      resolveCanonicalConcept(item.concept, InvoiceVendorPaymentDomainPack.planning.conceptFamilies) ===
+      "duplicate_payment",
+  );
+  if (!constraint) return undefined;
+
+  const payeeId = action.merchant;
+  const invoiceId = action.product;
+  const duplicateCheckKey = actionField<string>(action, "duplicateCheckKey");
+  const boundExecutionKey = actionField<string>(action, "executionIdempotencyBinding");
+
+  if (!payeeId || !invoiceId || !duplicateCheckKey || !boundExecutionKey) {
+    return {
+      constraintId: constraint.id,
+      canonicalConcept: "duplicate_payment",
+      field: "parameters.executionIdempotencyBinding",
+      expectedValue: "a canonical Invoice execution identity derived from payee, invoice, and duplicate-check data",
+      actualValue: boundExecutionKey,
+      status: "UNKNOWN",
+      reason: "Action is missing the payee, invoice, duplicate-check, or execution-binding data needed to prove the one-time-payment identity",
+    };
+  }
+
+  const expectedExecutionKey = invoiceDuplicateExecutionKey({ payeeId, invoiceId, duplicateCheckKey });
+  const bound = expectedExecutionKey === boundExecutionKey;
+  return {
+    constraintId: constraint.id,
+    canonicalConcept: "duplicate_payment",
+    field: "parameters.executionIdempotencyBinding",
+    expectedValue: expectedExecutionKey,
+    actualValue: boundExecutionKey,
+    status: bound ? "MATCH" : "MISMATCH",
+    reason: bound
+      ? "Action is bound to the canonical one-time Invoice execution identity derived from its own payee, invoice, and duplicate-check data"
+      : "Action's carried execution-identity binding does not match the canonical identity its own payee/invoice/duplicate-check data derives -- possible stale or tampered binding",
+  };
+}
+
 function evaluateActionFidelity(
   _input: InvoiceVendorPaymentInput,
-  state: import("@truemandate/protocol").IntentState,
-  action: import("@truemandate/protocol").ActionProposal,
+  state: IntentState,
+  action: ActionProposal,
 ): ActionFidelityEvaluation {
-  return evaluateActionChecks(state, InvoiceVendorPaymentDomainPack.planning, [
+  const generic = evaluateActionChecks(state, InvoiceVendorPaymentDomainPack.planning, [
     {
       canonicalConcept: "payee",
       factType: "identity",
@@ -155,11 +255,6 @@ function evaluateActionFidelity(
       actualValue: action.product,
     },
     {
-      canonicalConcept: "duplicate_payment",
-      field: "parameters.duplicateCheckKey",
-      actualValue: actionField<string>(action, "duplicateCheckKey"),
-    },
-    {
       canonicalConcept: "due_date",
       field: "parameters.dueDate",
       actualValue: actionField<string>(action, "dueDate"),
@@ -170,6 +265,12 @@ function evaluateActionFidelity(
       actualValue: action.amount,
     },
   ]);
+  const duplicatePaymentRow = evaluateInvoiceDuplicatePaymentBinding(state, action);
+  const rows = duplicatePaymentRow ? [...generic.rows, duplicatePaymentRow] : generic.rows;
+  return {
+    rows,
+    preservesIntent: rows.every((row) => row.status === "MATCH"),
+  };
 }
 
 function buildExternalOfferNode(
@@ -220,6 +321,7 @@ export const InvoiceVendorPaymentDomainPack: DomainPack<InvoiceVendorPaymentInpu
   },
   workflowId: workflowIdFor,
   assertWorkflowId,
+  resolveExecutionIdempotencyKey,
   buildActionProposal,
   evaluateActionFidelity,
   buildExternalOfferNode,

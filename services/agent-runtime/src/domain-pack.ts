@@ -120,6 +120,18 @@ export interface DomainPack<TInput extends WorkflowRequestBase> {
   workflowId(input: TInput, intentStateHash: string): string;
   assertWorkflowId(input: TInput, intentStateHash: string): Result<string>;
 
+  /**
+   * Optional override for the EXECUTION idempotency identity the engine uses
+   * for OutcomeContract / PreparedAction / Gateway / idempotencyStore /
+   * side-effect-ledger keying -- distinct from workflowId (which stays keyed
+   * on the caller's per-submission input.idempotencyKey so distinct
+   * submission attempts keep distinct workflow records/provenance). Defaults
+   * to input.idempotencyKey when a pack does not implement this -- unchanged
+   * behavior for every domain that doesn't need a business-identity-bound
+   * execution key.
+   */
+  resolveExecutionIdempotencyKey?(input: TInput): string;
+
   buildActionProposal(input: TInput, ctx: ActionProposalContext): DomainActionFields;
 
   /**

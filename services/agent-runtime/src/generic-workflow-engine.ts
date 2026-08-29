@@ -456,6 +456,15 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       return err(ErrorCode.SCHEMA_PARSE_FAILED, `Invalid ${this.deps.pack.id} workflow request`, { issues: parsed.error.issues });
     }
     const input = parsed.data;
+    // The execution-facing idempotency identity: defaults to the caller's raw
+    // per-submission input.idempotencyKey, but a domain pack may override it
+    // with a deterministic, business-identity-bound key (see DomainPack.
+    // resolveExecutionIdempotencyKey) so separate submission attempts of the
+    // SAME underlying economic action converge on the SAME gateway/ledger
+    // key. workflowId derivation below is deliberately unaffected -- it keeps
+    // using input.idempotencyKey directly so distinct attempts still get
+    // distinct workflow records.
+    const idempotencyKey = this.deps.pack.resolveExecutionIdempotencyKey?.(input) ?? input.idempotencyKey;
     const currentState = await this.deps.intents.getCurrentStateForIntent(input.intentId, input.expectedIntentStateId);
     if (!currentState.ok) return currentState;
     if (input.expectedIntentStateHash && input.expectedIntentStateHash !== currentState.value.stateHash) return err(ErrorCode.GRANT_INTENT_STATE_MISMATCH, "Expected IntentState hash is stale");
@@ -738,7 +747,7 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
     }
     const workflow = await this.append({ id: workflowId.value, intentId: input.intentId, workflowId: workflowId.value, kind: "WORKFLOW", createdAt, predecessors: [ref(guardian.value)], payload: { intentStateId: state.value.id, intentStateHash: state.value.stateHash, packId: this.deps.pack.id, state: eligible ? "AUTHORITY_EVALUATION" : "BLOCKED" } });
     if (!workflow.ok) return workflow;
-    const references = { workflowId: workflowId.value, intentStateId: state.value.id, intentStateHash: state.value.stateHash, workflow: { id: workflow.value.id, hash: workflow.value.contentHash }, plan: { id: plan.value.id, hash: plan.value.contentHash }, planVerification: { id: planVerification.value.id, hash: planVerification.value.contentHash }, action: { id: actionArtifact.value.id, hash: actionArtifact.value.contentHash }, guardian: { id: guardian.value.id, hash: guardian.value.contentHash }, proofs: proofRows.map((p) => ({ id: p.id, hash: p.contentHash })), idempotencyKey: input.idempotencyKey };
+    const references = { workflowId: workflowId.value, intentStateId: state.value.id, intentStateHash: state.value.stateHash, workflow: { id: workflow.value.id, hash: workflow.value.contentHash }, plan: { id: plan.value.id, hash: plan.value.contentHash }, planVerification: { id: planVerification.value.id, hash: planVerification.value.contentHash }, action: { id: actionArtifact.value.id, hash: actionArtifact.value.contentHash }, guardian: { id: guardian.value.id, hash: guardian.value.contentHash }, proofs: proofRows.map((p) => ({ id: p.id, hash: p.contentHash })), idempotencyKey };
     if (!eligible) return ok({ workflowId: workflowId.value, state: "BLOCKED", artifacts: references });
     const authority = await this.deps.authority.evaluateWorkflow(references);
     if (!authority.ok) return authority;
@@ -771,7 +780,7 @@ export class GenericWorkflowEngine<TInput extends WorkflowRequestBase> {
       evaluationBody: authority.value,
       actionArtifact: { id: actionArtifact.value.id, contentHash: actionArtifact.value.contentHash },
       intentState: { id: state.value.id, stateHash: state.value.stateHash, version: state.value.version },
-      idempotencyKey: input.idempotencyKey,
+      idempotencyKey,
       approvalId: input.approvalId,
       createdAt,
     });
