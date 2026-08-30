@@ -62,6 +62,29 @@ async function postToPublicBff(
   } as Result<never>;
 }
 
+async function getFromPublicBff(
+  tokenProvider: { getIdentityToken(audience: string): Promise<string> },
+  webUrl: string,
+  path: string,
+): Promise<Result<Record<string, unknown>>> {
+  const token = await tokenProvider.getIdentityToken(webUrl);
+  if (!token) throw new Error(`S2S identity token missing for WORKFLOWS_API_URL (${path})`);
+  const response = await fetch(`${webUrl.replace(/\/$/, "")}${path}`, {
+    method: "GET",
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const text = await response.text();
+  const parsed = text ? JSON.parse(text) : {};
+  if (response.ok) return ok(parsed as Record<string, unknown>);
+  const error = (parsed as { error?: { code?: string; message?: string; details?: Record<string, unknown> } }).error;
+  return {
+    ok: false,
+    code: error?.code ?? "UNKNOWN_ERROR",
+    message: error?.message ?? `HTTP ${response.status}`,
+    details: error?.details,
+  } as Result<never>;
+}
+
 async function main(): Promise<void> {
   const config = loadRuntimeConfig();
   const webUrl = required("WORKFLOWS_API_URL");
@@ -95,6 +118,18 @@ async function main(): Promise<void> {
     intents: {
       getTip: (intentId) => intents.getTip(intentId) as Promise<Result<{ id: string; stateHash: string }>>,
     },
+    readWorkspace: (intentId, workflowId) =>
+      getFromPublicBff(
+        tokenProvider,
+        webUrl,
+        `/v1/workspace/${encodeURIComponent(intentId)}?workflowId=${encodeURIComponent(workflowId)}`,
+      ),
+    readApproval: (approvalId) =>
+      getFromPublicBff(
+        tokenProvider,
+        webUrl,
+        `/v1/approvals/${encodeURIComponent(approvalId)}`,
+      ),
     newRunId: () => crypto.randomUUID(),
   };
 

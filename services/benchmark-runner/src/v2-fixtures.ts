@@ -31,7 +31,7 @@ export function buildBenchmarkWorkflowRequest(
     };
     case "travel": return {
       ...common,
-      intent: { ...common.intent, rawText: "Book 2 refundable hotel stays at Seaside Lodge with Meridian Travel Partners for under USD 5000 before December 31, 2026, with check-in on December 20 and checkout on December 22." },
+      intent: { ...common.intent, rawText: "Book 2 refundable hotel stays at Seaside Lodge through Meridian Travel Partners, with check-in on December 20, 2026 and checkout on December 22, 2026. Complete the booking strictly before December 31, 2026 and keep the total cost under USD 5000." },
       action: { capability: "book_travel", merchant: "Meridian Travel Partners", product: "Seaside Lodge", quantity: 2, amount: 3200, currency: "USD", refundable: true, deliveryTerms: "check in on 2026-12-20 and check out on 2026-12-22", consequenceLevel: "HIGH", parameters: { provider: "Meridian Travel Partners", providerApproved: true, lodgingName: "Seaside Lodge", travelerCount: 2, checkInDate: "2026-12-20T00:00:00.000Z", checkOutDate: "2026-12-22T00:00:00.000Z" } },
       domain: { packId: domain, payload: { provider: { id: "Meridian Travel Partners", name: "Meridian Travel Partners", approved: true, approvalEvidenceId: "approval-evidence" }, booking: { itineraryId: `itin-${sequence}`, lodgingName: "Seaside Lodge", travelDate: "2026-12-20T00:00:00.000Z", checkInDate: "2026-12-20T00:00:00.000Z", checkOutDate: "2026-12-22T00:00:00.000Z", travelerCount: 2 }, policy: { refundableRequired: true }, evidenceIds: ["approval-evidence", "traveler-count-evidence", "refund-evidence", "hotel-offer-evidence"] } },
     };

@@ -7,6 +7,11 @@ import {
   type DemoActionFixture,
   type DemoScenarioTemplate,
 } from "@truemandate/demo-fixtures";
+import {
+  deriveComparisonIntegrity,
+  unavailableComparisonIntegrity,
+  type ComparisonIntegrityView,
+} from "./comparison-integrity.js";
 
 /**
  * Trusted demo-evidence orchestration. Runs as the existing `phase-c-verifier`
@@ -64,6 +69,8 @@ export interface DemoOrchestratorPorts {
   readonly intents: {
     getTip(intentId: string): Promise<Result<{ id: string; stateHash: string }>>;
   };
+  readonly readWorkspace: (intentId: string, workflowId: string) => Promise<Result<Record<string, unknown>>>;
+  readonly readApproval: (approvalId: string) => Promise<Result<Record<string, unknown>>>;
   /** Fresh id for a new orchestration run. Injected so tests can prove retry
    * safety by invoking the orchestrator twice with the SAME runId. */
   readonly newRunId: () => string;
@@ -90,6 +97,7 @@ export interface DemoAttackOrchestrationResult {
   readonly boundIntentStateHash: string;
   readonly verifiedEvidenceIds: readonly string[];
   readonly verifiedClaimIds: readonly string[];
+  readonly comparisonIntegrity: ComparisonIntegrityView;
 }
 
 export type DemoOrchestrationResult =
@@ -287,6 +295,15 @@ async function provisionAndVerifyEvidence(
   return ok({ evidenceIds: verified.value.envelopeIds, claimIds: verified.value.claimIds });
 }
 
+function approvalIdFromWorkflow(workflow: Record<string, unknown>): string | undefined {
+  const approval = workflow.approval;
+  if (approval && typeof approval === "object" && !Array.isArray(approval)) {
+    const id = (approval as Record<string, unknown>).id;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  return undefined;
+}
+
 export async function runDemoOrchestration(
   ports: DemoOrchestratorPorts,
   input: { readonly scenarioId: string; readonly variantId: string },
@@ -371,6 +388,31 @@ export async function runDemoOrchestration(
   if (!attackSubmitted.ok) return attackSubmitted as Result<never>;
   const attackWorkflowId = String(attackSubmitted.value.workflowId ?? "");
 
+  const [controlWorkspace, attackWorkspace] = await Promise.all([
+    ports.readWorkspace(intentId, controlWorkflowId),
+    ports.readWorkspace(intentId, attackWorkflowId),
+  ]);
+  const controlApprovalId = approvalIdFromWorkflow(controlSubmitted.value);
+  const controlApproval = controlApprovalId
+    ? await ports.readApproval(controlApprovalId)
+    : undefined;
+  const comparisonIntegrity = deriveComparisonIntegrity({
+    intentId,
+    compiledIntentStateId: established.value.intentStateId,
+    compiledIntentStateHash: established.value.intentStateHash,
+    boundIntentStateId,
+    boundIntentStateHash,
+    controlWorkflow: controlSubmitted.value,
+    attackWorkflow: attackSubmitted.value,
+    controlWorkspace: controlWorkspace.ok ? controlWorkspace.value : undefined,
+    attackWorkspace: attackWorkspace.ok ? attackWorkspace.value : undefined,
+    controlApproval: controlApproval?.ok ? controlApproval.value : undefined,
+    controlVerifiedEvidenceIds: provisioned.value.evidenceIds,
+    attackVerifiedEvidenceIds: provisioned.value.evidenceIds,
+    controlVerifiedClaimIds: provisioned.value.claimIds,
+    attackVerifiedClaimIds: provisioned.value.claimIds,
+  });
+
   return ok({
     kind: "attack",
     intentId,
@@ -382,5 +424,8 @@ export async function runDemoOrchestration(
     boundIntentStateHash,
     verifiedEvidenceIds: [...evidenceIds],
     verifiedClaimIds: [...provisioned.value.claimIds],
+    comparisonIntegrity: comparisonIntegrity.available
+      ? comparisonIntegrity
+      : unavailableComparisonIntegrity("BACKEND_COMPARISON_UNAVAILABLE"),
   });
 }

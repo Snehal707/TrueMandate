@@ -20,6 +20,59 @@ function workflowOk(workflowId: string, state: string): Result<Record<string, un
   return ok({ workflowId, state });
 }
 
+function workspaceFixture(input: {
+  readonly intentStateId: string;
+  readonly stateHash: string;
+  readonly readiness: string;
+  readonly historicalStateIds: readonly string[];
+  readonly authorityDecision?: string;
+  readonly guardianDecision?: string;
+  readonly guardianCriticalFailure?: boolean;
+  readonly blockingStage?: string;
+  readonly evidenceDetail?: string;
+  readonly planVerificationDetail?: string;
+  readonly sideEffects?: readonly unknown[];
+}): Record<string, unknown> {
+  return {
+    summary: {
+      intentId: "demo-procurement-run-fixed-intent",
+      rawIntent: "same",
+      principalId: "demo",
+      createdAt: "2026-08-30T00:00:00.000Z",
+      intentStateId: input.intentStateId,
+      stateHash: input.stateHash,
+      readiness: input.readiness,
+      historicalStateIds: input.historicalStateIds,
+    },
+    guardian: {
+      aggregator: {
+        decision: input.guardianDecision ?? "ALLOW",
+        semanticStatus: "CLEAR",
+        criticalFailure: input.guardianCriticalFailure ?? false,
+      },
+    },
+    authority: {
+      decision: input.authorityDecision,
+      explanation: "test",
+    },
+    execution: {
+      phase: "BLOCKED",
+      preparedAction: undefined,
+      sideEffects: input.sideEffects ?? [],
+      unknownPending: false,
+      blockedRetry: false,
+    },
+    lifecycle: {
+      stages: [
+        { stage: "evidence", status: "COMPLETED", detail: input.evidenceDetail ?? "4 of 4 required proofs satisfied" },
+        { stage: "planVerification", status: "COMPLETED", detail: input.planVerificationDetail ?? "VERIFIED" },
+        { stage: "authority", status: "COMPLETED", detail: input.authorityDecision ?? "AUTHORIZED" },
+      ],
+      blockingStage: input.blockingStage,
+    },
+  };
+}
+
 function mockPorts(overrides: Partial<DemoOrchestratorPorts> = {}): DemoOrchestratorPorts & {
   readonly submitWorkflowCalls: unknown[];
   readonly submitEvidenceCalls: unknown[];
@@ -64,8 +117,26 @@ function mockPorts(overrides: Partial<DemoOrchestratorPorts> = {}): DemoOrchestr
         return tip(tipState.id, tipState.stateHash);
       }),
     },
+    readWorkspace: vi.fn(async (_intentId: string, workflowId: string) => ok(
+      workflowId === "wf-control"
+        ? workspaceFixture({
+            intentStateId: "S1",
+            stateHash: "hash-s1",
+            readiness: "ACTIONABLE",
+            historicalStateIds: ["S0"],
+            authorityDecision: "ALLOW",
+          })
+        : workspaceFixture({
+            intentStateId: "S1",
+            stateHash: "hash-s1",
+            readiness: "ACTIONABLE",
+            historicalStateIds: ["S0"],
+            blockingStage: "planVerification",
+          }),
+    )),
+    readApproval: vi.fn(async () => err(ErrorCode.VALIDATION_FAILED, "No approval")),
     newRunId: () => "run-fixed",
-    now: () => "2026-08-28T00:00:00.000Z",
+    now: () => "2026-08-30T00:00:00.000Z",
     sleep: async () => undefined,
     ...overrides,
   };
@@ -197,6 +268,8 @@ describe("attack variant orchestration — single request, S1 sequencing", () =>
     expect(result.value.boundIntentStateHash).toBe("hash-s1");
     expect(result.value.verifiedEvidenceIds).toEqual(["env-1-verified"]);
     expect(result.value.verifiedClaimIds).toEqual(["claim-1-verified", "claim-2-verified"]);
+    expect(result.value.comparisonIntegrity.status).toBe("VERIFIED_COMPARISON");
+    expect(result.value.comparisonIntegrity.sameVerifiedS1).toBe(true);
   });
 });
 

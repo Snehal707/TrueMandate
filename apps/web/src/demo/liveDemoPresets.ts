@@ -146,7 +146,7 @@ function buildTravelRequest(rawText?: string): SdkWorkflowRequest {
       createdAt: isoNow(),
       rawText:
         rawText ??
-        "Book 2 refundable hotel stays at Seaside Lodge with Meridian Travel Partners for under USD 5000 before December 31, 2026, with check-in on December 20 and checkout on December 22.",
+        "Book 2 refundable hotel stays at Seaside Lodge through Meridian Travel Partners, with check-in on December 20, 2026 and checkout on December 22, 2026. Complete the booking strictly before December 31, 2026 and keep the total cost under USD 5000.",
     },
     action: {
       capability: "book_travel",
