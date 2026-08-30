@@ -64,12 +64,17 @@ function workflowFixture(input?: {
   readonly decision?: string;
   readonly executionStatus?: string;
   readonly approval?: Record<string, unknown>;
+  readonly evaluation?: Record<string, unknown>;
   readonly commitTokenPresent?: boolean;
 }): Record<string, unknown> {
   return {
     workflowId: input?.workflowId ?? "wf-1",
     state: input?.state ?? "AUTHORIZED",
-    ...(input?.decision ? { evaluation: { decision: input.decision } } : {}),
+    ...(input?.evaluation
+      ? { evaluation: input.evaluation }
+      : input?.decision
+        ? { evaluation: { decision: input.decision } }
+        : {}),
     ...(input?.executionStatus ? { execution: { status: input.executionStatus } } : {}),
     ...(input?.approval ? { approval: input.approval } : {}),
     ...(input?.commitTokenPresent ? { artifacts: { commitToken: { id: "token-1" } } } : {}),
@@ -288,6 +293,118 @@ describe("deriveComparisonIntegrity", () => {
     }));
     expect(result.sameVerifiedClaims).toBe(false);
     expect(result.status).toBe("INCOMPLETE_COMPARISON");
+  });
+
+  it("accepts coherent pending approval governance without treating it as execution authorization", () => {
+    const inlineApproval = {
+      id: "approval-wf-control",
+      workflowId: "wf-control",
+      intentId: "intent-1",
+      intentStateId: "state-1",
+      authorityEvaluationId: "evaluation-wf-control-authority-wf-control",
+      requestedCapability: "arrange_fulfillment",
+      requestedScope: { amount: 3500, currency: "USD", merchant: "approved-carrier" },
+      status: "PENDING",
+      requestedAt: "2026-08-30T00:00:00.000Z",
+      expiresAt: "2026-10-01T00:00:00.000Z",
+    };
+    const result = deriveComparisonIntegrity(baseInput({
+      controlWorkflow: workflowFixture({
+        workflowId: "wf-control",
+        state: "AWAITING_APPROVAL",
+        approval: inlineApproval,
+        evaluation: {
+          decision: "REQUIRE_APPROVAL",
+          evaluation: {
+            id: "evaluation-wf-control-authority-wf-control",
+            materializationReason: "PENDING_APPROVAL",
+            expiresAt: "2026-10-01T00:00:00.000Z",
+          },
+        },
+      }),
+      controlWorkspace: workspaceFixture({
+        intentStateId: "state-1",
+        stateHash: "hash-1",
+        readiness: "ACTIONABLE",
+        historicalStateIds: ["state-0"],
+      }),
+      controlApproval: {
+        id: "approval-wf-control",
+        workflowId: "wf-control",
+        intentId: "intent-1",
+        intentStateId: "state-1",
+        requestedCapability: "arrange_fulfillment",
+        requestedScope: { amount: 3500, currency: "USD", merchant: "approved-carrier" },
+        status: "PENDING",
+        requestedAt: "2026-08-30T00:00:00.000Z",
+        expiresAt: "2026-10-01T00:00:00.000Z",
+      },
+    }));
+    expect(result.controlGovernanceOutcome).toBe("REQUIRES_APPROVAL");
+    expect(result.controlGovernanceValid).toBe(true);
+    expect(result.attackPreparedActionPresent).toBe(false);
+    expect(result.attackCommitTokenPresent).toBe(false);
+    expect(result.attackExecuted).toBe(false);
+    expect(result.status).toBe("VERIFIED_COMPARISON");
+  });
+
+  it("fails closed when REQUIRE_APPROVAL is present but approval binding is incoherent", () => {
+    const result = deriveComparisonIntegrity(baseInput({
+      controlWorkflow: workflowFixture({
+        workflowId: "wf-control",
+        state: "AWAITING_APPROVAL",
+        approval: {
+          id: "approval-wf-control",
+          workflowId: "wf-control",
+          intentId: "intent-1",
+          intentStateId: "wrong-state",
+          authorityEvaluationId: "evaluation-wf-control-authority-wf-control",
+          requestedCapability: "arrange_fulfillment",
+          requestedScope: { amount: 3500, currency: "USD", merchant: "approved-carrier" },
+          status: "PENDING",
+          requestedAt: "2026-08-30T00:00:00.000Z",
+          expiresAt: "2026-10-01T00:00:00.000Z",
+        },
+        evaluation: {
+          decision: "REQUIRE_APPROVAL",
+          evaluation: {
+            id: "evaluation-wf-control-authority-wf-control",
+            materializationReason: "PENDING_APPROVAL",
+            expiresAt: "2026-10-01T00:00:00.000Z",
+          },
+        },
+      }),
+      controlWorkspace: workspaceFixture({
+        intentStateId: "state-1",
+        stateHash: "hash-1",
+        readiness: "ACTIONABLE",
+        historicalStateIds: ["state-0"],
+      }),
+      controlApproval: undefined,
+    }));
+    expect(result.controlGovernanceOutcome).toBe("REQUIRES_APPROVAL");
+    expect(result.controlGovernanceValid).toBe(false);
+    expect(result.reasons).toContain("CONTROL_AUTHORITY_NOT_REACHED");
+    expect(result.status).toBe("INCOMPLETE_COMPARISON");
+  });
+
+  it("keeps BLOCK invalid even when the rest of the comparison basis matches", () => {
+    const result = deriveComparisonIntegrity(baseInput({
+      controlWorkflow: workflowFixture({
+        workflowId: "wf-control",
+        state: "BLOCKED",
+        decision: "BLOCK",
+      }),
+      controlWorkspace: workspaceFixture({
+        intentStateId: "state-1",
+        stateHash: "hash-1",
+        readiness: "ACTIONABLE",
+        historicalStateIds: ["state-0"],
+      }),
+    }));
+    expect(result.controlGovernanceOutcome).toBe("BLOCKED");
+    expect(result.controlGovernanceValid).toBe(false);
+    expect(result.reasons).toContain("CONTROL_AUTHORITY_BLOCKED");
   });
 
   it("fails closed when authoritative workspace reads are unavailable", () => {

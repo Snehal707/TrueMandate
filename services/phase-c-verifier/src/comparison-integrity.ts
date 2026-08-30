@@ -144,6 +144,20 @@ function authorityDecision(
     stringValue(record(workflow.evaluation), ["decision"]);
 }
 
+function approvalCandidates(input: {
+  readonly workflow: Record<string, unknown>;
+  readonly approval?: Record<string, unknown>;
+}): readonly Record<string, unknown>[] {
+  const candidates: Record<string, unknown>[] = [];
+  const push = (candidate: Record<string, unknown> | undefined) => {
+    if (!candidate) return;
+    candidates.push(candidate);
+  };
+  push(input.approval);
+  push(record(input.workflow.approval));
+  return candidates;
+}
+
 function governanceOutcome(
   workspace: Record<string, unknown> | undefined,
   workflow: Record<string, unknown>,
@@ -180,18 +194,21 @@ function approvalBindingValid(input: {
   readonly approval?: Record<string, unknown>;
   readonly nowMs: number;
 }): boolean {
-  if (!input.approval) return false;
   const evaluation = record(record(input.workflow.evaluation)?.evaluation) ?? record(input.workflow.evaluation);
-  const approval = input.approval;
   const expiresAt = typeof evaluation?.expiresAt === "string" ? evaluation.expiresAt : undefined;
-  return approval.status === "PENDING" &&
+  if (typeof expiresAt !== "string" ||
+    !Number.isFinite(Date.parse(expiresAt)) ||
+    Date.parse(expiresAt) <= input.nowMs) {
+    return false;
+  }
+
+  return approvalCandidates(input).some((approval) =>
+    approval.status === "PENDING" &&
     approval.workflowId === input.workflow.workflowId &&
     approval.intentId === input.intentId &&
     approval.intentStateId === input.boundIntentStateId &&
-    approval.authorityEvaluationId === evaluation?.id &&
-    typeof expiresAt === "string" &&
-    Number.isFinite(Date.parse(expiresAt)) &&
-    Date.parse(expiresAt) > input.nowMs;
+    approval.authorityEvaluationId === evaluation?.id,
+  );
 }
 
 function controlGovernanceValidity(input: {

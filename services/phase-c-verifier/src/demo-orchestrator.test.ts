@@ -36,9 +36,26 @@ function semanticArtifactFixture(input: {
   readonly previousIntentStateHash?: string;
   readonly requiredProofCount?: number;
   readonly satisfiedProofCount?: number;
+  readonly requiredProofObligationIds?: readonly string[];
+  readonly proofRows?: readonly Record<string, unknown>[];
+  readonly allRequiredCovered?: boolean;
 }): Result<Record<string, unknown>> {
-  const required = input.requiredProofCount ?? 4;
+  const requiredProofObligationIds = input.requiredProofObligationIds ??
+    Array.from({ length: input.requiredProofCount ?? 4 }, (_, index) => `obl-${index}`);
+  const required = requiredProofObligationIds.length;
   const satisfied = input.satisfiedProofCount ?? required;
+  const proofRows = input.proofRows ??
+    Array.from({ length: required }, (_, index) => ({
+      obligationId: requiredProofObligationIds[index],
+      constraintId: `c-${index}`,
+      concept: `concept-${index}`,
+      evidenceId: `e-${index}`,
+      claimId: `claim-${index}`,
+      evidenceTrustClass: "ELEVATED_EXTERNAL",
+      status: index < satisfied ? "SATISFIED" : "UNSATISFIED",
+      reason: "test",
+      proofMechanism: "EVIDENCE_OBLIGATION",
+    }));
   return ok({
     id: `semantic-verification-${input.intentStateId}`,
     kind: "SEMANTIC_VERIFICATION",
@@ -78,18 +95,8 @@ function semanticArtifactFixture(input: {
         intentStateHash: input.intentStateHash,
         packId: "procurement",
         generatedAt: "2026-08-30T00:00:00.000Z",
-        requiredProofObligationIds: Array.from({ length: required }, (_, index) => `obl-${index}`),
-        proofRows: Array.from({ length: required }, (_, index) => ({
-          obligationId: `obl-${index}`,
-          constraintId: `c-${index}`,
-          concept: `concept-${index}`,
-          evidenceId: `e-${index}`,
-          claimId: `claim-${index}`,
-          evidenceTrustClass: "ELEVATED_EXTERNAL",
-          status: index < satisfied ? "SATISFIED" : "UNSATISFIED",
-          reason: "test",
-          proofMechanism: "EVIDENCE_OBLIGATION",
-        })),
+        requiredProofObligationIds,
+        proofRows,
         coverage: {
           requiredConstraintIds: [],
           derivedObligationConstraintIds: [],
@@ -97,13 +104,30 @@ function semanticArtifactFixture(input: {
           missingObligationConstraintIds: [],
           missingEvaluationConstraintIds: [],
           incompleteDeterministicRuleIds: [],
-          allRequiredCovered: satisfied === required,
+          allRequiredCovered: input.allRequiredCovered ?? satisfied === required,
         },
         verifiedEvidenceRefs: [],
       },
       verifiedEvidenceRefs: [],
     },
   });
+}
+
+function approvalFixture(input?: Partial<Record<string, unknown>>): Record<string, unknown> {
+  return {
+    id: "approval-wf-control",
+    workflowId: "wf-control",
+    intentId: "demo-procurement-run-fixed-intent",
+    intentStateId: "S1",
+    authorityEvaluationId: "evaluation-wf-control-authority-wf-control",
+    actionId: "action-wf-control",
+    requestedCapability: "execute_payment",
+    requestedScope: { amount: 100, currency: "USD", merchant: "approved-merchant" },
+    status: "PENDING",
+    requestedAt: "2026-08-30T00:00:00.000Z",
+    expiresAt: "2026-09-30T00:00:00.000Z",
+    ...input,
+  };
 }
 
 function workflowOk(workflowId: string, state: string): Result<Record<string, unknown>> {
@@ -187,7 +211,11 @@ function mockPorts(overrides: Partial<DemoOrchestratorPorts> = {}): DemoOrchestr
       if (record.idempotencyKey?.endsWith("-control")) {
         // Control's unpinned leg 2 is the only call allowed to supersede.
         tipState = { id: "S1", stateHash: "hash-s1" };
-        return workflowOk("wf-control", "AUTHORIZED");
+        return ok({
+          workflowId: "wf-control",
+          state: "AUTHORIZED",
+          approval: approvalFixture(),
+        });
       }
       return workflowOk(`wf-${record.idempotencyKey}`, "BLOCKED");
     }),
@@ -408,6 +436,138 @@ describe("attack variant orchestration — single request, S1 sequencing", () =>
     expect(result.value.comparisonIntegrity.sameVerifiedS1).toBe(true);
     expect(result.value.comparisonIntegrity.privilegedReadiness).toBe("ACTIONABLE");
     expect(result.value.comparisonIntegrity.semanticSuccessorConfirmed).toBe(true);
+  });
+
+  it("keeps proof coverage complete when required proofs are uniquely satisfied and an extra deterministic row exists", async () => {
+    const base = mockPorts();
+    const ports = {
+      ...base,
+      intents: {
+        ...base.intents,
+        getSemanticArtifact: vi.fn(async (id: string) =>
+          semanticArtifactFixture({
+            intentStateId: id.replace(/^semantic-verification-/, ""),
+            intentStateHash: "hash-s1",
+            readiness: "ACTIONABLE",
+            previousIntentStateId: "S0",
+            previousIntentStateHash: "hash-s0",
+            requiredProofObligationIds: ["obl-a", "obl-b", "obl-c", "obl-d"],
+            proofRows: [
+              {
+                obligationId: "obl-a",
+                constraintId: "c-a",
+                concept: "payee",
+                status: "SATISFIED",
+                reason: "required payee satisfied",
+                proofMechanism: "EVIDENCE_OBLIGATION",
+              },
+              {
+                obligationId: "obl-b",
+                constraintId: "c-b",
+                concept: "invoice_identity",
+                status: "SATISFIED",
+                reason: "required invoice identity satisfied",
+                proofMechanism: "EVIDENCE_OBLIGATION",
+              },
+              {
+                obligationId: "obl-c",
+                constraintId: "c-c",
+                concept: "amount",
+                status: "SATISFIED",
+                reason: "required amount satisfied",
+                proofMechanism: "EVIDENCE_OBLIGATION",
+              },
+              {
+                obligationId: "obl-d",
+                constraintId: "c-d",
+                concept: "due_date",
+                status: "SATISFIED",
+                reason: "required due date satisfied",
+                proofMechanism: "EVIDENCE_OBLIGATION",
+              },
+              {
+                obligationId: "obl-extra",
+                constraintId: "c-extra",
+                concept: "duplicate_payment",
+                status: "SATISFIED",
+                reason: "deterministic duplicate-payment binding satisfied",
+                proofMechanism: "DETERMINISTIC_RULE",
+                deterministicRuleId: "invoice_duplicate_execution_binding_v1",
+              },
+            ],
+            allRequiredCovered: true,
+          }),
+        ),
+      },
+    };
+    const result = await runDemoOrchestration(ports, { scenarioId: "procurement", variantId: "quantity_drift" });
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.value.kind !== "attack") return;
+    expect(result.value.comparisonIntegrity.requiredProofCount).toBe(4);
+    expect(result.value.comparisonIntegrity.satisfiedProofCount).toBe(5);
+    expect(result.value.comparisonIntegrity.proofCoverageComplete).toBe(true);
+    expect(result.value.comparisonIntegrity.sameVerifiedS1).toBe(true);
+  });
+
+  it("fails closed when a required proof obligation is missing even if an extra satisfied row exists", async () => {
+    const base = mockPorts();
+    const ports = {
+      ...base,
+      intents: {
+        ...base.intents,
+        getSemanticArtifact: vi.fn(async (id: string) =>
+          semanticArtifactFixture({
+            intentStateId: id.replace(/^semantic-verification-/, ""),
+            intentStateHash: "hash-s1",
+            readiness: "ACTIONABLE",
+            previousIntentStateId: "S0",
+            previousIntentStateHash: "hash-s0",
+            requiredProofObligationIds: ["obl-a", "obl-b", "obl-c", "obl-d"],
+            proofRows: [
+              {
+                obligationId: "obl-a",
+                constraintId: "c-a",
+                concept: "payee",
+                status: "SATISFIED",
+                reason: "required payee satisfied",
+                proofMechanism: "EVIDENCE_OBLIGATION",
+              },
+              {
+                obligationId: "obl-b",
+                constraintId: "c-b",
+                concept: "invoice_identity",
+                status: "SATISFIED",
+                reason: "required invoice identity satisfied",
+                proofMechanism: "EVIDENCE_OBLIGATION",
+              },
+              {
+                obligationId: "obl-c",
+                constraintId: "c-c",
+                concept: "amount",
+                status: "UNKNOWN",
+                reason: "required amount unresolved",
+                proofMechanism: "EVIDENCE_OBLIGATION",
+              },
+              {
+                obligationId: "obl-extra",
+                constraintId: "c-extra",
+                concept: "duplicate_payment",
+                status: "SATISFIED",
+                reason: "deterministic duplicate-payment binding satisfied",
+                proofMechanism: "DETERMINISTIC_RULE",
+              },
+            ],
+            allRequiredCovered: false,
+          }),
+        ),
+      },
+    };
+    const result = await runDemoOrchestration(ports, { scenarioId: "procurement", variantId: "quantity_drift" });
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.value.kind !== "attack") return;
+    expect(result.value.comparisonIntegrity.proofCoverageComplete).toBe(false);
+    expect(result.value.comparisonIntegrity.reasons).toContain("CONTROL_PROOF_INCOMPLETE");
+    expect(result.value.comparisonIntegrity.status).toBe("INCOMPLETE_COMPARISON");
   });
 });
 

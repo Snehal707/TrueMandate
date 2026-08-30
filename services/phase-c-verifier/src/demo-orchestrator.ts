@@ -125,6 +125,31 @@ function countSatisfiedProofs(rows: readonly unknown[]): number {
   }, 0);
 }
 
+function requiredProofsSatisfied(
+  requiredProofObligationIds: readonly string[],
+  proofRows: readonly unknown[],
+): boolean {
+  if (requiredProofObligationIds.length === 0) return false;
+
+  const rowsByObligation = new Map<string, Record<string, unknown>[]>();
+  for (const row of proofRows) {
+    const parsed = asRecord(row);
+    const obligationId = asString(parsed?.obligationId);
+    if (!obligationId) continue;
+    const existing = rowsByObligation.get(obligationId);
+    if (existing) {
+      existing.push(parsed);
+    } else {
+      rowsByObligation.set(obligationId, [parsed]);
+    }
+  }
+
+  return requiredProofObligationIds.every((obligationId) => {
+    const matches = rowsByObligation.get(obligationId) ?? [];
+    return matches.length === 1 && matches[0]?.status === "SATISFIED";
+  });
+}
+
 async function readAuthoritativeVerifiedState(
   ports: DemoOrchestratorPorts,
   boundIntentStateId: string,
@@ -153,8 +178,10 @@ async function readAuthoritativeVerifiedState(
   const allRequiredSatisfied = Boolean(
     proofSummary &&
       proofSummary.coverage.allRequiredCovered &&
-      requiredProofCount > 0 &&
-      satisfiedProofCount === requiredProofCount,
+      requiredProofsSatisfied(
+        proofSummary.requiredProofObligationIds,
+        proofSummary.proofRows,
+      ),
   );
 
   return {
