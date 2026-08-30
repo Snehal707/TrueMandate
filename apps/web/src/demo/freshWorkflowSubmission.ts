@@ -38,6 +38,41 @@ function defaultWait(delayMs: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, delayMs));
 }
 
+const TIMEOUT_RECOVERY_DELAY_MS = 2_000;
+
+/**
+ * `AbortSignal.timeout()` rejects fetch with a DOMException named
+ * "TimeoutError" (browsers use the literal message "signal timed out"); a
+ * manually aborted signal surfaces as "AbortError". Both mean the browser
+ * gave up on the connection -- not that the backend rejected the request.
+ */
+function isClientTimeoutError(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
+/**
+ * A client-side transport timeout on the REFERENCE submission does not mean
+ * the backend didn't process it: the browser gave up waiting, but the
+ * request may still be running, or may have already finished, server-side.
+ * One bounded retry -- on the exact same request and idempotency key -- lets
+ * the backend's own idempotency guarantee resolve this instead of surfacing
+ * a false failure for a workflow that actually went through. Only a second
+ * client-side timeout (or any non-timeout failure) propagates un-retried.
+ */
+async function submitReferenceLegWithTimeoutRecovery(
+  sdk: FreshWorkflowSdk,
+  referenceRequest: SdkWorkflowRequest,
+  wait: (delayMs: number) => Promise<void>,
+): Promise<Result<SdkWorkflowView>> {
+  try {
+    return await sdk.submitWorkflow(referenceRequest);
+  } catch (firstError) {
+    if (!isClientTimeoutError(firstError)) throw firstError;
+    await wait(TIMEOUT_RECOVERY_DELAY_MS);
+    return await sdk.submitWorkflow(referenceRequest);
+  }
+}
+
 /**
  * RAW intent finalization is asynchronous. Once the public workspace exposes
  * its finalized tip, continue with a state-bound REFERENCE submission.
@@ -88,7 +123,7 @@ export async function submitFreshWorkflowWhenReady(
     const { workflowId: _rawWorkflowId, ...stateBoundRequest } = request;
 
     report({ phase: "submitting-workflow", intentStateId: stateId });
-    submitted = await sdk.submitWorkflow({
+    const referenceRequest: SdkWorkflowRequest = {
       ...stateBoundRequest,
       intent: {
         kind: "REFERENCE",
@@ -97,7 +132,8 @@ export async function submitFreshWorkflowWhenReady(
         expectedIntentStateHash: stateHash,
       },
       idempotencyKey: `${request.idempotencyKey}:finalized:${stateId}`,
-    });
+    };
+    submitted = await submitReferenceLegWithTimeoutRecovery(sdk, referenceRequest, wait);
     if (submitted.ok || !retryableStateCodes.has(submitted.code)) {
       return submitted;
     }

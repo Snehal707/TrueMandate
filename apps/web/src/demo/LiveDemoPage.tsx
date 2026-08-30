@@ -37,7 +37,10 @@ import {
   type RailStage,
 } from "./live-stage-rail";
 
-const sdk = createSdkCore({ baseUrl: "", timeoutMs: 120_000 });
+// Real successful Procurement submissions have been observed taking 113+
+// seconds server-side; 120s left almost no margin. This instance is bumped
+// independently of AttackLabPage's own SDK instance -- not a shared config.
+const sdk = createSdkCore({ baseUrl: "", timeoutMs: 180_000 });
 
 /** The governed path, in the order this page runs it. */
 const LIVE_PIPELINE_STAGES: readonly { stage: string; title: string; body: string }[] = [

@@ -187,3 +187,168 @@ describe("submitFreshWorkflowWhenReady", () => {
     expect(readWorkspace).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Submission-day reliability fix: a client-side transport timeout on the
+ * state-bound REFERENCE leg (the call that synchronously runs plan -> plan
+ * verification -> Guardian -> Authority, and has been observed taking 100+
+ * seconds server-side) no longer surfaces as a bare failure. It gets exactly
+ * one bounded retry, on the identical request and idempotency key, so the
+ * backend's own idempotency guarantee -- not a second economic workflow --
+ * resolves it.
+ */
+describe("submitFreshWorkflowWhenReady -- REFERENCE-leg timeout recovery", () => {
+  function readyWorkspace(): { ok: true; value: IntentWorkspaceView } {
+    return {
+      ok: true,
+      value: {
+        summary: {
+          intentId: "intent-live",
+          rawIntent: "Book a governed trip.",
+          principalId: "live-demo",
+          createdAt: "2026-08-24T00:00:00.000Z",
+          intentStateId: "state-live-v1",
+          stateHash: "hash-live-v1",
+          historicalStateIds: [],
+        },
+      } as unknown as IntentWorkspaceView,
+    };
+  }
+
+  function timeoutError(): DOMException {
+    return new DOMException("signal timed out", "TimeoutError");
+  }
+
+  const FAST_OPTIONS = { wait: async () => {}, delaysMs: [0] };
+
+  it("A: REFERENCE succeeds normally -- exactly one submit of the REFERENCE leg", async () => {
+    const submitWorkflow = vi
+      .fn()
+      .mockResolvedValueOnce(notReady)
+      .mockResolvedValueOnce({ ok: true as const, value: workflow });
+    const readWorkspace = vi.fn(async () => readyWorkspace());
+
+    const result = await submitFreshWorkflowWhenReady(
+      { submitWorkflow, readWorkspace },
+      request,
+      FAST_OPTIONS,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(submitWorkflow).toHaveBeenCalledTimes(2); // leg 1 (RAW) + leg 2 (REFERENCE), no retry
+  });
+
+  it("B: one client timeout on REFERENCE -- retries once, same key, succeeds", async () => {
+    const submitWorkflow = vi
+      .fn()
+      .mockResolvedValueOnce(notReady)
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ ok: true as const, value: workflow });
+    const readWorkspace = vi.fn(async () => readyWorkspace());
+
+    const result = await submitFreshWorkflowWhenReady(
+      { submitWorkflow, readWorkspace },
+      request,
+      FAST_OPTIONS,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(submitWorkflow).toHaveBeenCalledTimes(3); // leg 1 + REFERENCE(throws) + REFERENCE(retry, succeeds)
+  });
+
+  it("C: two client timeouts on REFERENCE -- fails closed after exactly two REFERENCE attempts", async () => {
+    const secondTimeout = timeoutError();
+    const submitWorkflow = vi
+      .fn()
+      .mockResolvedValueOnce(notReady)
+      .mockRejectedValueOnce(timeoutError())
+      .mockRejectedValueOnce(secondTimeout);
+    const readWorkspace = vi.fn(async () => readyWorkspace());
+
+    await expect(
+      submitFreshWorkflowWhenReady({ submitWorkflow, readWorkspace }, request, FAST_OPTIONS),
+    ).rejects.toBe(secondTimeout);
+
+    expect(submitWorkflow).toHaveBeenCalledTimes(3); // leg 1 + REFERENCE attempt 1 + REFERENCE attempt 2, then stop
+  });
+
+  it("D: a backend Result failure on REFERENCE is never retried", async () => {
+    const submitWorkflow = vi
+      .fn()
+      .mockResolvedValueOnce(notReady)
+      .mockResolvedValueOnce({ ok: false as const, code: "AUTHORITY_BLOCKED", message: "blocked" });
+    const readWorkspace = vi.fn(async () => readyWorkspace());
+
+    const result = await submitFreshWorkflowWhenReady(
+      { submitWorkflow, readWorkspace },
+      request,
+      FAST_OPTIONS,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("AUTHORITY_BLOCKED");
+    expect(submitWorkflow).toHaveBeenCalledTimes(2); // leg 1 + REFERENCE, no retry after a real backend refusal
+  });
+
+  it("E: the retry reuses the exact same request object, state id/hash, and idempotency key", async () => {
+    const submitWorkflow = vi
+      .fn()
+      .mockResolvedValueOnce(notReady)
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ ok: true as const, value: workflow });
+    const readWorkspace = vi.fn(async () => readyWorkspace());
+
+    await submitFreshWorkflowWhenReady({ submitWorkflow, readWorkspace }, request, FAST_OPTIONS);
+
+    const firstAttempt = submitWorkflow.mock.calls[1]?.[0] as SdkWorkflowRequest;
+    const secondAttempt = submitWorkflow.mock.calls[2]?.[0] as SdkWorkflowRequest;
+    expect(secondAttempt).toBe(firstAttempt); // identical object reference, not merely equal
+    expect(firstAttempt.idempotencyKey).toBe("idem-live:finalized:state-live-v1");
+    expect(firstAttempt.intent).toMatchObject({
+      kind: "REFERENCE",
+      intentId: "intent-live",
+      expectedIntentStateId: "state-live-v1",
+      expectedIntentStateHash: "hash-live-v1",
+    });
+  });
+
+  it("F: recovery introduces no commitWorkflow call", async () => {
+    const submitWorkflow = vi
+      .fn()
+      .mockResolvedValueOnce(notReady)
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ ok: true as const, value: workflow });
+    const readWorkspace = vi.fn(async () => readyWorkspace());
+    const commitWorkflow = vi.fn();
+
+    await submitFreshWorkflowWhenReady(
+      { submitWorkflow, readWorkspace, commitWorkflow } as never,
+      request,
+      FAST_OPTIONS,
+    );
+
+    expect(commitWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("G: a throwing progress callback cannot alter submission behavior", async () => {
+    const submitWorkflow = vi
+      .fn()
+      .mockResolvedValueOnce(notReady)
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ ok: true as const, value: workflow });
+    const readWorkspace = vi.fn(async () => readyWorkspace());
+    const onProgress = vi.fn(() => {
+      throw new Error("presentation bug");
+    });
+
+    const result = await submitFreshWorkflowWhenReady(
+      { submitWorkflow, readWorkspace },
+      request,
+      { ...FAST_OPTIONS, onProgress },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(submitWorkflow).toHaveBeenCalledTimes(3); // the recovery path still ran to completion
+    expect(onProgress).toHaveBeenCalled(); // the observer was invoked, and its throw changed nothing
+  });
+});

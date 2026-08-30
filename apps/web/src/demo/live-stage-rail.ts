@@ -136,7 +136,7 @@ export function classifyFailure(errorCode?: string): FailurePresentation | undef
       kind: "request-failure",
       headline: "The request could not be completed.",
       explanation:
-        "The call to the public API did not succeed. Nothing was authorized and no workflow advanced.",
+        "The request did not complete in this browser session. No economic action was committed from this page.",
       economicEffect: "No economic action was taken.",
     };
   }
