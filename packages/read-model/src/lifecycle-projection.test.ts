@@ -32,6 +32,15 @@ const guardian = (decision: string, criticalFailure = false): LifecycleArtifactR
   payload: { verdict: { decision, semanticStatus: "CLEAR", criticalFailure } },
 });
 const outcome = (): LifecycleArtifactRow => ({ kind: "OUTCOME_CONTRACT", payload: { id: "outcome-1" } });
+const executionAuthorization = (): LifecycleArtifactRow => ({
+  kind: "EXECUTION_AUTHORIZATION",
+  payload: {
+    commitTokenId: "ct-1",
+    preparedActionId: "prep-1",
+    grantId: "grant-1",
+    outcomeContractId: "outcome-1",
+  },
+});
 
 const satisfiedProofs = (n: number) =>
   Array.from({ length: n }, (_, i) => proof("SATISFIED", "authoritative-proof-handoff", `c-${i}`));
@@ -200,6 +209,112 @@ describe("historical workflow with an incomplete artifact set", () => {
 
   it("claims no blocker it cannot evidence", () => {
     expect(view.blockingStage).toBeUndefined();
+  });
+});
+
+describe("workflow frozen at an early state, but Authority actually granted", () => {
+  // The durable WORKFLOW artifact is written once, immutably, at Guardian time
+  // and never updated as the workflow progresses further. EXECUTION_AUTHORIZATION
+  // is only ever written after bindAndMint succeeds, so its presence is
+  // authoritative proof Authority granted -- regardless of what the frozen
+  // workflow.state snapshot says.
+  const view = projectLifecycle({
+    artifacts: [
+      ...satisfiedProofs(5),
+      plan(),
+      planVerification("VERIFIED"),
+      action(true),
+      guardian("ALLOW"),
+      workflow("AUTHORITY_EVALUATION"),
+      executionAuthorization(),
+    ],
+    readiness: "ACTIONABLE",
+  });
+
+  it("reports Authority and PreparedAction completed, not stuck at NOT_REACHED", () => {
+    expect(stageOf(view, "authority")?.status).toBe("COMPLETED");
+    expect(stageOf(view, "authority")?.detail).toBe("AUTHORIZED");
+    expect(stageOf(view, "preparedAction")?.status).toBe("COMPLETED");
+  });
+
+  it("does not also claim execution or outcome without their own evidence", () => {
+    expect(stageOf(view, "execution")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "outcome")?.status).toBe("NOT_PRODUCED");
+  });
+});
+
+describe("execution confirmed by a resolved outcome contract", () => {
+  // Neither generic-workflow-engine.ts's semantic artifacts nor the caller's
+  // sideEffectCount ever populate after commit in production. The durable
+  // OutcomeContract's own paymentStatus is the real, separate write the
+  // commit step makes -- and is sufficient on its own.
+  const view = projectLifecycle({
+    artifacts: [
+      ...satisfiedProofs(5),
+      plan(),
+      planVerification("VERIFIED"),
+      action(true),
+      guardian("ALLOW"),
+      workflow("AUTHORITY_EVALUATION"),
+      executionAuthorization(),
+    ],
+    readiness: "ACTIONABLE",
+    outcomeContract: { state: "RESOLVED", paymentStatus: "SUCCESS" },
+  });
+
+  it("completes execution from the outcome contract alone, with no side-effect count supplied", () => {
+    expect(stageOf(view, "execution")?.status).toBe("COMPLETED");
+  });
+
+  it("completes outcome", () => {
+    expect(stageOf(view, "outcome")?.status).toBe("COMPLETED");
+  });
+});
+
+describe("outcome contract exists but payment has not resolved yet", () => {
+  const view = projectLifecycle({
+    artifacts: [
+      ...satisfiedProofs(5),
+      plan(),
+      planVerification("VERIFIED"),
+      action(true),
+      guardian("ALLOW"),
+      workflow("AUTHORITY_EVALUATION"),
+      executionAuthorization(),
+    ],
+    readiness: "ACTIONABLE",
+    outcomeContract: { state: "AWAITING_OUTCOME", paymentStatus: "PENDING" },
+  });
+
+  it("does not claim execution completed while payment is still pending", () => {
+    expect(stageOf(view, "execution")?.status).toBe("NOT_REACHED");
+  });
+
+  it("still reports outcome as completed, since a contract now exists", () => {
+    expect(stageOf(view, "outcome")?.status).toBe("COMPLETED");
+  });
+});
+
+describe("blocked workflow stays fully unreached even with the new inputs absent", () => {
+  // Confirms the fix is additive-only: a workflow that never reached Authority
+  // must not be spuriously promoted merely because the new signals are missing.
+  const view = projectLifecycle({
+    artifacts: [
+      ...satisfiedProofs(5),
+      plan(),
+      planVerification("VERIFIED"),
+      action(true),
+      guardian("ALLOW"),
+      workflow("BLOCKED"),
+    ],
+    readiness: "ACTIONABLE",
+  });
+
+  it("reports authority, preparedAction, execution, and outcome as unreached", () => {
+    expect(stageOf(view, "authority")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "preparedAction")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "execution")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "outcome")?.status).toBe("NOT_PRODUCED");
   });
 });
 

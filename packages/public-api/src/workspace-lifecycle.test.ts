@@ -30,7 +30,10 @@ function bound(intentId: string, rows: Omit<Row, "intentId">[]): Row[] {
   return rows.map((row) => ({ ...row, intentId }));
 }
 
-function ports(listWorkflowArtifacts?: (workflowId: string) => Result<readonly unknown[]>) {
+function ports(
+  listWorkflowArtifacts?: (workflowId: string) => Result<readonly unknown[]>,
+  getOutcomeContract?: (id: string) => Result<unknown>,
+) {
   return createLivePublicBffPorts({
     intentCreate: { createIntent: () => ok(INTENT) },
     workspaceSource: {
@@ -40,8 +43,30 @@ function ports(listWorkflowArtifacts?: (workflowId: string) => Result<readonly u
       ...(listWorkflowArtifacts ? { listWorkflowArtifacts: async (workflowId: string) => listWorkflowArtifacts(workflowId) } : {}),
     },
     evidence: new EvidenceService(),
+    ...(getOutcomeContract ? { outcomeRead: { getOutcomeContract: async (id: string) => getOutcomeContract(id) } } : {}),
   });
 }
+
+const EXECUTION_AUTHORIZED_AWAITING_COMMIT = (intentId: string) => bound(intentId, [
+  { kind: "PROOF", payload: { status: "SATISFIED", method: "authoritative-proof-handoff", constraintId: "c-qty" } },
+  { kind: "PLAN", payload: { plan: { steps: [] } } },
+  { kind: "PLAN_VERIFICATION", payload: { verification: { status: "VERIFIED" } } },
+  { kind: "ACTION", payload: { deterministicActionFidelity: { preservesIntent: true } } },
+  { kind: "GUARDIAN", payload: { verdict: { decision: "ALLOW", semanticStatus: "CLEAR", criticalFailure: false, judgeResults: [] } } },
+  // The immutable WORKFLOW snapshot is frozen here -- exactly as observed live --
+  // even though EXECUTION_AUTHORIZATION below proves the workflow reached and
+  // passed Authority.
+  { kind: "WORKFLOW", payload: { state: "AUTHORITY_EVALUATION" } },
+  {
+    kind: "EXECUTION_AUTHORIZATION",
+    payload: {
+      commitTokenId: "ct-1",
+      preparedActionId: "prep-1",
+      grantId: "grant-1",
+      outcomeContractId: "outcome-1",
+    },
+  },
+]);
 
 const AUTHORIZED = (intentId: string) => bound(intentId, [
   { kind: "PROOF", payload: { status: "SATISFIED", method: "authoritative-proof-handoff", constraintId: "c-qty" } },
@@ -197,6 +222,87 @@ describe("8. redaction guarantees remain intact", () => {
       for (const forbidden of ["committoken", "commit_token", "grantid", "nonce", "credential", "privatekey", "promptversion"]) {
         expect(serialized).not.toContain(forbidden);
       }
+    }
+  });
+});
+
+describe("9. workflow frozen at an early state, but EXECUTION_AUTHORIZATION proves Authority granted", () => {
+  it("reports Authority ALLOW and PreparedAction completed even though the WORKFLOW snapshot never advanced", async () => {
+    const result = await ports((workflowId) => ok(EXECUTION_AUTHORIZED_AWAITING_COMMIT("intent-1")))
+      .workspaceRead.getWorkspace("intent-1", "wf-frozen");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.authority?.decision).toBe("ALLOW");
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "authority")?.status).toBe("COMPLETED");
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "preparedAction")?.status).toBe("COMPLETED");
+  });
+
+  it("does not also claim execution or outcome without an outcomeRead port wired", async () => {
+    const result = await ports((workflowId) => ok(EXECUTION_AUTHORIZED_AWAITING_COMMIT("intent-1")))
+      .workspaceRead.getWorkspace("intent-1", "wf-frozen");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "execution")?.status).toBe("NOT_REACHED");
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "outcome")?.status).toBe("NOT_PRODUCED");
+  });
+});
+
+describe("10. execution confirmed end-to-end via the outcome contract", () => {
+  it("fetches the OutcomeContract by the id recorded on EXECUTION_AUTHORIZATION and completes execution and outcome", async () => {
+    const result = await ports(
+      () => ok(EXECUTION_AUTHORIZED_AWAITING_COMMIT("intent-1")),
+      (id) => {
+        expect(id).toBe("outcome-1");
+        return ok({ id, state: "RESOLVED", paymentStatus: "SUCCESS" });
+      },
+    ).workspaceRead.getWorkspace("intent-1", "wf-committed");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "execution")?.status).toBe("COMPLETED");
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "outcome")?.status).toBe("COMPLETED");
+  });
+});
+
+describe("11. outcome contract exists but payment has not resolved yet", () => {
+  it("completes outcome but does not claim execution completed while payment is still pending", async () => {
+    const result = await ports(
+      () => ok(EXECUTION_AUTHORIZED_AWAITING_COMMIT("intent-1")),
+      (id) => ok({ id, state: "AWAITING_OUTCOME", paymentStatus: "PENDING" }),
+    ).workspaceRead.getWorkspace("intent-1", "wf-pending");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "execution")?.status).toBe("NOT_REACHED");
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "outcome")?.status).toBe("COMPLETED");
+  });
+});
+
+describe("12. outcome contract lookup fails", () => {
+  it("degrades to NOT_REACHED/NOT_PRODUCED rather than throwing or faking success", async () => {
+    const result = await ports(
+      () => ok(EXECUTION_AUTHORIZED_AWAITING_COMMIT("intent-1")),
+      () => err(ErrorCode.VALIDATION_FAILED, "Unknown outcome contract", {}),
+    ).workspaceRead.getWorkspace("intent-1", "wf-lookup-failed");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "execution")?.status).toBe("NOT_REACHED");
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "outcome")?.status).toBe("NOT_PRODUCED");
+  });
+});
+
+describe("13. redaction guarantees hold for the new EXECUTION_AUTHORIZATION-derived fields", () => {
+  it("exposes no commit token, grant, or prepared-action id from EXECUTION_AUTHORIZATION or the outcome contract", async () => {
+    const result = await ports(
+      () => ok(EXECUTION_AUTHORIZED_AWAITING_COMMIT("intent-1")),
+      (id) => ok({ id, state: "RESOLVED", paymentStatus: "SUCCESS" }),
+    ).workspaceRead.getWorkspace("intent-1", "wf-committed");
+    const serialized = JSON.stringify(result).toLowerCase();
+    for (const forbidden of ["ct-1", "prep-1", "grant-1", "committoken", "commit_token", "grantid", "credential", "privatekey"]) {
+      expect(serialized).not.toContain(forbidden);
     }
   });
 });

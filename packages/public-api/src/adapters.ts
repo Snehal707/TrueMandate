@@ -326,8 +326,37 @@ export function createLivePublicBffPorts(input: {
     const verificationPayload = rows.find((row) => row.kind === "SEMANTIC_VERIFICATION")?.payload;
     const verification = verificationPayload?.verification as { readiness?: unknown } | undefined;
     const readiness = typeof verification?.readiness === "string" ? verification.readiness : undefined;
+
+    // Durable proof Authority granted, a PreparedAction was minted, and a
+    // commit token was issued -- written once, right after bindAndMint. See
+    // the matching comment in projectLifecycle. Its outcomeContractId is the
+    // only way to find the OutcomeContract from here: that record lives in a
+    // separate collection, never itself a semantic artifact.
+    const executionAuthorizationPayload = payloadOf("EXECUTION_AUTHORIZATION");
+    const outcomeContractId = typeof executionAuthorizationPayload?.outcomeContractId === "string"
+      ? executionAuthorizationPayload.outcomeContractId
+      : undefined;
+    const outcomeContractResult = outcomeContractId && outcomeRead
+      ? await Promise.resolve(outcomeRead.getOutcomeContract(outcomeContractId))
+      : undefined;
+    const outcomeContractValue = outcomeContractResult?.ok
+      ? (outcomeContractResult.value as { state?: unknown; paymentStatus?: unknown })
+      : undefined;
+    const outcomeContractForLifecycle = outcomeContractValue
+      ? {
+          ...(typeof outcomeContractValue.state === "string" ? { state: outcomeContractValue.state } : {}),
+          ...(typeof outcomeContractValue.paymentStatus === "string"
+            ? { paymentStatus: outcomeContractValue.paymentStatus }
+            : {}),
+        }
+      : undefined;
+
     const lifecycle = rows.length > 0
-      ? projectLifecycle({ artifacts: rows, ...(readiness ? { readiness } : {}) })
+      ? projectLifecycle({
+          artifacts: rows,
+          ...(readiness ? { readiness } : {}),
+          ...(outcomeContractForLifecycle ? { outcomeContract: outcomeContractForLifecycle } : {}),
+        })
       : undefined;
 
     // Never synthesize "UNAVAILABLE" from a projection gap. A Guardian record that
@@ -352,7 +381,16 @@ export function createLivePublicBffPorts(input: {
           ...(guardian ? { guardian } : {}),
           ...(lifecycle ? { lifecycle } : {}),
           ...(typeof workflowState === "string"
-            ? { authority: projectAuthority({ authorityDecision: undefined, semanticGate: workflowState }) }
+            ? {
+                authority: projectAuthority({
+                  // The artifact's mere existence is proof: generic-workflow-
+                  // engine.ts only reaches bindAndMint (which writes it) after
+                  // Authority ALLOWs -- a BLOCKed workflow never produces one,
+                  // so this is never a false ALLOW.
+                  authorityDecision: executionAuthorizationPayload ? "ALLOW" : undefined,
+                  semanticGate: workflowState,
+                }),
+              }
             : {}),
           graph: projectProvenanceGraph({
             nodes: [],

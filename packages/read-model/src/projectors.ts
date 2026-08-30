@@ -413,6 +413,14 @@ export function projectLifecycle(input: {
   readonly readiness?: string;
   readonly sideEffectCount?: number;
   readonly provenanceNodeCount?: number;
+  /**
+   * The durable OutcomeContract, fetched by the caller from the separate
+   * outcomeContracts collection (keyed by the EXECUTION_AUTHORIZATION
+   * artifact's outcomeContractId -- not itself present in `artifacts`).
+   * Distinct from `of("OUTCOME_CONTRACT")` below, which checks for a
+   * semantic-artifact kind this pipeline never actually writes.
+   */
+  readonly outcomeContract?: { readonly state?: string; readonly paymentStatus?: string };
 }): LifecycleView {
   const of = (kind: string) => input.artifacts.find((row) => row.kind === kind)?.payload;
   const all = (kind: string) => input.artifacts.filter((row) => row.kind === kind).map((row) => row.payload);
@@ -424,9 +432,23 @@ export function projectLifecycle(input: {
   const guardianVerdict = record(of("GUARDIAN")?.verdict);
   const proofs = all("PROOF");
   const outcome = of("OUTCOME_CONTRACT") ?? of("OUTCOME");
+  /**
+   * Durable proof that Authority granted, a PreparedAction was minted, and a
+   * CommitToken was issued -- written once by generic-workflow-engine.ts
+   * right after bindAndMint. Its mere existence is authoritative: a BLOCKed
+   * workflow never reaches that call, so there is no false-positive case to
+   * guard against. This is a stronger, later signal than the WORKFLOW
+   * artifact's own `state`, which is written once, immutably, at Guardian
+   * time and never updated as the workflow progresses further -- relying on
+   * it alone permanently freezes authority/preparedAction at whatever state
+   * existed at that one snapshot (observed live: frozen at
+   * "AUTHORITY_EVALUATION" for workflows that had already reached AUTHORIZED).
+   */
+  const executionAuthorization = of("EXECUTION_AUTHORIZATION");
 
   const workflowState = typeof workflow?.state === "string" ? workflow.state : undefined;
-  const authorityReached = workflowState === "AUTHORITY_EVALUATION" ||
+  const authorityReached = Boolean(executionAuthorization) ||
+    workflowState === "AUTHORITY_EVALUATION" ||
     workflowState === "AUTHORIZED" ||
     workflowState === "AWAITING_APPROVAL" ||
     workflowState === "EXECUTED";
@@ -514,20 +536,37 @@ export function projectLifecycle(input: {
   stages.push({
     stage: "authority",
     status: authorityReached ? "COMPLETED" : "NOT_REACHED",
-    ...(workflowState ? { detail: workflowState } : {}),
+    ...(executionAuthorization
+      ? { detail: "AUTHORIZED" }
+      : workflowState
+        ? { detail: workflowState }
+        : {}),
   });
-  stages.push({ stage: "preparedAction", status: workflowState === "AUTHORIZED" || workflowState === "EXECUTED" ? "COMPLETED" : "NOT_REACHED" });
+  stages.push({
+    stage: "preparedAction",
+    status: executionAuthorization || workflowState === "AUTHORIZED" || workflowState === "EXECUTED"
+      ? "COMPLETED"
+      : "NOT_REACHED",
+  });
 
-  // Execution is claimed only from a recorded side effect. An authorized workflow
-  // that has not committed has not executed, and absence of a side effect is not
-  // itself proof that nothing happened elsewhere — it is only what this record shows.
+  // Execution is claimed from a recorded side effect when the caller supplies
+  // one, or from the durable OutcomeContract's own paymentStatus -- a real,
+  // separate write the commit step makes, unlike this pipeline's semantic
+  // artifacts (which never gain a post-authorize entry; see
+  // EXECUTION_AUTHORIZATION above). Neither an authorized-but-uncommitted
+  // workflow (paymentStatus stays PENDING) nor a merely-created outcome
+  // contract satisfies this.
   const sideEffects = input.sideEffectCount ?? 0;
+  const executionConfirmedByOutcome = input.outcomeContract?.paymentStatus === "SUCCESS";
   stages.push({
     stage: "execution",
-    status: sideEffects > 0 ? "COMPLETED" : "NOT_REACHED",
+    status: sideEffects > 0 || executionConfirmedByOutcome ? "COMPLETED" : "NOT_REACHED",
     detail: `${sideEffects} recorded side effect(s)`,
   });
-  stages.push({ stage: "outcome", status: outcome ? "COMPLETED" : "NOT_PRODUCED" });
+  stages.push({
+    stage: "outcome",
+    status: outcome || input.outcomeContract ? "COMPLETED" : "NOT_PRODUCED",
+  });
   stages.push({
     stage: "provenance",
     status: (input.provenanceNodeCount ?? 0) > 0 ? "COMPLETED" : "NOT_PRODUCED",
