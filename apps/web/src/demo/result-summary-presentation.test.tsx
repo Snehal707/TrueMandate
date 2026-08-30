@@ -195,3 +195,88 @@ describe("governance report leads with plain language", () => {
     expect(bare).not.toContain("In plain language");
   });
 });
+
+/**
+ * "Did execution occur" must distinguish a lifecycle-confirmed completion
+ * from a bare AUTHORIZED status that has not been confirmed as run --
+ * collapsing them previously made an unconfirmed AUTHORIZED status render as
+ * a plain "Yes, it ran".
+ */
+describe("governance report execution line distinguishes authorized from confirmed", () => {
+  const AUTHORIZED_NOT_YET_COMMITTED: RunSummaryInput = {
+    hasRun: true,
+    workspacePresent: true,
+    workflowState: "AUTHORIZED",
+    intentId: "intent-2",
+    intentStateId: "state-2",
+    constraintsTotal: 5,
+    constraintsWithoutCriticalFailure: 5,
+    planStepCount: 3,
+    planArtifactsPresent: true,
+    guardianDecision: "ALLOW",
+    guardianSemanticStatus: "CLEAR",
+    authorityDecision: "ALLOW",
+    executionPhase: "PROPOSE",
+    executionStatus: "AUTHORIZED",
+    sideEffectCount: 0,
+    outcomePresent: true,
+    outcomeState: "CREATED",
+    resolutionPresent: false,
+    requestInFlight: false,
+    lifecycle: {
+      stages: [
+        { stage: "intent", status: "COMPLETED" },
+        { stage: "verification", status: "COMPLETED" },
+        { stage: "guardian", status: "COMPLETED", detail: "ALLOW" },
+        { stage: "authority", status: "COMPLETED" },
+        { stage: "preparedAction", status: "NOT_REACHED" },
+        { stage: "execution", status: "NOT_REACHED", detail: "0 recorded side effect(s)" },
+        { stage: "outcome", status: "NOT_PRODUCED" },
+      ],
+    },
+  };
+
+  const EXECUTION_CONFIRMED_COMPLETE: RunSummaryInput = {
+    ...AUTHORIZED_NOT_YET_COMMITTED,
+    intentId: "intent-3",
+    executionStatus: "SUCCESS",
+    lifecycle: {
+      stages: [
+        { stage: "intent", status: "COMPLETED" },
+        { stage: "verification", status: "COMPLETED" },
+        { stage: "guardian", status: "COMPLETED", detail: "ALLOW" },
+        { stage: "authority", status: "COMPLETED" },
+        { stage: "preparedAction", status: "COMPLETED" },
+        { stage: "execution", status: "COMPLETED", detail: "1 recorded side effect(s)" },
+        { stage: "outcome", status: "COMPLETED" },
+      ],
+    },
+  };
+
+  function plainSummaryHtml(input: RunSummaryInput): string {
+    return strip(
+      renderToString(
+        <GovernanceReport
+          workflowId="wf-1"
+          sections={[]}
+          summary={deriveRunSummary(input)}
+          request="Buy 500 food-grade containers from an approved supplier."
+        />,
+      ),
+    );
+  }
+
+  it("an AUTHORIZED status not yet confirmed by lifecycle never claims a plain Yes", () => {
+    const html = plainSummaryHtml(AUTHORIZED_NOT_YET_COMMITTED);
+    expect(html).toContain("Not yet — execution was authorized");
+    expect(html).not.toContain("Yes — execution reported AUTHORIZED");
+    expect(html).not.toContain("Yes — governed mock execution completed");
+  });
+
+  it("a lifecycle-confirmed completion says Yes, naming it a governed mock execution", () => {
+    const html = plainSummaryHtml(EXECUTION_CONFIRMED_COMPLETE);
+    expect(html).toContain("Yes — governed mock execution completed");
+    expect(html).not.toContain("Not yet —");
+    expect(html).not.toContain("No — the action was never executed.");
+  });
+});

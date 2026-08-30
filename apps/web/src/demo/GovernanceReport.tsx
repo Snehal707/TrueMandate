@@ -32,10 +32,20 @@ function PlainSummary(props: { readonly summary: RunSummary; readonly request: s
       ? `No — Authority returned ${refused.detail ?? "a non-granting decision"}.`
       : "No — Authority was never reached.";
 
-  const executed = summary.succeeded.find((fact) => fact.label === "Execution ran");
-  const executionLine = executed
-    ? `Yes — execution reported ${executed.detail ?? "a result"}.`
-    : "No — the action was never executed.";
+  // Two different "yes" facts exist upstream (live-run-summary.ts) precisely so
+  // this line can tell them apart: a lifecycle-confirmed completion is not the
+  // same claim as "authorized, result not yet confirmed" -- collapsing them
+  // into one check previously made an unconfirmed AUTHORIZED status read as a
+  // plain "Yes, it ran".
+  const executionCompleted = summary.succeeded.find(
+    (fact) => fact.label === "Governed mock execution completed",
+  );
+  const executionAuthorizedOnly = summary.succeeded.find((fact) => fact.label === "Execution ran");
+  const executionLine = executionCompleted
+    ? `Yes — governed mock execution completed, reporting ${executionCompleted.detail ?? "a result"}.`
+    : executionAuthorizedOnly
+      ? `Not yet — execution was authorized (${executionAuthorizedOnly.detail ?? "no result yet"}) but has not been confirmed as run. This requires a separate commit.`
+      : "No — the action was never executed.";
 
   const rows: readonly (readonly [string, string])[] = [
     ["What was requested", props.request],
