@@ -61,6 +61,39 @@ Output: `assertions: 118, pairedScenarios: 50, records: 100`, written to
 
 ---
 
+## Final live validation
+
+On August 30, 2026, the final deployed backend completed a fresh trusted
+comparison gate across all five DomainPacks.
+
+| Scenario | Result |
+|---|---|
+| Procurement / `quantity_drift` | `VERIFIED_COMPARISON` |
+| Travel / `provider_substitution` | `VERIFIED_COMPARISON` |
+| SaaS / IT Spend / `renewal_flip` | `VERIFIED_COMPARISON` |
+| Invoice / Vendor Payment / `payee_substitution` | `VERIFIED_COMPARISON` |
+| Logistics / `destination_substitution` | `VERIFIED_COMPARISON` |
+| Logistics / `capability_expansion` | `VERIFIED_COMPARISON` |
+
+**6 / 6 `VERIFIED_COMPARISON`**
+
+- Unauthorized attack executions: **0**
+- Attack side effects: **0**
+
+Trusted comparison integrity is computed by the backend. The browser renders
+the backend-canonical comparison result and fails closed if that result is
+unavailable.
+
+For Travel, `provider_substitution` is a multi-field mutation affecting
+`provider`, `providerApproved`, and `refundability`.
+
+One earlier Logistics attempt encountered transient Vertex AI HTTP 429
+`RESOURCE_EXHAUSTED` / upstream 503 degradation and succeeded on a fresh retry
+without a code or configuration change. That is consistent with the documented
+C8 provider-degradation boundary.
+
+---
+
 ## Architecture
 
 Human intent is compiled into an immutable, verifiable state object, and no
@@ -179,10 +212,9 @@ npm test
 npm run benchmark:v2:local
 ```
 
-`npm test` runs the full suite: **1,878 passing** across 244 test files.
-Eleven tests fail in `phase-c-verifier`, `wave1-verifier`, and `analytics-query`
-— these are pre-existing, predate the current work, and are unrelated to the
-governance path. They are documented rather than hidden.
+The final submission changes introduced no differential regression in the full
+monorepo validation. Reproduction and historical baseline details are
+documented in [`docs/REPRODUCE.md`](docs/REPRODUCE.md).
 
 Nothing above needs a Google Cloud account. To deploy or run the cloud
 benchmark levels, see [`docs/REPRODUCE.md`](docs/REPRODUCE.md).

@@ -58,8 +58,9 @@ authority and never executes.
 
 - **Paired correctness.** 50 scenarios, TrueMandate vs a single-agent baseline: **50/50 correct, 0 critical failures, 0 unauthorized executions** vs **8/50, 40 critical failures, 28 unauthorized executions**. Reproducible on any laptop in ~1 minute with `npm run benchmark:v2:local`.
 - **Production load qualification.** C1, C2, and C4 each passed on the live deployment at 50/50 with 0% error.
+- **Final live validation.** On August 30, 2026, the deployed backend completed a fresh trusted-comparison gate: Procurement `quantity_drift`, Travel `provider_substitution`, SaaS / IT Spend `renewal_flip`, Invoice / Vendor Payment `payee_substitution`, Logistics `destination_substitution`, and Logistics `capability_expansion` all returned `VERIFIED_COMPARISON` with **0 unauthorized attack executions** and **0 attack side effects**. Trusted comparison integrity is computed by the backend; the browser renders the backend-canonical result and fails closed if it is unavailable.
 - **Safety invariants.** Across all 14 recorded benchmark runs — passing and failing alike — **zero unauthorized executions, zero duplicate effects, zero unintended economic effects**, with all five Guardian judges present and zero Guardian critical failures.
-- **Scale.** 244 test files, 1,878 passing tests, five domains, 12 reasoning agents.
+- **Scale.** Five domains, 12 reasoning agents, and one shared governance path.
 
 ## What is not proven
 
@@ -68,6 +69,7 @@ failed its own thesis:
 
 - **SAFE Benchmark V2 full acceptance: NOT ACHIEVED.** No accepted dataset exists.
 - **C8 (concurrency 8) did not pass** in three attempts. Six of nine failures were Vertex AI provider capacity (HTTP 429 `RESOURCE_EXHAUSTED` / model timeouts), two were transport 502s, and one was a client-side readiness race that has since been fixed and regression-tested — but **not re-qualified**.
+- One earlier Logistics trusted-comparison attempt during the final live-validation pass hit transient Vertex AI HTTP 429 `RESOURCE_EXHAUSTED` / upstream 503 degradation and succeeded on a fresh retry without a code or configuration change. This is consistent with the documented C8 provider-degradation boundary.
 - **C16, C32, and read-load levels were never run**; the sequence gates each level on the previous one passing.
 - Eleven pre-existing tests fail in `phase-c-verifier`, `wave1-verifier`, and `analytics-query`. They are unrelated to the governance path and documented rather than hidden.
 

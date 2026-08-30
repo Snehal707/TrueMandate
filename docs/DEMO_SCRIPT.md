@@ -32,7 +32,7 @@ and the budget figure both staying green, and a red flag on the material change.
 **Click path:** Load the demo → land on Live Proof → let the workflow render →
 scroll to the provenance graph.
 
-> This is a real workflow on live infrastructure — eleven Cloud Run services, Firestore, Vertex AI Gemini.
+> This is a live governed workflow on real infrastructure — eleven Cloud Run services, Firestore, Vertex AI Gemini — with a controlled mock execution path.
 >
 > Intent is compiled, verified, and frozen into an immutable IntentState. A planner proposes. A plan verifier checks the plan still matches the intent. Then the Semantic Guardian runs five independent judges — fidelity, contradiction, devil's advocate, provenance, and evidence.
 >
@@ -52,7 +52,7 @@ scroll to the provenance graph.
 >
 > Here the merchant is approved and the price is under budget — a permissions-only system says yes. TrueMandate says no, because the `material` concept was weakened and its proof obligation is unsatisfied.
 >
-> No proof, no privilege. The purchase never executes.
+> No proof, no privilege. The governed mock execution never starts.
 
 **On screen:** the block reason text, held ~3s. This is the money shot — do not
 rush it.
@@ -89,6 +89,8 @@ npm run benchmark:v2:local
 > Concurrency eight did not pass. Three attempts. The cause was Vertex AI returning rate-limit and timeout errors under load — a provider capacity boundary, not a governance failure.
 >
 > We are not claiming full benchmark acceptance, because we did not achieve it. What we do claim is what the evidence shows: under provider degradation, the system failed closed. A missing judge blocks the action. Zero unauthorized executions, zero duplicate effects — in the failing runs too.
+>
+> Separately, on August 30, 2026, the final deployed backend completed a fresh six-row trusted comparison gate across all five DomainPacks: every row returned `VERIFIED_COMPARISON`, with zero unauthorized attack executions and zero attack side effects.
 
 **On screen at 2:30:** highlight the C8 row marked **NOT PASSED** in red. Showing
 the failure deliberately is the point.
@@ -99,7 +101,7 @@ the failure deliberately is the point.
 
 **Screen:** back to the architecture diagram, then the repo URL.
 
-> Payment success is not economic success. When nine of twelve shipments arrive, the payment is `SUCCESS` and the outcome contract is `PARTIAL` — and a resolution case opens automatically.
+> Payment success is not economic success. When nine of twelve shipments arrive, the governed mock execution can still be `SUCCESS` while the outcome contract is `PARTIAL` — and a resolution case opens automatically.
 >
 > LLMs reason. Infrastructure authorizes.
 >
