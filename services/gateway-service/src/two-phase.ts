@@ -108,6 +108,15 @@ export interface OutcomeContractBindingPort {
   }): Promise<Result<OutcomeContract>>;
 }
 
+/** Writes the post-commit payment fact to the authoritative OutcomeContract owner. */
+export interface OutcomePaymentStatusPort {
+  recordPaymentStatus(
+    outcomeContractId: string,
+    status: "SUCCESS" | "FAILED" | "UNKNOWN",
+    occurredAt: string,
+  ): Promise<Result<unknown>>;
+}
+
 export interface TwoPhaseGatewayOptions {
   readonly intents: IntentService;
   readonly authority: AuthorityService;
@@ -120,6 +129,8 @@ export interface TwoPhaseGatewayOptions {
   readonly provenanceOwner?: ProvenanceOwnerReadPort;
   /** Required for production T2/T3 — missing port fails closed. */
   readonly outcomeBinding: OutcomeContractBindingPort;
+  /** Production owner for post-commit payment state; absent only in local tests. */
+  readonly outcomePaymentStatus?: OutcomePaymentStatusPort;
   readonly registry?: ToolRegistry;
   readonly ledger?: SideEffectLedger;
   readonly tokenStore?: CommitTokenStore;
@@ -243,6 +254,7 @@ export class TwoPhaseGateway {
   private readonly externalStateProvider: CriticalExternalStateProvider;
   private readonly outcomeBinding: OutcomeContractBindingPort | undefined;
   private readonly outcomeService: OutcomeService | undefined;
+  private readonly outcomePaymentStatus: OutcomePaymentStatusPort | undefined;
   /** Production: false. Only set via createForUnboundLegacyTests. */
   private readonly allowUnboundEconomicCommit: boolean;
   private readonly stageRecorder: WorkflowStageRecorder | undefined;
@@ -270,6 +282,7 @@ export class TwoPhaseGateway {
       "onPaymentSuccess" in options.outcomeBinding
         ? (options.outcomeBinding as OutcomeService)
         : undefined;
+    this.outcomePaymentStatus = options.outcomePaymentStatus;
     this.allowUnboundEconomicCommit = options.allowUnboundEconomicCommit === true;
     this.stageRecorder = options.stageRecorder;
   }
@@ -318,6 +331,47 @@ export class TwoPhaseGateway {
       tool.value.privilegeClass === ToolPrivilegeClass.T2_ECONOMIC_WRITE ||
       tool.value.privilegeClass === ToolPrivilegeClass.T3_HIGH_CONSEQUENCE
     );
+  }
+
+  private async recordPaymentStatus(
+    outcomeContractId: string | undefined,
+    status: "SUCCESS" | "FAILED" | "UNKNOWN",
+    now: string,
+  ): Promise<void> {
+    if (!outcomeContractId) return;
+    try {
+      const recorded = this.outcomePaymentStatus
+        ? await this.outcomePaymentStatus.recordPaymentStatus(outcomeContractId, status, now)
+        // Local services are used only by unit/integration harnesses. Production
+        // injects outcomePaymentStatus so public reads observe the same owner state.
+        : this.outcomeService
+          ? status === "SUCCESS"
+            ? await this.outcomeService.onPaymentSuccess(outcomeContractId, now)
+            : status === "FAILED"
+              ? await this.outcomeService.onPaymentFailed(outcomeContractId, now)
+              : await this.outcomeService.onPaymentUnknown(outcomeContractId, now)
+          : undefined;
+      if (recorded && !recorded.ok) {
+        logStructured("error", {
+          event: "tm.outcome.payment_status_update_failed",
+          service: "gateway-service",
+          outcomeContractId,
+          status,
+          message: recorded.message,
+        });
+      }
+    } catch (error) {
+      // The economic write already happened. Do not misclassify it as failed or
+      // trigger a second commit; the owner remains PENDING and therefore fails
+      // closed in the public lifecycle until reconciliation succeeds.
+      logStructured("error", {
+        event: "tm.outcome.payment_status_update_failed",
+        service: "gateway-service",
+        outcomeContractId,
+        status,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async assertOutcomeBound(input: {
@@ -1059,9 +1113,11 @@ export class TwoPhaseGateway {
     const authHash = prepared.preparedActionHash;
 
     if (adapterResult.value.state === ExecutionState.UNKNOWN) {
-      if (this.outcomeService && prepared.outcomeContractId) {
-        await this.outcomeService.onPaymentUnknown(String(prepared.outcomeContractId), now);
-      }
+      await this.recordPaymentStatus(
+        prepared.outcomeContractId ? String(prepared.outcomeContractId) : undefined,
+        "UNKNOWN",
+        now,
+      );
       await this.idempotencyStore.markUnknown(
         keyResult.value,
         now,
@@ -1134,9 +1190,11 @@ export class TwoPhaseGateway {
     }
 
     if (adapterResult.value.state === ExecutionState.FAILED) {
-      if (this.outcomeService && prepared.outcomeContractId) {
-        await this.outcomeService.onPaymentFailed(String(prepared.outcomeContractId), now);
-      }
+      await this.recordPaymentStatus(
+        prepared.outcomeContractId ? String(prepared.outcomeContractId) : undefined,
+        "FAILED",
+        now,
+      );
       await this.authority.getExposureLedger().updateStatus(exposureEntryId, "RELEASED");
       if (input.rootExposure) {
         await this.authority.getExposureLedger().updateStatus(rootEntryId, "RELEASED");
@@ -1226,9 +1284,11 @@ export class TwoPhaseGateway {
       now,
     });
 
-    if (this.outcomeService && prepared.outcomeContractId) {
-      await this.outcomeService.onPaymentSuccess(String(prepared.outcomeContractId), now);
-    }
+    await this.recordPaymentStatus(
+      prepared.outcomeContractId ? String(prepared.outcomeContractId) : undefined,
+      "SUCCESS",
+      now,
+    );
 
     logStructured("info", {
       event: "tm.execution.result",

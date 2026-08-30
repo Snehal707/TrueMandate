@@ -371,6 +371,14 @@ resource "google_cloud_run_v2_service" "runtime" {
       }
 
       dynamic "env" {
+        for_each = each.key == "outcome-resolution" ? [1] : []
+        content {
+          name  = "TM_GATEWAY_CALLER_EMAIL"
+          value = local.service_account_emails["gateway"]
+        }
+      }
+
+      dynamic "env" {
         for_each = each.key == "evidence-service" ? [1] : []
         content {
           name  = "TM_EVIDENCE_SUBMIT_CALLER_EMAILS"

@@ -71,6 +71,10 @@ async function main(): Promise<void> {
     contracts: bundle.outcomeContracts,
     events: bundle.outcomeEvents,
   }, undefined, governancePublisher);
+  const tokenProvider = process.env.TM_S2S_BEARER
+    ? staticTokenProvider(process.env.TM_S2S_BEARER)
+    : await adcIdentityTokenProvider();
+  const outcomeOwner = new OutcomeS2SClient(config.outcomeResolutionUrl!, tokenProvider);
   const gateway = new TwoPhaseGateway({
     intents,
     authority,
@@ -93,6 +97,10 @@ async function main(): Promise<void> {
       },
     },
     outcomeBinding: outcomes,
+    outcomePaymentStatus: {
+      recordPaymentStatus: (id, status, occurredAt) =>
+        outcomeOwner.recordPaymentStatus(id, status, occurredAt),
+    },
     tokenStore: bundle.commitTokens,
     nonceStore: bundle.nonces,
     idempotencyStore: bundle.idempotency,
@@ -104,12 +112,8 @@ async function main(): Promise<void> {
     // into two-phase execution.
     stageRecorder: bundle.workflowStages,
   });
-  const tokenProvider = process.env.TM_S2S_BEARER
-    ? staticTokenProvider(process.env.TM_S2S_BEARER)
-    : await adcIdentityTokenProvider();
   const authorityOwner = new AuthorityS2SClient(config.authorityUrl!, tokenProvider);
   const intentOwner = new IntentProvenanceS2SClient(config.intentProvenanceUrl!, tokenProvider);
-  const outcomeOwner = new OutcomeS2SClient(config.outcomeResolutionUrl!, tokenProvider);
 
   const bus = new InMemoryPubSubBus();
   const onEvent = async (envelope: CloudEventEnvelope): Promise<Result<unknown>> => {

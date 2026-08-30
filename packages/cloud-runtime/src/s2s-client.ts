@@ -643,6 +643,22 @@ export class OutcomeS2SClient {
     if (!token) throw new Error("S2S identity token missing");
     return s2sResultFromHttp(await fetchS2SJson({ baseUrl: this.baseUrl, path: `/internal/outcomes/contracts/${encodeURIComponent(id)}`, method: "GET", token }));
   }
+  /** Gateway-only post-commit status update on the authoritative outcome owner. */
+  async recordPaymentStatus(
+    id: string,
+    status: "SUCCESS" | "FAILED" | "UNKNOWN",
+    occurredAt: string,
+  ): Promise<Result<unknown>> {
+    const token = await this.tokens.getIdentityToken(this.baseUrl);
+    if (!token) throw new Error("S2S identity token missing");
+    return s2sResultFromHttp(await fetchS2SJson({
+      baseUrl: this.baseUrl,
+      path: `/internal/outcomes/contracts/${encodeURIComponent(id)}/payment-status`,
+      method: "POST",
+      token,
+      body: { status, occurredAt },
+    }));
+  }
   async evaluateEvidence(contractId: string, body: unknown): Promise<Result<unknown>> {
     const token = await this.tokens.getIdentityToken(this.baseUrl);
     if (!token) throw new Error("S2S identity token missing");

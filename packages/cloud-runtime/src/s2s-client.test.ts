@@ -129,6 +129,32 @@ describe("OutcomeS2SClient", () => {
       authorization: "Bearer verified-token",
     });
   });
+
+  it("sends a gateway payment status update to the authoritative owner route", async () => {
+    const call: { audience?: string; url?: string; method?: string; body?: unknown } = {};
+    globalThis.fetch = async (input, init) => {
+      call.url = String(input);
+      call.method = String(init?.method ?? "GET");
+      call.body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      return new Response(JSON.stringify({ paymentStatus: "SUCCESS" }), { status: 200 });
+    };
+    const baseUrl = "https://outcome.example.run.app";
+    const client = new OutcomeS2SClient(baseUrl, {
+      getIdentityToken: async (audience) => {
+        call.audience = audience;
+        return "verified-token";
+      },
+    });
+
+    await client.recordPaymentStatus("outcome/1", "SUCCESS", "2026-08-31T00:00:00.000Z");
+
+    expect(call).toEqual({
+      audience: baseUrl,
+      url: `${baseUrl}/internal/outcomes/contracts/outcome%2F1/payment-status`,
+      method: "POST",
+      body: { status: "SUCCESS", occurredAt: "2026-08-31T00:00:00.000Z" },
+    });
+  });
 });
 
 describe("AgentRuntimeS2SClient", () => {

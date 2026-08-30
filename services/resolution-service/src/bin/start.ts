@@ -14,6 +14,7 @@ import {
   GatewayS2SClient,
   adcIdentityTokenProvider,
   requireAuthorityUrl,
+  requireGatewayCallerEmail,
   requireIntentProvenanceUrl,
   requireEvidenceUrl,
   requireGatewayUrl,
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
   const evaluationCallerEmail = config.phaseCVerifierCallerEmail;
   const wave1VerifierCallerEmail = config.wave1VerifierCallerEmail;
   const authorityCallerEmail = requireAuthorityCallerEmail(config);
+  const gatewayCallerEmail = requireGatewayCallerEmail(config);
   const outcomeReaderCallerEmails = (process.env.TM_OUTCOME_READER_CALLER_EMAILS ?? "")
     .split(",")
     .map((value) => value.trim())
@@ -121,6 +123,7 @@ async function main(): Promise<void> {
       }, {
         globalCallers: config.internalAllowedCallers,
         readerCallerEmails: outcomeReaderCallerEmails,
+        gatewayCallerEmail,
         authorityCallerEmail,
         evaluationCallerEmail,
         evidenceReadPort: {

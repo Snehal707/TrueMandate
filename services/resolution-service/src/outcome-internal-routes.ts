@@ -114,6 +114,8 @@ export function createOutcomeInternalRoutes(
   auth?: {
     readonly globalCallers?: readonly string[];
     readonly readerCallerEmails?: readonly string[];
+    /** Gateway alone may write the payment result after a privileged commit. */
+    readonly gatewayCallerEmail?: string;
     readonly authorityCallerEmail?: string;
     readonly evaluationCallerEmail?: string;
     readonly evidenceReadPort?: {
@@ -408,6 +410,32 @@ export function createOutcomeInternalRoutes(
       pattern: "/internal/outcomes/procurement-contract",
       allowedCallers: auth?.globalCallers,
       handler: async ({ body }) => createContract(body),
+    },
+    {
+      method: "POST",
+      pattern: "/internal/outcomes/contracts/:id/payment-status",
+      allowedCallers: auth?.gatewayCallerEmail ? [auth.gatewayCallerEmail] : [],
+      handler: async ({ params, body }): Promise<InternalRouteResponse> => {
+        const id = params.id;
+        if (!id) {
+          return response(err(ErrorCode.VALIDATION_FAILED, "OutcomeContract id missing"));
+        }
+        const request = z.object({
+          status: z.enum(["SUCCESS", "FAILED", "UNKNOWN"]),
+          occurredAt: z.string().datetime(),
+        }).strict().safeParse(body);
+        if (!request.success) {
+          return response(err(ErrorCode.SCHEMA_PARSE_FAILED, "Invalid payment status update"));
+        }
+        switch (request.data.status) {
+          case "SUCCESS":
+            return response(await outcomes.onPaymentSuccess(id, request.data.occurredAt));
+          case "FAILED":
+            return response(await outcomes.onPaymentFailed(id, request.data.occurredAt));
+          case "UNKNOWN":
+            return response(await outcomes.onPaymentUnknown(id, request.data.occurredAt));
+        }
+      },
     },
     {
       method: "POST",

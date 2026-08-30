@@ -185,6 +185,7 @@ describe("Phase 8 gateway OutcomeContract binding (fail-closed)", () => {
   it("T2 commit succeeds with bound contract; payment ≠ outcome SATISFIED", async () => {
     const rt = await makeRuntime();
     const outcomes = new OutcomeService();
+    const paymentUpdates: Array<{ contractId: string; status: string; occurredAt: string }> = [];
     const oc = await outcomes.createContractFromIntent({
       id: "oc-bind",
       intentState: rt.state,
@@ -203,6 +204,16 @@ describe("Phase 8 gateway OutcomeContract binding (fail-closed)", () => {
       provenance: rt.provenance,
       provenanceOwner: provenanceOwnerFrom(rt.provenance),
       outcomeBinding: outcomes,
+      outcomePaymentStatus: {
+        recordPaymentStatus: async (contractId, status, occurredAt) => {
+          paymentUpdates.push({ contractId, status, occurredAt });
+          return status === "SUCCESS"
+            ? outcomes.onPaymentSuccess(contractId, occurredAt)
+            : status === "FAILED"
+              ? outcomes.onPaymentFailed(contractId, occurredAt)
+              : outcomes.onPaymentUnknown(contractId, occurredAt);
+        },
+      },
       // TEST-ONLY lane: legacy harness grants lack the production evaluation
       // lineage; the authorize-time provenance gate is skipped here while
       // the binding invariant under test remains enforced.
@@ -274,6 +285,9 @@ describe("Phase 8 gateway OutcomeContract binding (fail-closed)", () => {
     expect(commit.ok).toBe(true);
     if (!commit.ok) return;
     expect(commit.value.status).toBe("SUCCESS");
+    expect(paymentUpdates).toEqual([
+      { contractId: oc.value.id, status: "SUCCESS", occurredAt: NOW },
+    ]);
 
     const after = await outcomes.getContract(oc.value.id);
     expect(after.ok).toBe(true);

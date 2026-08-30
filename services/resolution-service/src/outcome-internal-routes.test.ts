@@ -309,6 +309,29 @@ describe("outcome-resolution least-privilege caller isolation", () => {
     expect(read?.allowedCallers).not.toContain("unauthorized@test");
   });
 });
+
+describe("gateway payment-status owner route", () => {
+  it("accepts only the configured gateway caller and advances the durable contract", async () => {
+    const f = await fixture();
+    const created = await f.route.handler({ params: {}, headers: {}, body: f.body });
+    expect(created.status).toBe(200);
+    const contractId = String((created.body as { id: string }).id);
+    const route = createOutcomeInternalRoutes(f.outcomes, f.owners, {
+      gatewayCallerEmail: "gateway@example.test",
+    }).find((candidate) => candidate.pattern === "/internal/outcomes/contracts/:id/payment-status");
+
+    expect(route?.allowedCallers).toEqual(["gateway@example.test"]);
+    const updated = await route?.handler({
+      params: { id: contractId },
+      headers: {},
+      body: { status: "SUCCESS", occurredAt: NOW },
+    });
+
+    expect(updated).toMatchObject({ status: 200, body: { paymentStatus: "SUCCESS" } });
+    const stored = await f.outcomes.getContract(contractId);
+    expect(stored.ok && stored.value.paymentStatus).toBe("SUCCESS");
+  });
+});
 });
 
 describe("Phase C contract-read caller composition", () => {
