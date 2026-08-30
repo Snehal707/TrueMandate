@@ -1,7 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 /* ============================================================
    FINAL PASS — landing pipeline, CTA hierarchy, live stage rail.
    Tokens from demo-v2.css. No new palette.
    ============================================================ */
+
+/* Apply premium typography across the application */
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+h1, h2, h3, h4, .tm-wordmark, .tm-pipeline-title, .overline, .tm-hero h1, .tm-live-hero h2, .tm-button, .tm-nav button {
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+code, pre, .tm-live-route-chip, .tm-failclosed-detail code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+}
 
 /* ---------- Governed pipeline strip (first screen) ---------- */
 .tm-pipeline {
@@ -717,4 +730,237 @@
   .tm-request-workflow { margin-left: 0; }
   .tm-result-columns { grid-template-columns: 1fr; }
   .tm-governance-plain dl > div { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   TRUE MANDATE PREMIUM STYLING OVERRIDES (VIBRANT & PROFESSIONAL)
+   ============================================================ */
+
+/* Global Glow Variables and Theme Enhancements */
+:root {
+  --neon-glow-emerald: 0 0 35px rgba(55, 211, 154, 0.25);
+  --neon-glow-blue: 0 0 35px rgba(78, 161, 255, 0.22);
+  --neon-glow-amber: 0 0 35px rgba(255, 191, 71, 0.2);
+  --neon-glow-red: 0 0 35px rgba(255, 107, 107, 0.25);
+  --glass-surface: rgba(16, 29, 51, 0.55);
+  --glass-surface-hover: rgba(22, 40, 70, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.05);
+  --glass-border-active: rgba(78, 161, 255, 0.35);
+}
+
+/* Premium Card Base (Glassmorphism & Depth) */
+.tm-panel,
+.tm-rail,
+.tm-request-card,
+.tm-result-summary,
+.tm-live-stage,
+.tm-live-pillars > div,
+.tm-submitting,
+.tm-failclosed,
+.tm-governance-plain {
+  background: var(--glass-surface) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4) !important;
+  transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease), transform 0.3s var(--ease);
+}
+
+.tm-panel:hover,
+.tm-request-card:hover,
+.tm-result-summary:hover,
+.tm-live-stage:hover,
+.tm-live-pillars > div:hover {
+  border-color: rgba(78, 161, 255, 0.15) !important;
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5), 0 0 15px rgba(78, 161, 255, 0.05) !important;
+}
+
+/* Dynamic Interactive Tabs */
+.tm-nav {
+  background: rgba(11, 22, 40, 0.6);
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+}
+
+.tm-nav button {
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.03em;
+}
+
+.tm-nav button:hover {
+  color: var(--text-strong) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.tm-nav button[aria-current="true"] {
+  background: linear-gradient(135deg, rgba(78, 161, 255, 0.15) 0%, rgba(78, 161, 255, 0.05) 100%) !important;
+  border: 1px solid rgba(78, 161, 255, 0.4) !important;
+  color: var(--blue) !important;
+  box-shadow: 0 4px 15px rgba(78, 161, 255, 0.1) !important;
+}
+
+/* CTA & Button Polish */
+.tm-button.primary,
+.tm-cta.focused .tm-button.primary {
+  background: linear-gradient(135deg, #4ea1ff 0%, #3b82f6 50%, #37d39a 100%) !important;
+  color: #050d1a !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.03em;
+  box-shadow: var(--neon-glow-blue) !important;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease) !important;
+  border: none !important;
+}
+
+.tm-button.primary:hover {
+  transform: translateY(-2px) scale(1.02) !important;
+  box-shadow: 0 0 30px rgba(78, 161, 255, 0.4), 0 0 15px rgba(55, 211, 154, 0.3) !important;
+}
+
+.tm-button.ghost {
+  background: rgba(255, 255, 255, 0.02) !important;
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line-strong) !important;
+  transition: all 0.2s var(--ease) !important;
+}
+
+.tm-button.ghost:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: var(--blue) !important;
+  color: var(--text-strong) !important;
+}
+
+/* Domain Navigation Grid Cards */
+.tm-live-domain-card {
+  background: rgba(16, 29, 51, 0.4) !important;
+  border: 1px solid var(--glass-border) !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.tm-live-domain-card:hover {
+  transform: translateY(-2px) !important;
+  background: rgba(22, 40, 70, 0.6) !important;
+  border-color: rgba(78, 161, 255, 0.25) !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3) !important;
+}
+
+.tm-live-domain-card.active {
+  background: linear-gradient(135deg, rgba(78, 161, 255, 0.08) 0%, rgba(55, 211, 154, 0.04) 100%), rgba(16, 29, 51, 0.65) !important;
+  border-color: rgba(78, 161, 255, 0.5) !important;
+  box-shadow: var(--neon-glow-blue), inset 0 0 12px rgba(78, 161, 255, 0.15) !important;
+}
+
+/* Hero Section Refinements */
+.tm-hero h1 {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  background: linear-gradient(to right, var(--text-strong) 40%, #e0e9f5 70%, var(--blue) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.tm-request {
+  background: linear-gradient(135deg, rgba(16, 29, 51, 0.7) 0%, rgba(11, 22, 40, 0.7) 100%) !important;
+  border: 1px solid rgba(78, 161, 255, 0.2) !important;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.45) !important;
+}
+
+/* Punchline & Metrics Styling */
+.tm-punch {
+  border: 1px solid transparent !important;
+  transition: transform 0.3s var(--ease) !important;
+}
+.tm-punch:hover {
+  transform: translateY(-2px) !important;
+}
+.tm-punch.ok {
+  border-color: rgba(55, 211, 154, 0.2) !important;
+  background: linear-gradient(135deg, rgba(55, 211, 154, 0.08) 0%, rgba(55, 211, 154, 0.02) 100%) !important;
+}
+.tm-punch.warn {
+  border-color: rgba(255, 191, 71, 0.2) !important;
+  background: linear-gradient(135deg, rgba(255, 191, 71, 0.08) 0%, rgba(255, 191, 71, 0.02) 100%) !important;
+}
+
+/* Dynamic Live Rail Progress */
+.tm-rail-stage.active {
+  border-color: var(--blue) !important;
+  background: linear-gradient(180deg, rgba(78, 161, 255, 0.1) 0%, rgba(16, 29, 51, 0.4) 100%) !important;
+}
+
+.tm-rail-stage.active .dot {
+  box-shadow: 0 0 0 5px rgba(78, 161, 255, 0.25), 0 0 15px rgba(78, 161, 255, 0.6) !important;
+}
+
+/* Success Progress Track Glow */
+.tm-track {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid var(--glass-border);
+  height: 10px !important;
+}
+
+.tm-track .fill-got {
+  background: linear-gradient(90deg, #22c55e 0%, #37d39a 100%) !important;
+  box-shadow: 0 0 12px rgba(55, 211, 154, 0.4) !important;
+}
+
+.tm-track .fill-miss {
+  background: linear-gradient(90deg, #f59e0b 0%, #ffbf47 100%) !important;
+  box-shadow: 0 0 12px rgba(255, 191, 71, 0.3) !important;
+}
+
+/* Contradiction Witness styling */
+.tm-contradiction {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.tm-witness {
+  flex: 1;
+  padding: 14px 18px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  background: rgba(16, 29, 51, 0.3) !important;
+}
+
+.tm-witness.merchant {
+  border-left: 3px solid var(--emerald) !important;
+}
+
+.tm-witness.warehouse {
+  border-left: 3px solid var(--amber) !important;
+}
+
+/* Micro-interactions for secondary action options */
+.tm-live-outcome-button {
+  border-radius: 12px !important;
+  border: 1px solid var(--glass-border) !important;
+  background: rgba(16, 29, 51, 0.4) !important;
+  transition: all 0.25s var(--ease) !important;
+}
+
+.tm-live-outcome-button:hover {
+  transform: translateY(-2px) !important;
+  background: rgba(22, 40, 70, 0.55) !important;
+  border-color: rgba(78, 161, 255, 0.3) !important;
+  box-shadow: var(--neon-glow-blue) !important;
+}
+
+/* Code pre visual container polish */
+pre, .tm-live-details pre {
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  background: rgba(5, 12, 23, 0.8) !important;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Highlighted constraints */
+mark {
+  background: rgba(78, 161, 255, 0.2) !important;
+  color: var(--blue) !important;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(78, 161, 255, 0.3);
 }
