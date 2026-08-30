@@ -155,7 +155,7 @@ describe("SaaS, Invoice, Logistics: real demo-fixtures evidence through the full
     // before that run exposed the term representation gap — see
     // saas-term-normalization.test.ts for the isolated proof.
     const value = await assertFullyAuthorizedAndReplaySafe("saas_it_spend", "manage_saas_subscription", [
-      explicitConstraint("c-vendor", "vendor", ConstraintOperator.REQUIRE, "approved", ConstraintKind.HARD, "approved SaaS plan"),
+      explicitConstraint("c-vendor", "vendor", ConstraintOperator.REQUIRE, "approved", ConstraintKind.HARD, "approved vendor"),
       explicitConstraint("c-seat-count", "seat_count", ConstraintOperator.EQ, 10, ConstraintKind.HARD, "10 seats"),
       explicitConstraint("c-term", "term", ConstraintOperator.EQ, "12 months", ConstraintKind.HARD, "12 month term"),
       explicitConstraint("c-renewal", "renewal", ConstraintOperator.EQ, "MANUAL", ConstraintKind.HARD, "manual renewal"),

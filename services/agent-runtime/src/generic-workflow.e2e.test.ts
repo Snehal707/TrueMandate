@@ -2272,13 +2272,13 @@ describe("Wave 4.6 multi-domain packs on the shared workflow runtime", () => {
   });
 
   it("authorizes a governed SaaS/IT spend workflow and opens SaaS outcome requirements", async () => {
-    const rawText = "Purchase 10 seats of an approved SaaS plan with manual renewal and 12 month term for under USD 12000 before December 31, 2026.";
+    const rawText = "Purchase 10 seats of the Business Plan from an approved vendor with manual renewal and 12 month term for under USD 12000 before December 31, 2026.";
     const r = await runtime({
       rawText,
       capabilities: { manage_saas_subscription: AuthorityDecision.ALLOW },
       verificationReadiness: "EXECUTABLE",
       compilerTransform: replaceConstraints(rawText, [
-        explicitConstraint("saas-vendor", "approved_vendor", ConstraintOperator.EQ, true, ConstraintKind.HARD, "approved SaaS plan"),
+        explicitConstraint("saas-vendor", "approved_vendor", ConstraintOperator.EQ, true, ConstraintKind.HARD, "approved vendor"),
         explicitConstraint("saas-seats", "seat_count", ConstraintOperator.EQ, 10, ConstraintKind.HARD, "10 seats"),
         explicitConstraint("saas-term", "term_months", ConstraintOperator.EQ, 12, ConstraintKind.HARD, "12 month term"),
         explicitConstraint("saas-renewal", "renewal_setting", ConstraintOperator.EQ, "MANUAL", ConstraintKind.HARD, "manual renewal"),
@@ -2315,13 +2315,13 @@ describe("Wave 4.6 multi-domain packs on the shared workflow runtime", () => {
   });
 
   it("fails closed on a SaaS renewal mismatch before authorize", async () => {
-    const rawText = "Purchase 10 seats of an approved SaaS plan with manual renewal and 12 month term before December 31, 2026.";
+    const rawText = "Purchase 10 seats of the Business Plan from an approved vendor with manual renewal and 12 month term before December 31, 2026.";
     const r = await runtime({
       rawText,
       capabilities: { manage_saas_subscription: AuthorityDecision.ALLOW },
       verificationReadiness: "EXECUTABLE",
       compilerTransform: replaceConstraints(rawText, [
-        explicitConstraint("saas-vendor", "approved_vendor", ConstraintOperator.EQ, true, ConstraintKind.HARD, "approved SaaS plan"),
+        explicitConstraint("saas-vendor", "approved_vendor", ConstraintOperator.EQ, true, ConstraintKind.HARD, "approved vendor"),
         explicitConstraint("saas-seats", "seat_count", ConstraintOperator.EQ, 10, ConstraintKind.HARD, "10 seats"),
         explicitConstraint("saas-term", "term_months", ConstraintOperator.EQ, 12, ConstraintKind.HARD, "12 month term"),
         explicitConstraint("saas-renewal", "renewal_setting", ConstraintOperator.EQ, "MANUAL", ConstraintKind.HARD, "manual renewal"),

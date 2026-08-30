@@ -37,7 +37,7 @@ export function buildBenchmarkWorkflowRequest(
     };
     case "saas_it_spend": return {
       ...common,
-      intent: { ...common.intent, rawText: "Purchase 10 seats of an approved SaaS plan with manual renewal and 12 month term for under USD 12000 before December 31, 2026." },
+      intent: { ...common.intent, rawText: "Purchase 10 seats of the Business Plan from an approved vendor with manual renewal and 12 month term for under USD 12000 before December 31, 2026." },
       action: { capability: "manage_saas_subscription", merchant: "approved-vendor", product: "Business Plan", quantity: 10, amount: 9000, currency: "USD", deliveryTerms: "activate subscription before 2026-12-31", consequenceLevel: "HIGH", parameters: { renewalSetting: "MANUAL", termMonths: 12, seatCount: 10 } },
       domain: { packId: domain, payload: { vendor: { id: "approved-vendor", name: "Approved Vendor", approved: true, approvalEvidenceId: "approval-evidence" }, subscription: { planId: "plan-business", planName: "Business Plan", termMonths: 12, renewalSetting: "MANUAL", seatCount: 10 }, evidenceIds: ["approval-evidence", "seat-count-evidence", "term-renewal-evidence"] } },
     };

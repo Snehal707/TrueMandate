@@ -146,11 +146,11 @@ const CASES: readonly DomainCase[] = [
   {
     packId: "saas_it_spend",
     label: "SaaS / IT Spend",
-    rawText: "Purchase 10 seats of an approved SaaS plan with manual renewal and 12 month term for under USD 12000 before December 31, 2026.",
+    rawText: "Purchase 10 seats of the Business Plan from an approved vendor with manual renewal and 12 month term for under USD 12000 before December 31, 2026.",
     capability: "manage_saas_subscription",
     constraints: [
       explicitConstraint("s-vendor", "approved_vendor", ConstraintOperator.EQ, true, ConstraintKind.HARD, "approved"),
-      explicitConstraint("s-plan", "plan_name", ConstraintOperator.EQ, "Business Plan", ConstraintKind.HARD, "SaaS plan"),
+      explicitConstraint("s-plan", "plan_name", ConstraintOperator.EQ, "Business Plan", ConstraintKind.HARD, "Business Plan"),
       explicitConstraint("s-seats", "seat_count", ConstraintOperator.EQ, 10, ConstraintKind.HARD, "10 seats"),
       explicitConstraint("s-term", "term_months", ConstraintOperator.EQ, 12, ConstraintKind.HARD, "12 month term"),
       explicitConstraint("s-renewal", "renewal_setting", ConstraintOperator.EQ, "MANUAL", ConstraintKind.HARD, "manual renewal"),

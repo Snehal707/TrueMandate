@@ -282,7 +282,7 @@ const SAAS: DemoScenarioTemplate = {
   scenarioId: "saas_it_spend",
   packId: "saas_it_spend",
   rawText:
-    "Purchase 10 seats of an approved SaaS plan with manual renewal and 12 month term for under USD 12000 before December 31, 2026.",
+    "Purchase 10 seats of the Business Plan from an approved vendor with manual renewal and 12 month term for under USD 12000 before December 31, 2026.",
   evidenceSource: evidenceSourceFor("saas_it_spend"),
   evidenceCaptureTime: "2026-06-01T00:00:00.000Z",
   evidenceClaims: [
