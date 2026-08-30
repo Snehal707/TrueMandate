@@ -34,7 +34,13 @@ import { buildLiveProvenanceModel } from "./liveWorkflowTruth";
 import { LiveProvenanceGraph } from "./LiveProvenanceGraph";
 import { ProductTruthBadge } from "./ProductTruth";
 
-const sdk = createSdkCore({ baseUrl: "", timeoutMs: 120_000 });
+// A trusted comparison includes intent finalization, evidence verification,
+// then ordered control and attack workflow legs. Its bounded server window can
+// exceed two minutes, so the browser must not report a completed run as timed
+// out while Cloud Run is still returning its result.
+export const TRUSTED_COMPARISON_TIMEOUT_MS = 270_000;
+
+const sdk = createSdkCore({ baseUrl: "", timeoutMs: TRUSTED_COMPARISON_TIMEOUT_MS });
 
 const FAMILIES: readonly { id: AttackFamily; label: string }[] = [
   { id: "semantic", label: "Semantic" },

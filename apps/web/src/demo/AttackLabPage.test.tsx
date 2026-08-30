@@ -8,6 +8,7 @@ import {
   AttackLabPage,
   AttackTrace,
   ControlSummary,
+  TRUSTED_COMPARISON_TIMEOUT_MS,
   TrustedComparisonSummary,
   TwoLaneVerdict,
 } from "./AttackLabPage";
@@ -268,6 +269,13 @@ function sharedVerifiedS1Stages(authorityDetail = "AUTHORIZED") {
     { stage: "authority", status: "COMPLETED", detail: authorityDetail },
   ] as const;
 }
+
+describe("Attack Lab trusted comparison transport budget", () => {
+  it("waits beyond the orchestrator's two-minute completion window", () => {
+    expect(TRUSTED_COMPARISON_TIMEOUT_MS).toBeGreaterThan(120_000);
+    expect(TRUSTED_COMPARISON_TIMEOUT_MS).toBeLessThan(300_000);
+  });
+});
 
 describe("Attack Lab public truth boundary", () => {
   it("runs the same human intent and ordered vectors through the honest baseline and public workflow", async () => {
