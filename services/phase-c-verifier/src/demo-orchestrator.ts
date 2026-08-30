@@ -134,6 +134,7 @@ function requiredProofsSatisfied(
   const rowsByObligation = new Map<string, Record<string, unknown>[]>();
   for (const row of proofRows) {
     const parsed = asRecord(row);
+    if (!parsed) continue;
     const obligationId = asString(parsed?.obligationId);
     if (!obligationId) continue;
     const existing = rowsByObligation.get(obligationId);
