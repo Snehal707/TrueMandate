@@ -119,7 +119,7 @@ function asString(value: unknown): string | undefined {
 }
 
 function countSatisfiedProofs(rows: readonly unknown[]): number {
-  return rows.reduce((count, row) => {
+  return rows.reduce<number>((count, row) => {
     const status = asRecord(row)?.status;
     return status === "SATISFIED" ? count + 1 : count;
   }, 0);
