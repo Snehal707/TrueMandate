@@ -5,6 +5,7 @@ import {
   AgentRuntimeS2SClient,
   AuthorityS2SClient,
   EvidenceS2SClient,
+  GatewayS2SClient,
   IntentProvenanceS2SClient,
   OutcomeS2SClient,
   ResolutionS2SClient,
@@ -15,6 +16,7 @@ import {
   requireAgentRuntimeUrl,
   requireAuthorityUrl,
   requireEvidenceUrl,
+  requireGatewayUrl,
   requireIntentProvenanceUrl,
   requireOutcomeResolutionUrl,
   s2sResultFromHttp,
@@ -34,6 +36,7 @@ async function main(): Promise<void> {
   requireAgentRuntimeUrl(runtimeConfig);
   requireAuthorityUrl(runtimeConfig);
   requireEvidenceUrl(runtimeConfig);
+  requireGatewayUrl(runtimeConfig);
   requireOutcomeResolutionUrl(runtimeConfig);
   const persist = await initRuntimePersistence();
   const probed = await persist.probeReadiness();
@@ -50,6 +53,10 @@ async function main(): Promise<void> {
   );
   const workflows = new AgentRuntimeS2SClient(
     runtimeConfig.agentRuntimeUrl!,
+    tokenProvider,
+  );
+  const gateway = new GatewayS2SClient(
+    runtimeConfig.gatewayUrl!,
     tokenProvider,
   );
   const authority = new AuthorityS2SClient(
@@ -94,6 +101,11 @@ async function main(): Promise<void> {
       getIntent: (intentId) => owner.getIntent(intentId),
       getTip: (intentId) => owner.getTip(intentId),
       listWorkflowArtifacts: (workflowId) => owner.listWorkflowArtifacts(workflowId),
+      getNode: (id) => owner.getNode(id),
+      getEdge: (id) => owner.getEdge(id),
+    },
+    executionRead: {
+      getPreparedAction: (id) => gateway.getPreparedAction(id),
     },
     demoRuntime: demo,
     evidence: {

@@ -131,6 +131,9 @@ resource "google_cloud_run_v2_service" "runtime" {
           value = join(",", [
             local.service_account_emails["authority"],
             local.service_account_emails["agent-runtime"],
+            # Public BFF has GET-only access to reconstruct the redacted
+            # execution/provenance projection. It is not a commit caller.
+            local.service_account_emails["public-bff"],
             # Wave 1 remedy lifecycle: outcome-resolution drives the production
             # PrivilegedRemedyPort (prepare/authorize) against the Gateway.
             local.service_account_emails["outcome-resolution"],
@@ -693,6 +696,14 @@ resource "google_cloud_run_v2_service" "s2s" {
         content {
           name  = "TM_INTERNAL_AUTH_AUDIENCE"
           value = var.service_urls["public-bff"]
+        }
+      }
+
+      dynamic "env" {
+        for_each = each.key == "public-bff" ? [1] : []
+        content {
+          name  = "GATEWAY_URL"
+          value = var.service_urls["gateway"]
         }
       }
 

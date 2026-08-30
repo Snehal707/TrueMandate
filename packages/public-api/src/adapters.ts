@@ -12,7 +12,11 @@ import {
   projectGuardian,
   projectAuthority,
 } from "@truemandate/read-model";
-import type { Intent, IntentState } from "@truemandate/protocol";
+import type { Intent, IntentState, ProvenanceEdge, ProvenanceNode } from "@truemandate/protocol";
+import {
+  ProvenanceEdgeSchema,
+  ProvenanceNodeSchema,
+} from "@truemandate/schemas";
 import {
   buildCanonicalProjection,
   CANONICAL_PHASE_C_V5_DOC_IDS,
@@ -91,6 +95,14 @@ export function createLivePublicBffPorts(input: {
     listWorkflowArtifacts?(
       workflowId: string,
     ): Promise<Result<readonly unknown[]>> | Result<readonly unknown[]>;
+    /** Read-only provenance owner lookups. The public projection never writes
+     * provenance and only returns redacted graph records. */
+    getNode?(id: string): Promise<Result<unknown>> | Result<unknown>;
+    getEdge?(id: string): Promise<Result<unknown>> | Result<unknown>;
+  };
+  /** Read-only Gateway lookup used only to derive the durable execution path. */
+  readonly executionRead?: {
+    getPreparedAction(id: string): Promise<Result<unknown>> | Result<unknown>;
   };
   readonly demoRuntime?: Pick<DemoRuntime, "submitApproval">;
   readonly evidence: {
@@ -155,6 +167,7 @@ export function createLivePublicBffPorts(input: {
   const {
     intentCreate,
     workspaceSource,
+    executionRead,
     demoRuntime,
     evidence,
     canonicalStore,
@@ -351,10 +364,75 @@ export function createLivePublicBffPorts(input: {
         }
       : undefined;
 
+    // The immutable workflow-artifact set ends at authorization. A successful
+    // COMMIT instead leaves its durable proof in Gateway and provenance-owner
+    // records. Reconstruct that path only when every link agrees; a partial
+    // read must never be displayed as an execution.
+    const preparedActionId = typeof executionAuthorizationPayload?.preparedActionId === "string"
+      ? executionAuthorizationPayload.preparedActionId
+      : undefined;
+    const preparedResult = preparedActionId && executionRead
+      ? await Promise.resolve(executionRead.getPreparedAction(preparedActionId))
+      : undefined;
+    const preparedRecord = preparedResult?.ok && preparedResult.value && typeof preparedResult.value === "object"
+      ? (preparedResult.value as { preparedAction?: unknown }).preparedAction
+      : undefined;
+    const prepared = preparedRecord && typeof preparedRecord === "object"
+      ? preparedRecord as { id?: unknown; idempotencyKey?: unknown; toolId?: unknown; parameters?: { amount?: unknown } }
+      : undefined;
+    const preparedId = typeof prepared?.id === "string" ? prepared.id : undefined;
+    const idempotencyKey = typeof prepared?.idempotencyKey === "string" ? prepared.idempotencyKey : undefined;
+    const executionId = idempotencyKey ? `exec-${idempotencyKey}` : undefined;
+    const actionNodeId = preparedId ? `execution-action-${preparedId}` : undefined;
+    const executionNodeId = executionId ? `execution-${executionId}` : undefined;
+    const sideEffectNodeId = executionId ? `side-effect-${executionId}` : undefined;
+
+    const provenanceProof = executionId && actionNodeId && executionNodeId && sideEffectNodeId &&
+      workspaceSource.getNode && workspaceSource.getEdge
+      ? await Promise.all([
+          Promise.resolve(workspaceSource.getNode(actionNodeId)),
+          Promise.resolve(workspaceSource.getNode(executionNodeId)),
+          Promise.resolve(workspaceSource.getNode(sideEffectNodeId)),
+          Promise.resolve(workspaceSource.getEdge(`e-${actionNodeId}-${executionNodeId}`)),
+          Promise.resolve(workspaceSource.getEdge(`e-${executionNodeId}-${sideEffectNodeId}`)),
+        ])
+      : undefined;
+    const executionProvenance = provenanceProof && provenanceProof.every((result) => result.ok)
+      ? (() => {
+          const [action, execution, sideEffect, actionToExecution, executionToSideEffect] = provenanceProof;
+          if (!action.ok || !execution.ok || !sideEffect.ok || !actionToExecution.ok || !executionToSideEffect.ok) {
+            return undefined;
+          }
+          const actionNode = ProvenanceNodeSchema.safeParse(action.value);
+          const executionNode = ProvenanceNodeSchema.safeParse(execution.value);
+          const sideEffectNode = ProvenanceNodeSchema.safeParse(sideEffect.value);
+          const actionEdge = ProvenanceEdgeSchema.safeParse(actionToExecution.value);
+          const sideEffectEdge = ProvenanceEdgeSchema.safeParse(executionToSideEffect.value);
+          if (!actionNode.success || !executionNode.success || !sideEffectNode.success ||
+              !actionEdge.success || !sideEffectEdge.success) return undefined;
+          if (actionNode.data.id !== actionNodeId || executionNode.data.id !== executionNodeId ||
+              sideEffectNode.data.id !== sideEffectNodeId || executionNode.data.kind !== "EXECUTION" ||
+              sideEffectNode.data.kind !== "SIDE_EFFECT" ||
+              actionEdge.data.from !== actionNodeId || actionEdge.data.to !== executionNodeId ||
+              sideEffectEdge.data.from !== executionNodeId || sideEffectEdge.data.to !== sideEffectNodeId ||
+              !executionId) {
+            return undefined;
+          }
+          // The action-node identifier contains an internal PreparedAction id,
+          // so it validates the chain but is deliberately not public output.
+          return {
+            executionId,
+            nodes: [executionNode.data, sideEffectNode.data] as unknown as readonly ProvenanceNode[],
+            edges: [sideEffectEdge.data] as unknown as readonly ProvenanceEdge[],
+          };
+        })()
+      : undefined;
+
     const lifecycle = rows.length > 0
       ? projectLifecycle({
           artifacts: rows,
           ...(readiness ? { readiness } : {}),
+          ...(executionProvenance ? { sideEffectCount: 1, provenanceNodeCount: executionProvenance.nodes.length } : {}),
           ...(outcomeContractForLifecycle ? { outcomeContract: outcomeContractForLifecycle } : {}),
         })
       : undefined;
@@ -382,7 +460,7 @@ export function createLivePublicBffPorts(input: {
           ...(lifecycle ? { lifecycle } : {}),
           ...(typeof workflowState === "string"
             ? {
-                authority: projectAuthority({
+            authority: projectAuthority({
                   // The artifact's mere existence is proof: generic-workflow-
                   // engine.ts only reaches bindAndMint (which writes it) after
                   // Authority ALLOWs -- a BLOCKed workflow never produces one,
@@ -392,9 +470,21 @@ export function createLivePublicBffPorts(input: {
                 }),
               }
             : {}),
+          ...(executionProvenance
+            ? {
+                execution: {
+                  phase: "EXECUTE" as const,
+                  sideEffects: [{
+                    id: executionProvenance.executionId,
+                  }],
+                  unknownPending: false,
+                  blockedRetry: false,
+                },
+              }
+            : {}),
           graph: projectProvenanceGraph({
-            nodes: [],
-            edges: [],
+            nodes: executionProvenance?.nodes ?? [],
+            edges: executionProvenance?.edges ?? [],
             tracePath: [`intent:${intentId}`],
           }),
           timeline: mergeTimeline([

@@ -33,6 +33,11 @@ function bound(intentId: string, rows: Omit<Row, "intentId">[]): Row[] {
 function ports(
   listWorkflowArtifacts?: (workflowId: string) => Result<readonly unknown[]>,
   getOutcomeContract?: (id: string) => Result<unknown>,
+  executionProof?: {
+    getPreparedAction(id: string): Result<unknown>;
+    getNode(id: string): Result<unknown>;
+    getEdge(id: string): Result<unknown>;
+  },
 ) {
   return createLivePublicBffPorts({
     intentCreate: { createIntent: () => ok(INTENT) },
@@ -41,7 +46,14 @@ function ports(
       getTip: async () =>
         ok({ id: "state-1", intentId: "intent-1", constraints: [], stateHash: "h", version: 1, createdAt: INTENT.createdAt, createdBy: "owner" } as never),
       ...(listWorkflowArtifacts ? { listWorkflowArtifacts: async (workflowId: string) => listWorkflowArtifacts(workflowId) } : {}),
+      ...(executionProof
+        ? {
+            getNode: async (id: string) => executionProof.getNode(id),
+            getEdge: async (id: string) => executionProof.getEdge(id),
+          }
+        : {}),
     },
+    ...(executionProof ? { executionRead: { getPreparedAction: async (id: string) => executionProof.getPreparedAction(id) } } : {}),
     evidence: new EvidenceService(),
     ...(getOutcomeContract ? { outcomeRead: { getOutcomeContract: async (id: string) => getOutcomeContract(id) } } : {}),
   });
@@ -304,5 +316,65 @@ describe("13. redaction guarantees hold for the new EXECUTION_AUTHORIZATION-deri
     for (const forbidden of ["ct-1", "prep-1", "grant-1", "committoken", "commit_token", "grantid", "credential", "privatekey"]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+});
+
+describe("14. committed execution provenance", () => {
+  it("projects a complete durable execution path without exposing internal authorization identifiers", async () => {
+    const preparedAction = {
+      id: "prep-1",
+      idempotencyKey: "purchase-1",
+      toolId: "payment.execute",
+      capability: "execute_payment",
+      parameters: { amount: 742000, currency: "INR" },
+      parameterHash: "a".repeat(64),
+      intentId: "intent-1",
+      intentStateId: "state-1",
+      intentStateHash: "b".repeat(64),
+      actionContentHash: "c".repeat(64),
+      workflowId: "wf-committed",
+      workflowHash: "d".repeat(64),
+      evaluationRecordId: "evaluation-1",
+      evaluationRecordHash: "e".repeat(64),
+      evaluatedIntentStateVersion: 1,
+      grantId: "grant-1",
+      createdAt: INTENT.createdAt,
+      expiresAt: "2026-12-31T00:00:00.000Z",
+    };
+    const node = (id: string, kind: string) => ({
+      id,
+      kind,
+      label: kind.toLowerCase(),
+      createdAt: INTENT.createdAt,
+      trustClass: "TRUSTED_SYSTEM",
+      taint: { classes: ["NONE"], origins: [] },
+    });
+    const proof = {
+      getPreparedAction: (id: string) => {
+        expect(id).toBe("prep-1");
+        return ok({ preparedAction });
+      },
+      getNode: (id: string) => ok(node(id, id.startsWith("execution-action-") ? "ACTION" : id.startsWith("execution-") ? "EXECUTION" : "SIDE_EFFECT")),
+      getEdge: (id: string) => {
+        if (id.includes("execution-action-prep-1")) {
+          return ok({ id, from: "execution-action-prep-1", to: "execution-exec-purchase-1", relation: "RESULTED_IN", createdAt: INTENT.createdAt });
+        }
+        return ok({ id, from: "execution-exec-purchase-1", to: "side-effect-exec-purchase-1", relation: "RESULTED_IN", createdAt: INTENT.createdAt });
+      },
+    };
+    const result = await ports(
+      () => ok(EXECUTION_AUTHORIZED_AWAITING_COMMIT("intent-1")),
+      () => ok({ id: "outcome-1", state: "AWAITING_OUTCOME", paymentStatus: "SUCCESS" }),
+      proof,
+    ).workspaceRead.getWorkspace("intent-1", "wf-committed");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.execution.phase).toBe("EXECUTE");
+    expect(result.value.execution.sideEffects).toHaveLength(1);
+    expect(result.value.graph.nodes.map((n) => n.kind)).toEqual(["EXECUTION", "SIDE_EFFECT"]);
+    expect(result.value.lifecycle?.stages.find((s) => s.stage === "provenance")?.status).toBe("COMPLETED");
+    expect(JSON.stringify(result.value)).not.toContain("prep-1");
+    expect(JSON.stringify(result.value)).not.toContain("grant-1");
   });
 });

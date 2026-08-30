@@ -273,7 +273,11 @@ locals {
     "phase-a-verifier->intent-provenance"  = { from = "phase-a-verifier", to = "intent-provenance" }
     "evidence-service->intent-provenance"  = { from = "evidence-service", to = "intent-provenance" }
     "evidence-service->outcome-resolution" = { from = "evidence-service", to = "outcome-resolution" }
-    "web->public-bff"                      = { from = "web", to = "public-bff" }
+    # Live Proof reads the durable PreparedAction only to reconstruct a
+    # redacted execution/provenance projection. Gateway still permits COMMIT
+    # exclusively to agent-runtime and outcome-resolution.
+    "public-bff->gateway" = { from = "public-bff", to = "gateway" }
+    "web->public-bff"     = { from = "web", to = "public-bff" }
     # Trusted demo-evidence orchestration: public-bff is the ONLY caller
     # allowed to reach the new internal route (narrow, additive — does not
     # touch TM_EVIDENCE_VERIFY_CALLER_EMAILS or any other existing
