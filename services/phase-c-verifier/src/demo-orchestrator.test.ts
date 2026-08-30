@@ -16,6 +16,96 @@ function tip(id: string, stateHash: string): Result<{ id: string; stateHash: str
   return ok({ id, stateHash });
 }
 
+function authoritativeStateFixture(input: {
+  readonly id: string;
+  readonly stateHash: string;
+  readonly previousStateId?: string;
+}): Result<Record<string, unknown>> {
+  return ok({
+    id: input.id,
+    stateHash: input.stateHash,
+    ...(input.previousStateId ? { previousStateId: input.previousStateId } : {}),
+  });
+}
+
+function semanticArtifactFixture(input: {
+  readonly intentStateId: string;
+  readonly intentStateHash: string;
+  readonly readiness: string;
+  readonly previousIntentStateId?: string;
+  readonly previousIntentStateHash?: string;
+  readonly requiredProofCount?: number;
+  readonly satisfiedProofCount?: number;
+}): Result<Record<string, unknown>> {
+  const required = input.requiredProofCount ?? 4;
+  const satisfied = input.satisfiedProofCount ?? required;
+  return ok({
+    id: `semantic-verification-${input.intentStateId}`,
+    kind: "SEMANTIC_VERIFICATION",
+    payload: {
+      schemaVersion: 1,
+      intentStateId: input.intentStateId,
+      intentStateHash: input.intentStateHash,
+      ...(input.previousIntentStateId ? { previousIntentStateId: input.previousIntentStateId } : {}),
+      ...(input.previousIntentStateHash ? { previousIntentStateHash: input.previousIntentStateHash } : {}),
+      verification: {
+        id: "verification-1",
+        intentId: "demo-procurement-run-fixed-intent",
+        candidateId: "candidate-1",
+        candidateHash: "candidate-hash",
+        lifecycle: "VERIFIED",
+        findings: [],
+        transformations: [],
+        criticalFailure: false,
+        readiness: input.readiness,
+        ambiguityClass: "A0",
+        modelMeta: {
+          modelId: "intent-verifier",
+          modelVersion: "gemini-test",
+          promptVersion: "v1",
+          schemaId: "verifier.result.v1",
+          schemaVersion: "1",
+          protocolVersion: "0.1.0",
+          requestId: "req-1",
+          timestamp: "2026-08-30T00:00:00.000Z",
+        },
+        verifiedAt: "2026-08-30T00:00:00.000Z",
+      },
+      proofSummary: {
+        version: 1,
+        intentId: "demo-procurement-run-fixed-intent",
+        intentStateId: input.intentStateId,
+        intentStateHash: input.intentStateHash,
+        packId: "procurement",
+        generatedAt: "2026-08-30T00:00:00.000Z",
+        requiredProofObligationIds: Array.from({ length: required }, (_, index) => `obl-${index}`),
+        proofRows: Array.from({ length: required }, (_, index) => ({
+          obligationId: `obl-${index}`,
+          constraintId: `c-${index}`,
+          concept: `concept-${index}`,
+          evidenceId: `e-${index}`,
+          claimId: `claim-${index}`,
+          evidenceTrustClass: "ELEVATED_EXTERNAL",
+          status: index < satisfied ? "SATISFIED" : "UNSATISFIED",
+          reason: "test",
+          proofMechanism: "EVIDENCE_OBLIGATION",
+        })),
+        coverage: {
+          requiredConstraintIds: [],
+          derivedObligationConstraintIds: [],
+          evaluatedConstraintIds: [],
+          missingObligationConstraintIds: [],
+          missingEvaluationConstraintIds: [],
+          incompleteDeterministicRuleIds: [],
+          allRequiredCovered: satisfied === required,
+        },
+        verifiedEvidenceRefs: [],
+      },
+      verifiedEvidenceRefs: [],
+    },
+  });
+}
+
 function workflowOk(workflowId: string, state: string): Result<Record<string, unknown>> {
   return ok({ workflowId, state });
 }
@@ -116,6 +206,20 @@ function mockPorts(overrides: Partial<DemoOrchestratorPorts> = {}): DemoOrchestr
         getTipCalls.push(intentId);
         return tip(tipState.id, tipState.stateHash);
       }),
+      getIntentState: vi.fn(async (stateId: string) =>
+        authoritativeStateFixture({
+          id: stateId,
+          stateHash: stateId === "S1" ? "hash-s1" : "hash-s0",
+          previousStateId: stateId === "S1" ? "S0" : undefined,
+        })),
+      getSemanticArtifact: vi.fn(async (id: string) =>
+        semanticArtifactFixture({
+          intentStateId: id.replace(/^semantic-verification-/, ""),
+          intentStateHash: id.endsWith("S1") ? "hash-s1" : "hash-s0",
+          readiness: id.endsWith("S1") ? "ACTIONABLE" : "PLANNABLE",
+          previousIntentStateId: id.endsWith("S1") ? "S0" : undefined,
+          previousIntentStateHash: id.endsWith("S1") ? "hash-s0" : undefined,
+        })),
     },
     readWorkspace: vi.fn(async (_intentId: string, workflowId: string) => ok(
       workflowId === "wf-control"
@@ -241,7 +345,11 @@ describe("attack variant orchestration — single request, S1 sequencing", () =>
       getTipCallSawControlSubmitted.push(controlSubmitted);
       return tip("S1", "hash-s1");
     });
-    const result = await runDemoOrchestration(mockPorts({ submitWorkflow, intents: { getTip } }), {
+    const ports = mockPorts();
+    const result = await runDemoOrchestration(mockPorts({
+      submitWorkflow,
+      intents: { ...ports.intents, getTip },
+    }), {
       scenarioId: "procurement",
       variantId: "quantity_drift",
     });
@@ -270,6 +378,36 @@ describe("attack variant orchestration — single request, S1 sequencing", () =>
     expect(result.value.verifiedClaimIds).toEqual(["claim-1-verified", "claim-2-verified"]);
     expect(result.value.comparisonIntegrity.status).toBe("VERIFIED_COMPARISON");
     expect(result.value.comparisonIntegrity.sameVerifiedS1).toBe(true);
+  });
+
+  it("repairs the live projection gap by using authoritative S1 readiness and lineage server-side", async () => {
+    const ports = mockPorts({
+      readWorkspace: vi.fn(async (_intentId: string, workflowId: string) => ok(
+        workflowId === "wf-control"
+          ? workspaceFixture({
+              intentStateId: "S1",
+              stateHash: "hash-s1",
+              readiness: "UNKNOWN",
+              historicalStateIds: [],
+              authorityDecision: "ALLOW",
+              evidenceDetail: "5 of 5 required proofs satisfied",
+            })
+          : workspaceFixture({
+              intentStateId: "S1",
+              stateHash: "hash-s1",
+              readiness: "UNKNOWN",
+              historicalStateIds: [],
+              blockingStage: "planVerification",
+              evidenceDetail: "5 of 5 required proofs satisfied",
+            }),
+      )),
+    });
+    const result = await runDemoOrchestration(ports, { scenarioId: "procurement", variantId: "quantity_drift" });
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.value.kind !== "attack") return;
+    expect(result.value.comparisonIntegrity.sameVerifiedS1).toBe(true);
+    expect(result.value.comparisonIntegrity.privilegedReadiness).toBe("ACTIONABLE");
+    expect(result.value.comparisonIntegrity.semanticSuccessorConfirmed).toBe(true);
   });
 });
 

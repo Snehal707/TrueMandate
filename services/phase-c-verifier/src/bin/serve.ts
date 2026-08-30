@@ -117,6 +117,8 @@ async function main(): Promise<void> {
     },
     intents: {
       getTip: (intentId) => intents.getTip(intentId) as Promise<Result<{ id: string; stateHash: string }>>,
+      getIntentState: (stateId) => intents.getIntentState(stateId) as Promise<Result<Record<string, unknown>>>,
+      getSemanticArtifact: (id) => intents.getSemanticArtifact(id) as Promise<Result<Record<string, unknown>>>,
     },
     readWorkspace: (intentId, workflowId) =>
       getFromPublicBff(

@@ -30,6 +30,18 @@ export interface ComparisonIntegrityView {
   readonly attackSideEffectCount: number;
 }
 
+export interface AuthoritativeVerifiedStateView {
+  readonly stateId: string;
+  readonly stateHash: string;
+  readonly readiness: string;
+  readonly previousStateId?: string;
+  readonly previousStateHash?: string;
+  readonly requiredProofCount: number;
+  readonly satisfiedProofCount: number;
+  readonly allRequiredSatisfied: boolean;
+  readonly semanticArtifactPresent: boolean;
+}
+
 interface ComparisonIntegrityInput {
   readonly intentId: string;
   readonly compiledIntentStateId: string;
@@ -45,6 +57,7 @@ interface ComparisonIntegrityInput {
   readonly attackVerifiedEvidenceIds: readonly string[];
   readonly controlVerifiedClaimIds: readonly string[];
   readonly attackVerifiedClaimIds: readonly string[];
+  readonly authoritativeControlState?: AuthoritativeVerifiedStateView;
   readonly nowMs?: number;
 }
 
@@ -215,17 +228,20 @@ function controlGovernanceValidity(input: {
 }
 
 function semanticSuccessorConfirmed(input: {
-  readonly workspace?: Record<string, unknown>;
+  readonly authoritativeControlState?: AuthoritativeVerifiedStateView;
   readonly compiledIntentStateId: string;
   readonly compiledIntentStateHash: string;
   readonly boundIntentStateId: string;
   readonly boundIntentStateHash: string;
 }): boolean {
-  if (!input.workspace) return false;
-  const historicalStateIds = arrayOfStrings(input.workspace, ["summary", "historicalStateIds"]);
+  const authoritative = input.authoritativeControlState;
+  if (!authoritative || !authoritative.semanticArtifactPresent) return false;
   return input.boundIntentStateId !== input.compiledIntentStateId &&
     input.boundIntentStateHash !== input.compiledIntentStateHash &&
-    historicalStateIds.includes(input.compiledIntentStateId);
+    authoritative.stateId === input.boundIntentStateId &&
+    authoritative.stateHash === input.boundIntentStateHash &&
+    authoritative.previousStateId === input.compiledIntentStateId &&
+    authoritative.previousStateHash === input.compiledIntentStateHash;
 }
 
 function attackUnsafeAuthorityPrevented(input: {
@@ -302,11 +318,17 @@ export function deriveComparisonIntegrity(input: ComparisonIntegrityInput): Comp
   const sameVerifiedClaims = input.controlVerifiedClaimIds.length > 0 &&
     stringSetEquals(input.controlVerifiedClaimIds, input.attackVerifiedClaimIds);
 
-  const proofs = evidenceProofCounts(input.controlWorkspace);
-  const privilegedReadiness = stringValue(input.controlWorkspace, ["summary", "readiness"]) ?? "UNKNOWN";
+  const proofs = input.authoritativeControlState
+    ? {
+        satisfied: input.authoritativeControlState.satisfiedProofCount,
+        required: input.authoritativeControlState.requiredProofCount,
+        complete: input.authoritativeControlState.allRequiredSatisfied,
+      }
+    : evidenceProofCounts(input.controlWorkspace);
+  const privilegedReadiness = input.authoritativeControlState?.readiness ?? "UNKNOWN";
   const readinessValid = privilegedReadiness === "ACTIONABLE" || privilegedReadiness === "EXECUTABLE";
   const successorConfirmed = semanticSuccessorConfirmed({
-    workspace: input.controlWorkspace,
+    authoritativeControlState: input.authoritativeControlState,
     compiledIntentStateId: input.compiledIntentStateId,
     compiledIntentStateHash: input.compiledIntentStateHash,
     boundIntentStateId: input.boundIntentStateId,

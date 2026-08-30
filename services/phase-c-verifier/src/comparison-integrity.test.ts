@@ -104,6 +104,17 @@ function baseInput(overrides?: Partial<Parameters<typeof deriveComparisonIntegri
     attackVerifiedEvidenceIds: ["evidence-1"],
     controlVerifiedClaimIds: ["claim-1"],
     attackVerifiedClaimIds: ["claim-1"],
+    authoritativeControlState: {
+      stateId: "state-1",
+      stateHash: "hash-1",
+      readiness: "ACTIONABLE",
+      previousStateId: "state-0",
+      previousStateHash: "hash-0",
+      requiredProofCount: 4,
+      satisfiedProofCount: 4,
+      allRequiredSatisfied: true,
+      semanticArtifactPresent: true,
+    },
     nowMs: Date.parse("2026-08-30T00:00:00.000Z"),
     ...overrides,
   };
@@ -130,6 +141,17 @@ describe("deriveComparisonIntegrity", () => {
         historicalStateIds: [],
         blockingStage: "planVerification",
       }),
+      authoritativeControlState: {
+        stateId: "state-0",
+        stateHash: "hash-0",
+        readiness: "PLANNABLE",
+        previousStateId: undefined,
+        previousStateHash: undefined,
+        requiredProofCount: 4,
+        satisfiedProofCount: 4,
+        allRequiredSatisfied: true,
+        semanticArtifactPresent: true,
+      },
     }));
     expect(result.sameIntentState).toBe(true);
     expect(result.sameVerifiedS1).toBe(false);
@@ -166,6 +188,17 @@ describe("deriveComparisonIntegrity", () => {
         authorityDecision: "ALLOW",
         evidenceDetail: "3 of 4 required proofs satisfied",
       }),
+      authoritativeControlState: {
+        stateId: "state-1",
+        stateHash: "hash-1",
+        readiness: "ACTIONABLE",
+        previousStateId: "state-0",
+        previousStateHash: "hash-0",
+        requiredProofCount: 4,
+        satisfiedProofCount: 3,
+        allRequiredSatisfied: false,
+        semanticArtifactPresent: true,
+      },
     }));
     expect(result.sameVerifiedS1).toBe(false);
     expect(result.proofCoverageComplete).toBe(false);
@@ -180,9 +213,65 @@ describe("deriveComparisonIntegrity", () => {
         historicalStateIds: ["state-0"],
         authorityDecision: "ALLOW",
       }),
+      authoritativeControlState: {
+        stateId: "state-1",
+        stateHash: "hash-1",
+        readiness: "PLANNABLE",
+        previousStateId: "state-0",
+        previousStateHash: "hash-0",
+        requiredProofCount: 4,
+        satisfiedProofCount: 4,
+        allRequiredSatisfied: true,
+        semanticArtifactPresent: true,
+      },
     }));
     expect(result.sameVerifiedS1).toBe(false);
     expect(result.privilegedReadiness).toBe("PLANNABLE");
+  });
+
+  it("CASE H: live procurement projection gap still passes when authoritative S1 proves readiness and lineage", () => {
+    const result = deriveComparisonIntegrity(baseInput({
+      controlWorkspace: workspaceFixture({
+        intentStateId: "state-1",
+        stateHash: "hash-1",
+        readiness: "UNKNOWN",
+        historicalStateIds: [],
+        authorityDecision: "ALLOW",
+        evidenceDetail: "5 of 5 required proofs satisfied",
+      }),
+      attackWorkspace: workspaceFixture({
+        intentStateId: "state-1",
+        stateHash: "hash-1",
+        readiness: "UNKNOWN",
+        historicalStateIds: [],
+        blockingStage: "planVerification",
+        evidenceDetail: "5 of 5 required proofs satisfied",
+      }),
+      authoritativeControlState: {
+        stateId: "state-1",
+        stateHash: "hash-1",
+        readiness: "ACTIONABLE",
+        previousStateId: "state-0",
+        previousStateHash: "hash-0",
+        requiredProofCount: 5,
+        satisfiedProofCount: 5,
+        allRequiredSatisfied: true,
+        semanticArtifactPresent: true,
+      },
+    }));
+    expect(result.sameIntentState).toBe(true);
+    expect(result.sameVerifiedS1).toBe(true);
+    expect(result.privilegedReadiness).toBe("ACTIONABLE");
+    expect(result.semanticSuccessorConfirmed).toBe(true);
+  });
+
+  it("CASE I: semantic-looking bound state without authoritative lineage stays fail-closed", () => {
+    const result = deriveComparisonIntegrity(baseInput({
+      authoritativeControlState: undefined,
+    }));
+    expect(result.sameVerifiedS1).toBe(false);
+    expect(result.privilegedReadiness).toBe("UNKNOWN");
+    expect(result.semanticSuccessorConfirmed).toBe(false);
   });
 
   it("CASE F: differing verified evidence sets fail the comparison", () => {

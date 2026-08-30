@@ -1,4 +1,5 @@
 import { ErrorCode, err, ok, type Result } from "@truemandate/protocol";
+import { SemanticVerificationArtifactPayloadSchema } from "@truemandate/schemas";
 import {
   demoScenarioTemplate,
   evidenceClaimId,
@@ -8,6 +9,7 @@ import {
   type DemoScenarioTemplate,
 } from "@truemandate/demo-fixtures";
 import {
+  type AuthoritativeVerifiedStateView,
   deriveComparisonIntegrity,
   unavailableComparisonIntegrity,
   type ComparisonIntegrityView,
@@ -68,6 +70,8 @@ export interface DemoOrchestratorPorts {
   };
   readonly intents: {
     getTip(intentId: string): Promise<Result<{ id: string; stateHash: string }>>;
+    getIntentState(stateId: string): Promise<Result<Record<string, unknown>>>;
+    getSemanticArtifact(id: string): Promise<Result<Record<string, unknown>>>;
   };
   readonly readWorkspace: (intentId: string, workflowId: string) => Promise<Result<Record<string, unknown>>>;
   readonly readApproval: (approvalId: string) => Promise<Result<Record<string, unknown>>>;
@@ -103,6 +107,68 @@ export interface DemoAttackOrchestrationResult {
 export type DemoOrchestrationResult =
   | ({ readonly kind: "control" } & DemoControlOrchestrationResult)
   | ({ readonly kind: "attack" } & DemoAttackOrchestrationResult);
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function countSatisfiedProofs(rows: readonly unknown[]): number {
+  return rows.reduce((count, row) => {
+    const status = asRecord(row)?.status;
+    return status === "SATISFIED" ? count + 1 : count;
+  }, 0);
+}
+
+async function readAuthoritativeVerifiedState(
+  ports: DemoOrchestratorPorts,
+  boundIntentStateId: string,
+): Promise<AuthoritativeVerifiedStateView | undefined> {
+  const [state, artifact] = await Promise.all([
+    ports.intents.getIntentState(boundIntentStateId),
+    ports.intents.getSemanticArtifact(`semantic-verification-${boundIntentStateId}`),
+  ]);
+  if (!state.ok || !artifact.ok) return undefined;
+
+  const stateValue = asRecord(state.value);
+  const stateId = asString(stateValue?.id);
+  const stateHash = asString(stateValue?.stateHash);
+  if (!stateId || !stateHash) return undefined;
+
+  const artifactValue = asRecord(artifact.value);
+  const payload = SemanticVerificationArtifactPayloadSchema.safeParse(artifactValue?.payload);
+  if (!payload.success) return undefined;
+  if (payload.data.intentStateId !== stateId || payload.data.intentStateHash !== stateHash) {
+    return undefined;
+  }
+
+  const proofSummary = payload.data.proofSummary;
+  const requiredProofCount = proofSummary?.requiredProofObligationIds.length ?? 0;
+  const satisfiedProofCount = proofSummary ? countSatisfiedProofs(proofSummary.proofRows) : 0;
+  const allRequiredSatisfied = Boolean(
+    proofSummary &&
+      proofSummary.coverage.allRequiredCovered &&
+      requiredProofCount > 0 &&
+      satisfiedProofCount === requiredProofCount,
+  );
+
+  return {
+    stateId,
+    stateHash,
+    readiness: payload.data.verification.readiness,
+    previousStateId: asString(stateValue?.previousStateId) ?? payload.data.previousIntentStateId,
+    previousStateHash: payload.data.previousIntentStateHash,
+    requiredProofCount,
+    satisfiedProofCount,
+    allRequiredSatisfied,
+    semanticArtifactPresent: true,
+  };
+}
 
 function actionBody(action: DemoActionFixture): Record<string, unknown> {
   return {
@@ -396,6 +462,10 @@ export async function runDemoOrchestration(
   const controlApproval = controlApprovalId
     ? await ports.readApproval(controlApprovalId)
     : undefined;
+  const authoritativeControlState = await readAuthoritativeVerifiedState(
+    ports,
+    boundIntentStateId,
+  );
   const comparisonIntegrity = deriveComparisonIntegrity({
     intentId,
     compiledIntentStateId: established.value.intentStateId,
@@ -411,6 +481,7 @@ export async function runDemoOrchestration(
     attackVerifiedEvidenceIds: provisioned.value.evidenceIds,
     controlVerifiedClaimIds: provisioned.value.claimIds,
     attackVerifiedClaimIds: provisioned.value.claimIds,
+    authoritativeControlState,
   });
 
   return ok({
