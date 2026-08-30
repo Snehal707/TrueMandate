@@ -1011,7 +1011,6 @@ export function AttackLabPage(props: {
       </section>
 
       {error ? <p className="tm-attack-runtime-error" role="alert">{error}</p> : null}
-      <ScenarioExportPanel scenario={scenario} />
       {result ? <><TwoLaneVerdict result={result} /><TrustedComparisonSummary result={result} /><ControlSummary result={result} /><AttackComparison result={result} /><AttackTrace result={result} /><WhyDifferent result={result} /></> : (
         <section className="tm-attack-export-panel">
           <div className="tm-attack-result-head">
@@ -1024,6 +1023,7 @@ export function AttackLabPage(props: {
           <pre>{scenarioJson}</pre>
         </section>
       )}
+      {result ? <ScenarioExportPanel scenario={scenario} /> : null}
     </section>
   );
 }
