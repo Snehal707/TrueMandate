@@ -173,6 +173,12 @@ flowchart LR
 
 Deployed on Google Cloud Run, with Firestore for durable state, Pub/Sub for
 governance events, and Vertex AI Gemini for reasoning.
+
+**Reasoning model:** `gemini-3.7-flash` on Vertex AI. The deployed model is
+recorded with semantic judgments and can be changed through the `GEMINI_MODEL`
+deployment setting; it proposes structured semantic objects only and never
+authorizes or executes economic actions.
+
 Full detail in [`docs/architecture/`](docs/architecture/).
 
 ---
