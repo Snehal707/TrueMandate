@@ -502,6 +502,22 @@ export function SubmissionProgressPanel(props: {
   );
 }
 
+function ServerOwnedWaitPanel(props: { readonly elapsedSeconds: number }) {
+  return (
+    <section className="tm-submitting" aria-live="polite" aria-label="Server-owned workflow progress">
+      <header>
+        <p className="tm-live-kicker">Creating live workflow</p>
+        <span className="tm-submitting-elapsed">{formatElapsed(props.elapsedSeconds)} elapsed</span>
+      </header>
+      <ol className="tm-submitting-steps">
+        <li className="tm-submitting-step done"><span className="dot" aria-hidden="true" /><span className="label">Request sent</span><span className="plain">The browser has handed the fixed demo scenario to the deployed service.</span></li>
+        <li className="tm-submitting-step active" aria-current="step"><span className="dot" aria-hidden="true" /><span className="label">Waiting for the governed result</span><span className="plain">The server is establishing intent, verifying evidence, and running the governed workflow.</span></li>
+      </ol>
+      <p className="tm-submitting-note">These server-owned steps are not streamed individually. This panel reports only what the browser knows while it waits for the durable response.</p>
+    </section>
+  );
+}
+
 /**
  * Judge-readable rail over the real lifecycle. Status comes entirely from
  * deriveStageRail — this component renders, it never decides.
@@ -718,22 +734,23 @@ export function LiveDemoPage() {
   const [error, setError] = useState<LiveDemoError | undefined>();
   const [workflowView, setWorkflowView] = useState<LiveWorkflowView>("lifecycle");
   const [progress, setProgress] = useState<FreshWorkflowProgress | undefined>();
+  const [serverWaitStartedAt, setServerWaitStartedAt] = useState<number | undefined>();
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Keyed on presence, not identity, so a phase change does not restart the clock.
-  const submitting = Boolean(progress);
+  const submitting = Boolean(progress) || serverWaitStartedAt !== undefined;
   useEffect(() => {
     if (!submitting) {
       setElapsedSeconds(0);
       return;
     }
-    const startedAt = Date.now();
+    const startedAt = serverWaitStartedAt ?? Date.now();
     setElapsedSeconds(0);
     const timer = window.setInterval(() => {
       setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [submitting]);
+  }, [submitting, serverWaitStartedAt]);
 
   const selectedLabel = liveDomainLabel(domainId, customPackId);
   const activeOutcomeActions = outcomeActionsForDomain(domainId, customPackId);
@@ -760,6 +777,7 @@ export function LiveDemoPage() {
     // is established, so no stale workflow can be polled or displayed while
     // this submission is in flight.
     setRun(undefined);
+    if (domainId !== "custom_intent") setServerWaitStartedAt(Date.now());
     try {
       // Custom Intent is free browser-authored text — the trusted
       // demo-evidence path structurally cannot cover it (there is no
@@ -777,6 +795,7 @@ export function LiveDemoPage() {
     } finally {
       setPending("idle");
       setProgress(undefined);
+      setServerWaitStartedAt(undefined);
     }
   };
 
@@ -1181,6 +1200,9 @@ export function LiveDemoPage() {
 
         {progress ? (
           <SubmissionProgressPanel progress={progress} elapsedSeconds={elapsedSeconds} />
+        ) : null}
+        {serverWaitStartedAt !== undefined && !progress ? (
+          <ServerOwnedWaitPanel elapsedSeconds={elapsedSeconds} />
         ) : null}
       </section>
 

@@ -42,6 +42,27 @@ export const TRUSTED_COMPARISON_TIMEOUT_MS = 270_000;
 
 const sdk = createSdkCore({ baseUrl: "", timeoutMs: TRUSTED_COMPARISON_TIMEOUT_MS });
 
+function formatElapsed(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  return `${minutes}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+
+function AttackProgressPanel(props: { readonly elapsedSeconds: number; readonly trusted: boolean }) {
+  return (
+    <section className="tm-submitting" aria-live="polite" aria-label="Attack comparison progress">
+      <header>
+        <p className="tm-live-kicker">Attack comparison in progress</p>
+        <span className="tm-submitting-elapsed">{formatElapsed(props.elapsedSeconds)} elapsed</span>
+      </header>
+      <ol className="tm-submitting-steps">
+        <li className="tm-submitting-step done"><span className="dot" aria-hidden="true" /><span className="label">Request sent</span><span className="plain">The selected attack scenario has been sent to the deployed route.</span></li>
+        <li className="tm-submitting-step active" aria-current="step"><span className="dot" aria-hidden="true" /><span className="label">Waiting for comparison result</span><span className="plain">{props.trusted ? "The server is running the fixed control and attack paths over one verified evidence basis." : "The browser is waiting for the public workflow result."}</span></li>
+      </ol>
+      <p className="tm-submitting-note">Progress is intentionally limited to browser-observable facts. The final report is shown only after the returned result is validated.</p>
+    </section>
+  );
+}
+
 const FAMILIES: readonly { id: AttackFamily; label: string }[] = [
   { id: "semantic", label: "Semantic" },
   { id: "prompt_injection", label: "Prompt Injection" },
@@ -689,6 +710,8 @@ export function AttackLabPage(props: {
   const [randomVectorCount, setRandomVectorCount] = useState(3);
   const [result, setResult] = useState<AttackComparisonResult>();
   const [running, setRunning] = useState(false);
+  const [runningSince, setRunningSince] = useState<number | undefined>();
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -739,8 +762,18 @@ export function AttackLabPage(props: {
 
   const trustedVariant = mode === "curated" && selectedScenario ? TRUSTED_ATTACK_VARIANTS[selectedScenario.id] : undefined;
 
+  useEffect(() => {
+    if (runningSince === undefined) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const timer = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - runningSince) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [runningSince]);
+
   const runScenario = async () => {
     setRunning(true);
+    setRunningSince(Date.now());
     setResult(undefined);
     setError(undefined);
     try {
@@ -753,6 +786,7 @@ export function AttackLabPage(props: {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
     } finally {
       setRunning(false);
+      setRunningSince(undefined);
     }
   };
 
@@ -1008,6 +1042,7 @@ export function AttackLabPage(props: {
         <button type="button" className="tm-button primary tm-attack-run-button" onClick={runScenario} disabled={running || !validation.supported}>
           {running ? "Running both paths…" : "Run attack"}
         </button>
+        {running ? <AttackProgressPanel elapsedSeconds={elapsedSeconds} trusted={Boolean(trustedVariant)} /> : null}
       </section>
 
       {error ? <p className="tm-attack-runtime-error" role="alert">{error}</p> : null}
