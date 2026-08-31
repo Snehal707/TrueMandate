@@ -758,6 +758,17 @@ resource "google_cloud_run_v2_service" "s2s" {
         }
       }
 
+      # Outcome Contract creation verifies the durable Authority evaluation.
+      # This is GET-only: it does not permit evaluation, minting, approval
+      # decisions, preparation, commit, or execution.
+      dynamic "env" {
+        for_each = each.key == "authority" ? [1] : []
+        content {
+          name  = "TM_OUTCOME_RESOLUTION_CALLER_EMAIL"
+          value = local.service_account_emails["outcome-resolution"]
+        }
+      }
+
       ports {
         container_port = 8080
       }

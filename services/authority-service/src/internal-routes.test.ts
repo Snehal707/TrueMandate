@@ -311,6 +311,18 @@ describe("POST /internal/authority/procurement", () => {
     expect(routes.some((route) => route.pattern === "/internal/authority/grants")).toBe(false);
   });
 
+  it("limits outcome resolution to durable evaluation reads", () => {
+    const routes = createAuthorityInternalRoutes({
+      authority: { evaluateAuthorityRequest: async () => ({ ok: true as const, value: { decision: AuthorityDecision.ALLOW, reasons: [] } }) } as never,
+      evaluationReadCallers: ["public-bff@example.com", "outcome-resolution@example.com"],
+    });
+    const evaluationRead = routes.find((route) => route.pattern === "/internal/authority/evaluations/:id");
+    const evaluationWrite = routes.find((route) => route.pattern === "/internal/authority/evaluate");
+
+    expect(evaluationRead?.allowedCallers).toEqual(["public-bff@example.com", "outcome-resolution@example.com"]);
+    expect(evaluationWrite?.allowedCallers).toBeUndefined();
+  });
+
   it.each([false, true])("evaluates a valid current %s-obligation chain and returns the fresh state binding", async (zero) => {
     const fixture = makeFixture(zero ? "zero" : "valid", { zero });
     const response = await invoke(fixture, request(fixture));

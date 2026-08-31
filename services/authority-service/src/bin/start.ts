@@ -38,6 +38,13 @@ async function main(): Promise<void> {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+  const evaluationReadCallers = [
+    ...publicLifecycleReadCallers,
+    ...(process.env.TM_OUTCOME_RESOLUTION_CALLER_EMAIL ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  ];
   initTracing({ serviceName: config.serviceName });
   requireIntentProvenanceUrl(config);
   requireGatewayUrl(config); requireLearningUrl(config); requireOutcomeResolutionUrl(config);
@@ -106,7 +113,7 @@ async function main(): Promise<void> {
     },
     enableEvents: true,
     internalRoutes: [
-      ...createAuthorityInternalRoutes({ authority, artifacts, evaluations: persist.bundle.authorityEvaluations as never, preparedActions: { get: (id) => gatewayOwner.getPreparedAction(id) }, outcomeContracts: { get: (id) => outcomeOwner.getContract(id) }, provenance: artifacts, approvals: { get: (id) => persist.bundle.approvals.get(id) }, learning: learningOwner, resolution: { getMandate: (id) => resolutionOwner.getMandate(id), getCase: (id) => resolutionOwner.getCase(id), getRemedy: (caseId, remedyId) => resolutionOwner.getRemedy(caseId, remedyId) }, publicLifecycleReadCallers }),
+      ...createAuthorityInternalRoutes({ authority, artifacts, evaluations: persist.bundle.authorityEvaluations as never, preparedActions: { get: (id) => gatewayOwner.getPreparedAction(id) }, outcomeContracts: { get: (id) => outcomeOwner.getContract(id) }, provenance: artifacts, approvals: { get: (id) => persist.bundle.approvals.get(id) }, learning: learningOwner, resolution: { getMandate: (id) => resolutionOwner.getMandate(id), getCase: (id) => resolutionOwner.getCase(id), getRemedy: (caseId, remedyId) => resolutionOwner.getRemedy(caseId, remedyId) }, evaluationReadCallers }),
       ...createApprovalRoutes({
         approvals: {
           get: (id) =>
