@@ -1,6 +1,10 @@
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { ServerOwnedWaitPanel, SubmissionProgressPanel } from "./LiveDemoPage";
+import {
+  LIVE_DEMO_TIMEOUT_MS,
+  ServerOwnedWaitPanel,
+  SubmissionProgressPanel,
+} from "./LiveDemoPage";
 import {
   submitFreshWorkflowWhenReady,
   type FreshWorkflowProgress,
@@ -26,6 +30,11 @@ function render(progress: FreshWorkflowProgress, elapsedSeconds = 0): string {
 }
 
 describe("submission progress reports client facts only", () => {
+  it("keeps the Live Proof request alive beyond the observed 183-second control run", () => {
+    expect(LIVE_DEMO_TIMEOUT_MS).toBe(270_000);
+    expect(LIVE_DEMO_TIMEOUT_MS).toBeGreaterThan(183_481);
+  });
+
   it("explains the server-owned wait without inventing live stage updates", () => {
     const html = renderToString(<ServerOwnedWaitPanel elapsedSeconds={127} />).replaceAll("<!-- -->", "");
     expect(html).toContain("2:07 elapsed");
