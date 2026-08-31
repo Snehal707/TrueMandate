@@ -117,6 +117,13 @@ describe("result summary answers the five questions", () => {
       sideEffectCount: 1,
       outcomePresent: true,
       outcomeState: "SATISFIED",
+      lifecycle: {
+        stages: [
+          { stage: "authority", status: "COMPLETED" },
+          { stage: "execution", status: "COMPLETED", detail: "1 recorded side effect(s)" },
+          { stage: "outcome", status: "COMPLETED" },
+        ],
+      },
     });
     expect(executed).toContain("Authorized and executed under governance");
     expect(executed).toContain("Authority granted");

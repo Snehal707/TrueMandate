@@ -160,6 +160,31 @@ describe("absence is never evidence", () => {
 });
 
 describe("other real run shapes", () => {
+  it("does not present authorization as completed execution", () => {
+    const summary = deriveRunSummary({
+      ...GUARDIAN_UNAVAILABLE,
+      workflowState: "AUTHORIZED",
+      guardianDecision: "ALLOW",
+      authorityDecision: "ALLOW",
+      executionPhase: "PROPOSE",
+      executionStatus: "AUTHORIZED",
+      sideEffectCount: 0,
+      outcomePresent: true,
+      outcomeState: "CREATED",
+      lifecycle: {
+        stages: [
+          { stage: "authority", status: "COMPLETED" },
+          { stage: "execution", status: "NOT_REACHED", detail: "0 recorded side effect(s)" },
+        ],
+      },
+    });
+
+    expect(summary.outcomeClass).toBe("authorized-pending");
+    expect(summary.headline).toBe("Authorized — execution not yet committed");
+    expect(summary.succeeded.map((fact) => fact.label)).not.toContain("Execution ran");
+    expect(summary.didNotHappen.map((fact) => fact.label)).toContain("Execution not yet committed");
+  });
+
   it("recognises an authorized and executed run", () => {
     const summary = deriveRunSummary({
       ...GUARDIAN_UNAVAILABLE,
@@ -172,6 +197,13 @@ describe("other real run shapes", () => {
       sideEffectCount: 1,
       outcomePresent: true,
       outcomeState: "SATISFIED",
+      lifecycle: {
+        stages: [
+          { stage: "authority", status: "COMPLETED" },
+          { stage: "execution", status: "COMPLETED", detail: "1 recorded side effect(s)" },
+          { stage: "outcome", status: "COMPLETED" },
+        ],
+      },
     });
     expect(summary.outcomeClass).toBe("authorized-executed");
     expect(summary.terminal).toBe(false);

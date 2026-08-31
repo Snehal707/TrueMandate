@@ -502,7 +502,7 @@ export function SubmissionProgressPanel(props: {
   );
 }
 
-function ServerOwnedWaitPanel(props: { readonly elapsedSeconds: number }) {
+export function ServerOwnedWaitPanel(props: { readonly elapsedSeconds: number }) {
   return (
     <section className="tm-submitting" aria-live="polite" aria-label="Server-owned workflow progress">
       <header>
@@ -511,9 +511,9 @@ function ServerOwnedWaitPanel(props: { readonly elapsedSeconds: number }) {
       </header>
       <ol className="tm-submitting-steps">
         <li className="tm-submitting-step done"><span className="dot" aria-hidden="true" /><span className="label">Request sent</span><span className="plain">The browser has handed the fixed demo scenario to the deployed service.</span></li>
-        <li className="tm-submitting-step active" aria-current="step"><span className="dot" aria-hidden="true" /><span className="label">Waiting for the governed result</span><span className="plain">The server is establishing intent, verifying evidence, and running the governed workflow.</span></li>
+        <li className="tm-submitting-step active" aria-current="step"><span className="dot" aria-hidden="true" /><span className="label">Waiting for the governed result</span><span className="plain">The server is establishing intent, verifying evidence, Guardian, and Authority. This can take a few minutes; the page will show the Commit button as soon as authorization is returned.</span></li>
       </ol>
-      <p className="tm-submitting-note">These server-owned steps are not streamed individually. This panel reports only what the browser knows while it waits for the durable response.</p>
+      <p className="tm-submitting-note">These server-owned steps are not streamed individually. Keep this page open rather than retrying: the request is still running and the final page will use only the durable backend response.</p>
     </section>
   );
 }

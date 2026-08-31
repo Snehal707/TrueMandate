@@ -1,6 +1,6 @@
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { SubmissionProgressPanel } from "./LiveDemoPage";
+import { ServerOwnedWaitPanel, SubmissionProgressPanel } from "./LiveDemoPage";
 import {
   submitFreshWorkflowWhenReady,
   type FreshWorkflowProgress,
@@ -26,6 +26,14 @@ function render(progress: FreshWorkflowProgress, elapsedSeconds = 0): string {
 }
 
 describe("submission progress reports client facts only", () => {
+  it("explains the server-owned wait without inventing live stage updates", () => {
+    const html = renderToString(<ServerOwnedWaitPanel elapsedSeconds={127} />).replaceAll("<!-- -->", "");
+    expect(html).toContain("2:07 elapsed");
+    expect(html).toContain("can take a few minutes");
+    expect(html).toContain("Commit button as soon as authorization is returned");
+    expect(html).toContain("not streamed individually");
+  });
+
   it("shows the recording step first, with later steps still waiting", () => {
     const html = render({ phase: "recording-intent" });
     expect(html).toContain("Recording the intent");

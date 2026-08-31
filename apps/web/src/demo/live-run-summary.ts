@@ -189,7 +189,10 @@ function deriveOutcomeClass(input: RunSummaryInput): RunOutcomeClass {
   if (!input.hasRun) return "no-run";
   const failure = classifyFailure(input.errorCode);
   if (failure?.kind === "request-failure") return "request-failed";
-  if (input.executionStatus) return "authorized-executed";
+  const executionCompleted = input.lifecycle?.stages.some(
+    (stage) => stage.stage === "execution" && stage.status === "COMPLETED",
+  ) ?? false;
+  if (executionCompleted) return "authorized-executed";
   if (input.approvalStatus === "PENDING" || input.workflowState === "AWAITING_APPROVAL") {
     return "awaiting-approval";
   }
@@ -281,7 +284,10 @@ export function deriveRunSummary(input: RunSummaryInput): RunSummary {
     didNotHappen.push({ label: "Authority was not reached" });
   }
 
-  if (input.executionStatus) {
+  const executionCompleted = input.lifecycle?.stages.some(
+    (stage) => stage.stage === "execution" && stage.status === "COMPLETED",
+  ) ?? false;
+  if (executionCompleted && input.executionStatus) {
     // The only executor this system has ever had is a mock economic adapter —
     // see MockPaymentAdapter in the gateway service. When the backend's own
     // lifecycle confirms execution completed, say so in terms that cannot be
@@ -291,6 +297,11 @@ export function deriveRunSummary(input: RunSummaryInput): RunSummary {
         ? "Governed mock execution completed"
         : "Execution ran";
     succeeded.push({ label: executionLabel, detail: input.executionStatus });
+  } else if (input.executionStatus) {
+    didNotHappen.push({
+      label: "Execution not yet committed",
+      detail: input.executionStatus,
+    });
   } else {
     didNotHappen.push({ label: "The action was not executed" });
   }

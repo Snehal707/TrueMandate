@@ -40,7 +40,9 @@ function PlainSummary(props: { readonly summary: RunSummary; readonly request: s
   const executionCompleted = summary.succeeded.find(
     (fact) => fact.label === "Governed mock execution completed",
   );
-  const executionAuthorizedOnly = summary.succeeded.find((fact) => fact.label === "Execution ran");
+  const executionAuthorizedOnly = summary.didNotHappen.find(
+    (fact) => fact.label === "Execution not yet committed",
+  );
   const executionLine = executionCompleted
     ? `Yes — governed mock execution completed, reporting ${executionCompleted.detail ?? "a result"}.`
     : executionAuthorizedOnly
@@ -135,4 +137,3 @@ export function GovernanceReport(props: {
     </article>
   );
 }
-

@@ -220,6 +220,12 @@ describe("Result Summary, rail, and Governance Report agree about execution", ()
       authorityDecision: "ALLOW",
       executionStatus: "SUCCESS",
       sideEffectCount: 1,
+      lifecycle: {
+        stages: [
+          { stage: "authority", status: "COMPLETED" },
+          { stage: "execution", status: "COMPLETED", detail: "1 recorded side effect(s)" },
+        ],
+      },
     });
     const rail = deriveStageRail({
       ...railInput,
@@ -236,7 +242,7 @@ describe("Result Summary, rail, and Governance Report agree about execution", ()
       ),
     );
 
-    expect(summary.succeeded.map((f) => f.label)).toContain("Execution ran");
+    expect(summary.succeeded.map((f) => f.label)).toContain("Governed mock execution completed");
     expect(rail.find((stage) => stage.id === "execution")?.status).toBe("done");
     expect(section.availability).toBe("PRESENT");
   });
