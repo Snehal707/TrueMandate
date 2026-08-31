@@ -44,6 +44,10 @@ async function main(): Promise<void> {
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean),
+    ...(process.env.TM_GATEWAY_CALLER_EMAIL ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
   ];
   initTracing({ serviceName: config.serviceName });
   requireIntentProvenanceUrl(config);

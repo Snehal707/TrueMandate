@@ -769,6 +769,14 @@ resource "google_cloud_run_v2_service" "s2s" {
         }
       }
 
+      dynamic "env" {
+        for_each = each.key == "authority" ? [1] : []
+        content {
+          name  = "TM_GATEWAY_CALLER_EMAIL"
+          value = local.service_account_emails["gateway"]
+        }
+      }
+
       ports {
         container_port = 8080
       }
