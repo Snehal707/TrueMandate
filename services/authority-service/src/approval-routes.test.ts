@@ -22,7 +22,7 @@ class MemoryApprovals {
   async putEvent(id: string, value: ApprovalEvent): Promise<boolean> { if (this.events.has(id)) return false; this.events.set(id, value); return true; }
 }
 
-async function fixture() {
+async function fixture(publicLifecycleReadCallers?: readonly string[]) {
   const rt = await makeRuntime();
   const workflowId = "workflow-approval";
   const actionHash = hashActionProposal(rt.action);
@@ -41,6 +41,7 @@ async function fixture() {
     approvalEvents: { putIfAbsent: (id, value) => approvals.putEvent(id, value) },
     evaluations,
     tip: { getCurrentIntentState: async () => ({ ok: true as const, value: { id: rt.state.id, stateHash: rt.state.stateHash } }) },
+    ...(publicLifecycleReadCallers ? { publicLifecycleReadCallers } : {}),
   });
   const createRoute = routes.find((route) => route.pattern === "/internal/approvals")!;
   const decideRoute = routes.find((route) => route.pattern === "/internal/approvals/:id/decide")!;
@@ -59,6 +60,13 @@ async function fixture() {
 const CALLER = { email: "human-approver@example.com" };
 
 describe("Authority durable approval routes", () => {
+  it("limits the BFF lifecycle exception to approval reads", async () => {
+    const f = await fixture(["public-bff@example.com"]);
+    expect(f.getRoute.allowedCallers).toEqual(["public-bff@example.com"]);
+    expect(f.createRoute.allowedCallers).toBeUndefined();
+    expect(f.decideRoute.allowedCallers).toBeUndefined();
+  });
+
   it("creates a PENDING request derived from the evaluation with a durable event", async () => {
     const f = await fixture();
     const response = await f.createRoute.handler({ body: f.createBody, headers: {}, params: {} });

@@ -71,6 +71,8 @@ export interface ApprovalStorePorts {
   readonly now?: () => string;
   /** Wave 2: optional fail-open workflow stage recorder for APPROVAL timing. */
   readonly stageRecorder?: WorkflowStageRecorder;
+  /** Read-only BFF caller identity for public lifecycle projection. */
+  readonly publicLifecycleReadCallers?: readonly string[];
 }
 
 const CreateApprovalSchema = z
@@ -335,6 +337,9 @@ export function createApprovalRoutes(ports: ApprovalStorePorts): readonly Intern
     {
       method: "GET",
       pattern: "/internal/approvals/:id",
+      ...(ports.publicLifecycleReadCallers && ports.publicLifecycleReadCallers.length > 0
+        ? { allowedCallers: ports.publicLifecycleReadCallers }
+        : {}),
       handler: async ({ params }): Promise<InternalRouteResponse> => {
         const approvalId = params.id;
         if (!approvalId) {

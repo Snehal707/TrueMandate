@@ -82,6 +82,22 @@ describe("successful evidenced workflow", () => {
   });
 });
 
+describe("durable approval awaiting action", () => {
+  it("reports the Authority decision without claiming authorization or execution", () => {
+    const view = projectLifecycle({
+      artifacts: [
+        ...satisfiedProofs(5), plan(), planVerification("VERIFIED"), action(true),
+        guardian("ALLOW_WITH_MONITORING"), workflow("AUTHORITY_EVALUATION"),
+      ],
+      authorityDecision: "REQUIRE_APPROVAL",
+      approvalStatus: "PENDING",
+    });
+    expect(stageOf(view, "authority")).toMatchObject({ status: "COMPLETED", detail: "REQUIRE_APPROVAL" });
+    expect(stageOf(view, "preparedAction")?.status).toBe("NOT_REACHED");
+    expect(stageOf(view, "execution")?.status).toBe("NOT_REACHED");
+  });
+});
+
 describe("action-fidelity blocked workflow", () => {
   // Proofs all pass and the plan verifies: the evidence attests the intent
   // truthfully. What fails is that the proposed action no longer matches it.

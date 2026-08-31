@@ -748,6 +748,16 @@ resource "google_cloud_run_v2_service" "s2s" {
         }
       }
 
+      # The BFF can project only durable Authority/Approval read state. Route
+      # allowlists keep evaluate, mint, and approval decisions unavailable.
+      dynamic "env" {
+        for_each = each.key == "authority" ? [1] : []
+        content {
+          name  = "TM_PUBLIC_BFF_CALLER_EMAIL"
+          value = local.service_account_emails["public-bff"]
+        }
+      }
+
       ports {
         container_port = 8080
       }

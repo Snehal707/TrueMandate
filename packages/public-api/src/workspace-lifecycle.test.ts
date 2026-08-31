@@ -38,6 +38,7 @@ function ports(
     getNode(id: string): Result<unknown>;
     getEdge(id: string): Result<unknown>;
   },
+  approvalLifecycle?: { decision: string; status: string },
 ) {
   return createLivePublicBffPorts({
     intentCreate: { createIntent: () => ok(INTENT) },
@@ -55,6 +56,17 @@ function ports(
     },
     ...(executionProof ? { executionRead: { getPreparedAction: async (id: string) => executionProof.getPreparedAction(id) } } : {}),
     evidence: new EvidenceService(),
+    ...(approvalLifecycle ? {
+      approvalRead: {
+        getEvaluation: async () => ok({ decision: approvalLifecycle.decision }),
+        getApproval: async () => ok({
+          id: "approval-wf-awaiting", workflowId: "wf-awaiting", intentId: "intent-1",
+          intentStateId: "state-1", status: approvalLifecycle.status,
+          requestedCapability: "execute_payment", requestedScope: {},
+          requestedAt: INTENT.createdAt, expiresAt: "2026-12-31T00:00:00.000Z",
+        }),
+      },
+    } : {}),
     ...(getOutcomeContract ? { outcomeRead: { getOutcomeContract: async (id: string) => getOutcomeContract(id) } } : {}),
   });
 }
@@ -258,6 +270,23 @@ describe("9. workflow frozen at an early state, but EXECUTION_AUTHORIZATION prov
 
     expect(result.value.lifecycle?.stages.find((s) => s.stage === "execution")?.status).toBe("NOT_REACHED");
     expect(result.value.lifecycle?.stages.find((s) => s.stage === "outcome")?.status).toBe("NOT_PRODUCED");
+  });
+});
+
+describe("9a. durable Authority evaluation awaiting approval", () => {
+  it("projects REQUIRE_APPROVAL without claiming a prepared action or execution", async () => {
+    const result = await ports(
+      () => ok(AUTHORIZED("intent-1")),
+      undefined,
+      undefined,
+      { decision: "REQUIRE_APPROVAL", status: "PENDING" },
+    ).workspaceRead.getWorkspace("intent-1", "wf-awaiting");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.authority?.decision).toBe("REQUIRE_APPROVAL");
+    expect(result.value.authority?.approvalState).toBe("PENDING");
+    expect(result.value.lifecycle?.stages.find((stage) => stage.stage === "authority")).toMatchObject({ status: "COMPLETED", detail: "REQUIRE_APPROVAL" });
+    expect(result.value.lifecycle?.stages.find((stage) => stage.stage === "execution")?.status).toBe("NOT_REACHED");
   });
 });
 

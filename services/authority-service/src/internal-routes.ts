@@ -115,6 +115,11 @@ export function createAuthorityInternalRoutes(input: {
     createAuthorityBinding(raw: unknown): Promise<Result<unknown>>;
   };
   readonly approvals?: { get(id: string): Promise<unknown> };
+  /**
+   * The public BFF may read an evaluation only to project its already-durable
+   * lifecycle state. It never receives evaluate or mint authority.
+   */
+  readonly publicLifecycleReadCallers?: readonly string[];
   readonly learning?: LearningAdaptiveReadPort;
   readonly resolution?: {
     getMandate(id: string): Promise<Result<unknown>>;
@@ -130,6 +135,7 @@ export function createAuthorityInternalRoutes(input: {
     outcomeContracts,
     provenance,
     approvals,
+    publicLifecycleReadCallers,
     learning,
     resolution,
   } = input;
@@ -383,6 +389,9 @@ export function createAuthorityInternalRoutes(input: {
     {
       method: "GET",
       pattern: "/internal/authority/evaluations/:id",
+      ...(publicLifecycleReadCallers && publicLifecycleReadCallers.length > 0
+        ? { allowedCallers: publicLifecycleReadCallers }
+        : {}),
       handler: async ({ params }: { params: Record<string, string> }) => {
         const id = params.id;
         if (!id) {

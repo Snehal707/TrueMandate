@@ -334,6 +334,26 @@ export function createLivePublicBffPorts(input: {
     const payloadOf = (kind: string) => rows.find((row) => row.kind === kind)?.payload;
     const guardianVerdict = payloadOf("GUARDIAN")?.verdict as Parameters<typeof projectGuardian>[0];
     const workflowState = payloadOf("WORKFLOW")?.state;
+    const evaluationId = `evaluation-${workflowId}-authority-${workflowId}`;
+    const approvalId = `approval-${workflowId}`;
+    const [evaluationRead, approvalReadResult] = approvalRead
+      ? await Promise.all([
+          approvalRead.getEvaluation
+            ? Promise.resolve(approvalRead.getEvaluation(evaluationId))
+            : Promise.resolve(undefined),
+          Promise.resolve(approvalRead.getApproval(approvalId)),
+        ])
+      : [undefined, undefined] as const;
+    const authorityDecision = evaluationRead?.ok &&
+      evaluationRead.value && typeof evaluationRead.value === "object" &&
+      typeof (evaluationRead.value as { decision?: unknown }).decision === "string"
+      ? (evaluationRead.value as { decision: string }).decision
+      : undefined;
+    const approvalStatus = approvalReadResult?.ok &&
+      approvalReadResult.value && typeof approvalReadResult.value === "object" &&
+      typeof (approvalReadResult.value as { status?: unknown }).status === "string"
+      ? (approvalReadResult.value as { status: string }).status
+      : undefined;
     // Readiness is not on IntentState; it lives in the semantic verification
     // artifact, so it is only reported when that artifact is reachable.
     const verificationPayload = rows.find((row) => row.kind === "SEMANTIC_VERIFICATION")?.payload;
@@ -432,6 +452,8 @@ export function createLivePublicBffPorts(input: {
       ? projectLifecycle({
           artifacts: rows,
           ...(readiness ? { readiness } : {}),
+          ...(authorityDecision ? { authorityDecision } : {}),
+          ...(approvalStatus ? { approvalStatus } : {}),
           ...(executionProvenance ? { sideEffectCount: 1, provenanceNodeCount: executionProvenance.nodes.length } : {}),
           ...(outcomeContractForLifecycle ? { outcomeContract: outcomeContractForLifecycle } : {}),
         })
@@ -465,7 +487,8 @@ export function createLivePublicBffPorts(input: {
                   // engine.ts only reaches bindAndMint (which writes it) after
                   // Authority ALLOWs -- a BLOCKed workflow never produces one,
                   // so this is never a false ALLOW.
-                  authorityDecision: executionAuthorizationPayload ? "ALLOW" : undefined,
+                  authorityDecision: executionAuthorizationPayload ? "ALLOW" : authorityDecision,
+                  ...(approvalStatus ? { approvalState: approvalStatus } : {}),
                   semanticGate: workflowState,
                 }),
               }

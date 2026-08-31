@@ -411,6 +411,10 @@ function record(value: unknown): Record<string, unknown> | undefined {
 export function projectLifecycle(input: {
   readonly artifacts: readonly LifecycleArtifactRow[];
   readonly readiness?: string;
+  /** Durable Authority record read through the BFF's read-only projection. */
+  readonly authorityDecision?: string;
+  /** Durable ApprovalRequest status; a PENDING row holds the workflow safely. */
+  readonly approvalStatus?: string;
   readonly sideEffectCount?: number;
   readonly provenanceNodeCount?: number;
   /**
@@ -448,6 +452,7 @@ export function projectLifecycle(input: {
 
   const workflowState = typeof workflow?.state === "string" ? workflow.state : undefined;
   const authorityReached = Boolean(executionAuthorization) ||
+    Boolean(input.authorityDecision) ||
     workflowState === "AUTHORITY_EVALUATION" ||
     workflowState === "AUTHORIZED" ||
     workflowState === "AWAITING_APPROVAL" ||
@@ -538,6 +543,8 @@ export function projectLifecycle(input: {
     status: authorityReached ? "COMPLETED" : "NOT_REACHED",
     ...(executionAuthorization
       ? { detail: "AUTHORIZED" }
+      : input.authorityDecision
+        ? { detail: input.authorityDecision }
       : workflowState
         ? { detail: workflowState }
         : {}),
