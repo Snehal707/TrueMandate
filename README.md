@@ -11,29 +11,42 @@ A semantic trust and governance runtime for autonomous economic AI agents.
 
 ## The problem
 
-Every agent payment stack answers one question: *is this agent allowed to spend?*
+Autonomous agents are beginning to take real economic actions across
+procurement, travel, SaaS spend, invoice payments, and logistics.
 
-None of them answer the question that actually matters: *did the agent still
-understand what the human asked for by the time it spent the money?*
+Traditional authorization answers a narrow question: *may this agent use this
+tool or spend from this account?* It does not prove that a proposed action still
+preserves what the human originally meant after planning, delegation, model
+reasoning, and exposure to external content.
 
-A human says **"buy 500 food-grade containers from an approved supplier under
-₹800,000."** Four agent hops later, `food_grade` has quietly become
-`industrial_grade`. The supplier is approved. The budget is respected. The
-payment authorization is valid. **Every permission check passes, and the wrong
-thing gets bought.**
+A valid permission can still produce the wrong result:
 
-And it does not end at payment. Money moving is not the goal being achieved. If
-450 of 500 containers arrive, the payment is still `SUCCESS` — but the economic
-outcome is `PARTIAL`, and somebody has to make that right.
+- a travel agent changes the approved provider or refundability terms;
+- a payment agent substitutes a payee or invoice destination;
+- a SaaS agent turns a manual renewal into auto-renewal;
+- a logistics agent changes a shipment destination or expands fulfillment authority;
+- a procurement agent weakens a material, quantity, budget, supplier, or deadline constraint.
 
-TrueMandate treats both as infrastructure problems:
+The action can be authorized, technically successful, and still violate the
+user's intent.
+
+Execution success is also not outcome success. A payment may settle, a booking
+may be confirmed, or a shipment may be dispatched, while the user's economic
+goal remains unfulfilled. The system must preserve that distinction and support
+governed resolution when the outcome is partial, breached, or unknown.
+
+TrueMandate treats this as infrastructure, not a prompting problem:
 
 | Principle | Meaning |
 |---|---|
-| LLMs reason. Infrastructure authorizes. | Gemini proposes semantic objects. It never grants authority or executes. |
-| Data may cross the trust boundary. Authority may not. | Untrusted output can inform a decision. It can never *be* the decision. |
-| No proof, no privilege. | Unproven obligations block privileged action, every time. |
-| Payment success ≠ economic success. | Outcome contracts stay open until intent is fulfilled or the money is recovered. |
+| **LLMs reason. Infrastructure authorizes.** | Models may propose and interpret; they never grant authority or execute privileged actions directly. |
+| **Intent must survive the workflow.** | Immutable human intent and verified constraints remain traceable through planning, delegation, and execution. |
+| **Authority is bounded and revalidated.** | Privileged actions require exact scope, proof obligations, fresh commit validation, and idempotency. |
+| **Data may cross the trust boundary. Authority may not.** | External content can provide evidence, but cannot create or expand permission. |
+| **Payment success is not outcome success.** | Durable outcome contracts and provenance show whether the human goal was actually achieved. |
+
+TrueMandate is a semantic trust and governance runtime for making autonomous
+economic agents safe, traceable, and accountable across domains.
 
 ---
 
