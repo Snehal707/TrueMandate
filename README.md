@@ -171,8 +171,8 @@ flowchart LR
     style W fill:#065f46,color:#fff
 ```
 
-Deployed as 11 Cloud Run services on Google Cloud, with Firestore for durable
-state, Pub/Sub for governance events, and Vertex AI Gemini for reasoning.
+Deployed on Google Cloud Run, with Firestore for durable state, Pub/Sub for
+governance events, and Vertex AI Gemini for reasoning.
 Full detail in [`docs/architecture/`](docs/architecture/).
 
 ---
