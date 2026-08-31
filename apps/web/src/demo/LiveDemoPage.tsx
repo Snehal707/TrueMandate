@@ -1125,7 +1125,6 @@ export function LiveDemoPage() {
         <div className="tm-surface-classification">
           <ProductTruthBadge truthClass="LIVE" detail="PUBLIC SDK / API" />
         </div>
-        <p className="tm-live-overline">SEMANTIC TRUST FOR AUTONOMOUS AGENTS</p>
         <h2>Autonomous agents can execute correctly — and still violate human intent.</h2>
         <p className="tm-live-sub">
           This mode creates a genuinely fresh workflow against the deployed TrueMandate backend.

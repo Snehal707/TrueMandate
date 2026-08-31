@@ -794,7 +794,6 @@ export function AttackLabPage(props: {
     <section className="tm-view tm-attack-lab" aria-label="Attack Lab">
       <header className="tm-attack-hero">
         <h2>Don’t believe our benchmark.<br /><em>Try to break TrueMandate yourself.</em></h2>
-        <p>Give TrueMandate any economic intent. Then try to break it.</p>
       </header>
 
       <div className="tm-attack-modes" role="tablist" aria-label="Attack Lab modes">
@@ -816,7 +815,6 @@ export function AttackLabPage(props: {
       <section className="tm-attack-config">
         <div className="tm-attack-config-head">
           <div>
-            <p className="tm-live-kicker">Attack configuration</p>
             <h3>
               {mode === "curated" ? "Choose a truthful attack" :
                 mode === "build" ? "Build your own attack" :
@@ -1049,7 +1047,6 @@ export function AttackLabPage(props: {
         <section className="tm-attack-export-panel">
           <div className="tm-attack-result-head">
             <div>
-              <p className="tm-live-kicker">Scenario preview</p>
               <h3>Current export shape</h3>
             </div>
             <button type="button" className="tm-button ghost" onClick={() => downloadScenario(scenarioJson, scenario.id)}>Export JSON</button>

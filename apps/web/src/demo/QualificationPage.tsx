@@ -319,7 +319,6 @@ export function QualificationPage(props: { readonly historical?: ReactNode }) {
       <header className="tm-qual-hero">
         <div>
           <ProductTruthBadge truthClass="CANONICAL_HISTORICAL" detail="OBSERVED EVIDENCE" />
-          <p className="overline">Five DomainPacks · live Google Cloud deployment</p>
           <h2>Production Qualification</h2>
           <p className="lede">
             Measured through the shared governed workflow runtime. Every figure below is transcribed
