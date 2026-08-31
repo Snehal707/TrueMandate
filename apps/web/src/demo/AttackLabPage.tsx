@@ -793,7 +793,6 @@ export function AttackLabPage(props: {
   return (
     <section className="tm-view tm-attack-lab" aria-label="Attack Lab">
       <header className="tm-attack-hero">
-        <p className="overline">Interactive red-team console</p>
         <h2>Don’t believe our benchmark.<br /><em>Try to break TrueMandate yourself.</em></h2>
         <p>Give TrueMandate any economic intent. Then try to break it.</p>
       </header>

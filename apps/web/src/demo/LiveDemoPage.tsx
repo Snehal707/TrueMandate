@@ -1195,9 +1195,6 @@ export function LiveDemoPage() {
           >
             {pending === "working" ? "Creating live workflow…" : `Create fresh ${selectedLabel} workflow`}
           </button>
-          <p className="tm-live-note">
-            All predefined domains use the same generic workflow lifecycle. Procurement is a pack, not a special runtime path.
-          </p>
         </div>
 
         {progress ? (

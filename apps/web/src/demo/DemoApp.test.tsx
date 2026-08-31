@@ -302,6 +302,16 @@ describe("DemoPage main proof render (V2)", () => {
     expect(html).toContain("Privileged authorization handles remain private.");
   });
 
+  it("keeps implementation-only framing out of the judge-facing pages", () => {
+    const live = render({ proofSurface: "live-demo" });
+    const attack = render({ view: "attack" });
+    const architecture = render({ view: "architecture" });
+
+    expect(live).not.toContain("Powered by the live backend.");
+    expect(attack).not.toContain("Interactive red-team console");
+    expect(architecture).not.toContain(">Secondary<");
+  });
+
   it("shows only a subtle notice when live mode fails (no raw errors)", () => {
     const html = render({ notice: "Live proof temporarily unavailable." });
     expect(html).toContain("Live proof temporarily unavailable.");

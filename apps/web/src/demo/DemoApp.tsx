@@ -629,7 +629,6 @@ function ArchitectureView() {
   const [tab, setTab] = useState<"architecture" | "sdk" | "adk" | "registry">("architecture");
   return (
     <section className="tm-view" aria-label="Architecture">
-      <p className="overline">Secondary</p>
       <h2>TrueMandate Trust Architecture</h2>
       <p className="tm-lede">
         LLMs reason. Infrastructure authorizes. Outcomes are verified.
@@ -789,15 +788,7 @@ function FooterPanel(props: {
   readonly proofSurface?: ProofSurface;
 }) {
   if (props.proofSurface === "live-demo") {
-    return (
-      <footer className="tm-footer">
-        <p>
-          <strong>Powered by the live backend.</strong> Every workflow shown here is created through
-          TrueMandate&rsquo;s deployed public workflow route and reflects real returned workflow,
-          approval, evidence, outcome, and resolution state.
-        </p>
-      </footer>
-    );
+    return null;
   }
   return (
     <footer className="tm-footer">
